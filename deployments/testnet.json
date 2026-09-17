@@ -1,0 +1,15 @@
+{
+  "network": "testnet",
+  "genesisHash": "0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606",
+  "codeHash": "0x1d4e322540cbec1d1fdf2ca4a13b12521401d6c1ed5f0432c01cce84ea94eddf",
+  "hashType": "data1",
+  "cellDep": {
+    "outPoint": {
+      "txHash": "0x070bdab0b200bb12faca14662c2c7ebbaeaecf51b1da05170e4d5de5c4dc3fca",
+      "index": "0x0"
+    },
+    "depType": "code"
+  },
+  "binarySha256": "060b0b73f91a960a965fcfaeb68dc40ada0557ff24e0c086c89611dd471340ab",
+  "binaryBytes": 28592
+}

@@ -1,0 +1,18 @@
+import {ccc} from '@ckb-ccc/ccc';
+import {signer,client,render} from '@ckb-ccc/playground';
+import {submit,type Deployment} from '../sdk/src/index.js';
+import {buildSolverSetup} from './lib/solver-setup.js';
+import deployment from '../deployments/testnet.json';
+import solverWallet from '../deployments/solver-wallet.json';
+const owner=await ccc.Address.fromString('ckt1qrfrwcdnvssswdwpn3s9v8fp87emat306ctjwsm3nmlkjg8qyza2cqgqq9qha8uqganyw9aavyyqeltvrlg59lp4svl02uvq',client);
+if(!(await signer.getRecommendedAddressObj()).script.eq(owner.script))throw new Error('Connect JoyID wallet ending svl02uvq');
+console.log('OPENSWAP SEPARATE SOLVER SETUP — one JoyID signature');
+console.log('Local testnet solver address:',solverWallet.address);
+const built=await buildSolverSetup({signer,deployment:deployment as Deployment},ccc.Script.from(solverWallet.lock));
+console.log('Solver plain CKB:',ccc.fixedPointToString(built.tx.outputs[1]!.capacity));
+console.log('Solver token cell CKB:',ccc.fixedPointToString(built.tx.outputs[2]!.capacity));
+console.log('Maker order CKB:',ccc.fixedPointToString(built.tx.outputs[0]!.capacity));
+console.log('Network fee CKB:',ccc.fixedPointToString(await built.tx.getFee(client)));
+await render(built.tx);console.log('REQUESTING SETUP SIGNATURE');
+const hash=await submit(built,signer);console.log('SOLVER SETUP TX HASH:',hash);await client.waitTransaction(hash,1);
+console.log('SOLVER SETUP COMMITTED:',hash);

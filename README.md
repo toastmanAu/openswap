@@ -1,0 +1,120 @@
+# OpenSwap v0.1
+
+Clean-room implementation of the OpenSwap full-lot CKB lock:
+
+**ONE CELL · ONE LOT · ONE FILL · ONE MAKER PAYMENT**
+
+Every order input pays its maker at the same absolute output index, or follows
+an independently authorized owner recovery path. No global state, protocol fee,
+admin key, expiry, sequencer, or hosted matching API.
+
+## Build and test
+
+Requires Rust 1.98.1, the `riscv64imac-unknown-none-elf` target, a host C compiler,
+Python 3, and Make. `rust-toolchain.toml` pins Rust and the target.
+
+```sh
+make test                    # build the actual RISC-V binary; run CKB-VM tests
+make check                   # formatting and clippy with warnings denied
+make hash                    # SHA256, CKB data hash, binary size
+./scripts/check-reproducible.sh
+```
+
+All OpenSwap tests explicitly use **Data1**. Runtime code reads the running
+Script into 4096 bytes, token amounts into 16 bytes, and probes empty data with
+one byte. It does not load arbitrary cell data into allocated vectors.
+
+## Implementation status
+
+Contract settlement and rescue are implemented. The suite includes isolated
+adversarial tests, real xUDT conservation, signed secp cancellation and real ACP
+regressions. See [implementation status](docs/STATUS.md),
+[test coverage](docs/TEST_COVERAGE.md), and [measurements](docs/BENCHMARKS.md).
+
+The immutable Data1 contract is deployed on CKB testnet. Recorded checks cover
+JoyID/secp cancellation, indexed maker payments, reciprocal solver settlement,
+three competing-solver rounds, and browser create/cancel/swap flows.
+The current suites contain **88 Rust tests**, **60 SDK/solver/UI-helper tests**,
+and **7 browser tests**. A fresh two-wallet app test was also reported successful
+by the user after the wallet-switch fix; its transaction hashes are not recorded.
+
+This is a testnet reference implementation, not an audited mainnet release.
+See [status and validation limits](docs/STATUS.md),
+[SDK usage](docs/SDK_USAGE.md), and [deployment evidence](deployments/).
+
+## Run the app
+
+Requires Node.js 22 or newer and npm.
+
+```sh
+npm ci
+npm run dev:frontend
+```
+
+Open **http://127.0.0.1:5173**. The app scans the CKB indexer directly; there is
+no mandatory hosted order API. The development server is local only—this GitHub
+repository does not deploy or host a public trading website.
+
+- **Swap:** choose pay/receive tokens, enter the receive amount, and review the
+  automatically quoted payment. Live lots also have direct review buttons.
+- **Orders:** place orders, split them into lots, or cancel your own orders.
+- CKB amounts are entered/displayed in **CKB**, with exact decimal conversion.
+  Existing orders retain their original on-chain amounts.
+- Built-in catalog: iCKB, the explorer's top 20 sUDTs by holder count, and
+  UTXOSwap featured tokens. **Mainnet catalog entries are preview-only**;
+  current trading is testnet. Bitcoin-bound RGB++ spending requires a separate
+  leap integration. See [catalog provenance and compatibility](docs/TOKEN_CATALOG.md).
+- Use **Switch wallet inside OpenSwap** when changing accounts. The app clears
+  the old session and displays the actual connected CKB address. Changing the
+  account in a separate JoyID tab alone does not replace CCC's cached connection.
+  Own orders are excluded from the app's swap routes.
+
+A taker must hold the token requested by the maker, plus CKB for fees/storage.
+Amounts use catalog decimals; manually added tokens without metadata and the
+reference test token use integer units. Review the connected address and exact
+payment before signing. See [frontend guide](docs/FRONTEND.md).
+
+```sh
+npm run typecheck
+npm run test:sdk
+npm run build:frontend
+# With the development server running and Chrome installed:
+npm run test:frontend
+```
+
+## Key handling
+
+Never commit private keys, recovery phrases or wallet exports. Local test keys
+are stored under ignored `.local/`; `.env*`, dependencies, build outputs and
+browser artifacts are also ignored. Scripts that submit transactions require
+explicit execution and a locally supplied signer. Deployment journals contain
+public addresses, transaction hashes and public transaction data only.
+
+## Deployment tooling
+
+```sh
+npm ci
+npm run deploy:prepare -- <testnet-funding-address>
+```
+
+See [deployment runbook](docs/DEPLOYMENT_RUNBOOK.md). Production order scripts
+must use the exact binary's CKB data hash with `hashType: "data1"`.
+
+## Layout
+
+- `contracts/openswap-lock`: bounded consensus implementation and stable errors
+- `tests`: real CKB-VM tests and pinned external token/owner-lock fixtures
+- `sdk`: wire codec, asset resolution, scanning and transaction builders
+- `solver`: bounded matching and permissionless settlement runner
+- `scripts`: reproducible build, hashing, fixture checks, and deployment tools
+- `docs`: measured results, remaining release gates, and operational instructions
+- `docs/handoff`: original supplied handoff, preserved before implementation
+
+The root protocol/specification files remain authoritative. Original handoff
+checksums apply to `docs/handoff` (including its original README), not this
+implementation README. No Nervina SDL implementation code was used.
+
+## License
+
+New implementation code is MIT. External test fixtures retain their upstream
+license and provenance in `tests/fixtures`.

@@ -1,0 +1,55 @@
+{
+  "network": "testnet",
+  "verifiedAt": "2026-09-16T07:11:08.603Z",
+  "checks": [
+    {
+      "endpoint": "https://testnet.ckb.dev",
+      "createHash": "0x2d19439e6034c898c0c1b3b72139c7d7a83a38c2a6730ac719108e88e5c9487b",
+      "fillHash": "0x0a308b21df2f0b10a039d6513666b736fc2a048599488ac25f24b1e447b18563",
+      "orderInputIndexes": [
+        0,
+        1
+      ],
+      "tokenConservation": true,
+      "createFeeShannon": "67574",
+      "fillFeeShannon": "76345",
+      "status": "committed"
+    },
+    {
+      "endpoint": "https://testnet.ckbapp.dev",
+      "createHash": "0x2d19439e6034c898c0c1b3b72139c7d7a83a38c2a6730ac719108e88e5c9487b",
+      "fillHash": "0x0a308b21df2f0b10a039d6513666b736fc2a048599488ac25f24b1e447b18563",
+      "orderInputIndexes": [
+        0,
+        1
+      ],
+      "tokenConservation": true,
+      "createFeeShannon": "67574",
+      "fillFeeShannon": "76345",
+      "status": "committed"
+    }
+  ],
+  "mintChecks": [
+    {
+      "endpoint": "https://testnet.ckb.dev",
+      "txHash": "0x0ef9fdd3503374452f207b43980b727837950e78140800d7e2e10fd8a18525a2",
+      "status": "committed",
+      "amount": "1000",
+      "capacityShannon": "14400000000",
+      "feeShannon": "56112",
+      "consumedByFill": true,
+      "totalExerciseFeeShannon": "200031"
+    },
+    {
+      "endpoint": "https://testnet.ckbapp.dev",
+      "txHash": "0x0ef9fdd3503374452f207b43980b727837950e78140800d7e2e10fd8a18525a2",
+      "status": "committed",
+      "amount": "1000",
+      "capacityShannon": "14400000000",
+      "feeShannon": "56112",
+      "consumedByFill": true,
+      "totalExerciseFeeShannon": "200031"
+    }
+  ],
+  "mintVerifiedAt": "2026-09-16T07:13:04.308Z"
+}

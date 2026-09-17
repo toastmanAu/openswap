@@ -1,0 +1,14 @@
+[package]
+name = "openswap-lock"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[dependencies]
+ckb-std = { version = "=1.1.0", default-features = false, features = ["ckb-types", "allocator", "calc-hash"] }
+
+[[bin]]
+name = "openswap-lock"
+path = "src/main.rs"
+test = false
+bench = false

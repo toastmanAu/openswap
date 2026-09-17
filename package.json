@@ -1,0 +1,37 @@
+{
+  "name": "openswap-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "deploy:prepare": "node scripts/deploy-testnet.mjs",
+    "deploy:record": "node scripts/record-deployment.mjs",
+    "deploy:check": "node scripts/check-deployment.mjs",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.scripts.json && tsc -p frontend/tsconfig.json",
+    "test:sdk": "tsx --test sdk/test/*.test.ts solver/test/*.test.ts",
+    "orders": "tsx scripts/orders.ts",
+    "build:smoke": "node scripts/build-smoke.mjs",
+    "build:frontend": "npm run build -w @openswap/frontend",
+    "dev:frontend": "npm run dev -w @openswap/frontend",
+    "test:frontend": "playwright test -c frontend/playwright.config.ts"
+  },
+  "dependencies": {
+    "@ckb-ccc/shell": "1.3.12"
+  },
+  "workspaces": [
+    "sdk",
+    "solver",
+    "frontend"
+  ],
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/node": "22.20.3",
+    "esbuild": "0.28.2",
+    "tsx": "4.23.13",
+    "typescript": "7.0.2"
+  }
+}

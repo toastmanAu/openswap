@@ -1,0 +1,26 @@
+{
+  "startedAt": "2026-09-16T15:15:10.112Z",
+  "steps": [
+    {
+      "name": "create_cancel",
+      "hash": "0x677e24e12184b3511d5c5180603ed888734de36992e5ce1fe45da6493630b9ef",
+      "status": "committed"
+    },
+    {
+      "name": "cancel",
+      "hash": "0x0f270e0592435d74ab83581dd69e5e7cd709d61343305ccd07dea6543ad7bce0",
+      "status": "committed"
+    },
+    {
+      "name": "create_swap",
+      "hash": "0x55bfb24153cc0c8bab327f92d99149b6e49097aedb5a646b7981a0401e618962",
+      "status": "committed"
+    },
+    {
+      "name": "swap",
+      "hash": "0x38bd1aa708615eea377e3e9cbc0b70cc1e637ea86cb858929ebf85bb6515a6fd",
+      "status": "committed"
+    }
+  ],
+  "finishedAt": "2026-09-16T15:17:20.675Z"
+}

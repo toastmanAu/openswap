@@ -1,0 +1,31 @@
+{
+  "verifiedAt": "2026-09-16T09:44:33.395Z",
+  "transactions": {
+    "setupHash": "0x93665e434258ca91f36ad90c7d97076a15aa460cf558a52a99383ce67730a8e4",
+    "secpCreate": "0xb121b86b8ad13cf8e920ef4376730ea51a5abce4bedc4465f06ca8e13f61c072",
+    "secpCancel": "0x44909ad0b3f0595ceafa175529cc90e93862f6fcc44e8fa1679238ce9285a196",
+    "reciprocalCreate": "0x685e76e6f03082b9c83fab874a3f6342b1ee37d60311ff72d73354abf82ac66b",
+    "solverFill": "0x28f10b5a5e46d1b80a5a635d3dc89c8c12b9a602ddc6ccb0f728c48125c50c51",
+    "status": "committed"
+  },
+  "checks": [
+    {
+      "endpoint": "https://testnet.ckb.dev",
+      "secpCancellation": true,
+      "distinctMakerAndSolver": true,
+      "issuerInputAbsent": true,
+      "tokenConservation": true,
+      "filledOrders": 2,
+      "totalScenarioFeeShannon": "182558"
+    },
+    {
+      "endpoint": "https://testnet.ckbapp.dev",
+      "secpCancellation": true,
+      "distinctMakerAndSolver": true,
+      "issuerInputAbsent": true,
+      "tokenConservation": true,
+      "filledOrders": 2,
+      "totalScenarioFeeShannon": "182558"
+    }
+  ]
+}

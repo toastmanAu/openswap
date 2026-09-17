@@ -1,0 +1,10 @@
+/target/
+/node_modules/
+**/node_modules/
+.env
+.env.*
+!.env.example
+/.local/
+/frontend/dist/
+/frontend/test-results/
+/frontend/playwright-report/

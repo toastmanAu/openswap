@@ -1,0 +1,1 @@
+{"name":"@openswap/solver","version":"0.1.0","type":"module","license":"MIT","exports":"./src/index.ts","dependencies":{"@openswap/sdk":"0.1.0","@ckb-ccc/core":"1.21.0"}}

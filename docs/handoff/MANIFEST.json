@@ -1,0 +1,27 @@
+{
+  "project": "OpenSwap",
+  "version": "v0.1 handoff",
+  "generated_date": "2026-09-14",
+  "files": [
+    "AGENT_PROMPT.md",
+    "CONTRACT_IMPLEMENTATION.md",
+    "DECISIONS.md",
+    "DEPLOYMENT.md",
+    "PROTOCOL.md",
+    "README.md",
+    "ROADMAP.md",
+    "SDK.md",
+    "SECURITY.md",
+    "SOLVER.md",
+    "SOURCES.md",
+    "TASKS.md",
+    "TEST_PLAN.md",
+    "WIRE_FORMAT.md"
+  ],
+  "core_invariant": "ONE CELL \u00b7 ONE LOT \u00b7 ONE FILL \u00b7 ONE MAKER PAYMENT",
+  "contract_hash_type": "data1",
+  "reference_assets": [
+    "CKB",
+    "canonical plain xUDT 16-byte amount profile"
+  ]
+}

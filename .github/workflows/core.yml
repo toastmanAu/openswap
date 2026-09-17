@@ -1,0 +1,32 @@
+name: Contract core
+on: [push, pull_request]
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned toolchain
+        run: rustup show
+      - name: Verify external fixtures
+        run: python3 scripts/verify-fixtures.py
+      - name: Formatting and lint
+        run: make check
+      - name: Build and execute CKB-VM tests
+        run: make test
+      - name: Binary identity
+        run: make hash
+      - name: Rebuild in independent target directories
+        run: ./scripts/check-reproducible.sh
+  sdk:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run test:sdk
+      - run: npm run build:smoke
+      - run: npm run build:frontend

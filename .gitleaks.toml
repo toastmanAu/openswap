@@ -1,0 +1,11 @@
+title = "OpenSwap public-source secret scan"
+[extend]
+useDefault = true
+
+# These three exact values were verified as committed public testnet transactions.
+[[allowlists]]
+description = "Public transaction hashes in race-soak tokenOrder fields"
+condition = "AND"
+paths = ['''(^|/)deployments/race-soak-result\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"tokenOrder": "(0x993d265c78801443d2fbeafa2e269ff715704acddf874a27d380d9fedff3bc6b|0x844be369466df584e00853deda5d61c8ebb32806e180b23dc5e1367421cac0b0|0xea728e595d0e1e94eebadddc9c080c391155144428cdfa015d0e56395f80b833)",?\s*$''']

@@ -1,0 +1,1 @@
+{"name":"@openswap/sdk","version":"0.1.0","type":"module","license":"MIT","exports":"./src/index.ts","dependencies":{"@ckb-ccc/core":"1.21.0"}}

@@ -1,0 +1,12 @@
+{
+  "xudt": {
+    "url": "https://raw.githubusercontent.com/ckb-devrel/offckb/cd16d015e5339a791656f1acfb471adf473f7fa7/ckb/devnet/specs/xudt",
+    "sha256": "e9b92e5783f692f6ee99ca20eeda5f3da282e0f4010eb4fbd3db4e3058239349",
+    "ckbDataHash": "0x50bd8d6680b8b9cf98b73f3c08faf8b2a21914311954118ad6609be6e78a1b95"
+  },
+  "anyone_can_pay": {
+    "url": "https://raw.githubusercontent.com/ckb-devrel/offckb/cd16d015e5339a791656f1acfb471adf473f7fa7/ckb/devnet/specs/anyone_can_pay",
+    "sha256": "5eca558b873dcf54e589fa2135a7a0a13defcfd87469cac7dfc6a38cbf57720a",
+    "ckbDataHash": "0xcd69ba816f7471e59110058aa37387c362ed9a240cd178f7bb1ecee386cb31e6"
+  }
+}

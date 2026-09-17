@@ -1,0 +1,8 @@
+{
+  "verifiedAt": "2026-09-17T13:32:26.344Z",
+  "accountChangeInvalidatesReview": true,
+  "endpointSwitchInvalidatesReview": true,
+  "staleReviewCannotSign": true,
+  "insufficientTokenExplainedBeforeSigning": true,
+  "signingRequests": 0
+}

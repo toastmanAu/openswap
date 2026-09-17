@@ -1,0 +1,33 @@
+{
+  "network": "testnet",
+  "verifiedAt": "2026-09-16T06:43:40.798Z",
+  "deploymentTxHash": "0x070bdab0b200bb12faca14662c2c7ebbaeaecf51b1da05170e4d5de5c4dc3fca",
+  "checks": [
+    {
+      "endpoint": "https://testnet.ckb.dev",
+      "createHash": "0xe014e0446d18075a389377883a32bc705650061761df6d34d05179a13f3399a5",
+      "cancelHash": "0xc2e48f2635bb8e907aa39efbf39af2151f03a020200921b0552301f27f4251f9",
+      "orderInputIndex": 0,
+      "ownerProofIndex": 1,
+      "orderCapacityShannon": "24900000001",
+      "recoveredCapacityShannon": "24900000001",
+      "proofDecreaseShannon": "54485",
+      "createFeeShannon": "57707",
+      "cancelFeeShannon": "54485",
+      "status": "committed"
+    },
+    {
+      "endpoint": "https://testnet.ckbapp.dev",
+      "createHash": "0xe014e0446d18075a389377883a32bc705650061761df6d34d05179a13f3399a5",
+      "cancelHash": "0xc2e48f2635bb8e907aa39efbf39af2151f03a020200921b0552301f27f4251f9",
+      "orderInputIndex": 0,
+      "ownerProofIndex": 1,
+      "orderCapacityShannon": "24900000001",
+      "recoveredCapacityShannon": "24900000001",
+      "proofDecreaseShannon": "54485",
+      "createFeeShannon": "57707",
+      "cancelFeeShannon": "54485",
+      "status": "committed"
+    }
+  ]
+}

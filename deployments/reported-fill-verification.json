@@ -1,0 +1,38 @@
+{
+  "verifiedAt": "2026-09-17T13:28:31.736Z",
+  "hash": "0xbab0973b321182b2fed969030ebafb092d051de9d173e942db0deb975fe66a90",
+  "checks": [
+    {
+      "endpoint": "https://testnet.ckb.dev",
+      "status": "committed",
+      "makerAddress": "ckt1qrfrwcdnvssswdwpn3s9v8fp87emat306ctjwsm3nmlkjg8qyza2cqgqq9qha8uqganyw9aavyyqeltvrlg59lp4svl02uvq",
+      "makerLockHash": "0xe75d9c7a62d06c1e063eead8d13e8ef6cd08a864b3e4f481e82df0798fdd15a0",
+      "indexedMakerPayment": true,
+      "ownerRecovery": false,
+      "funderEqualsMaker": true,
+      "allOutputsBelongToMaker": true,
+      "ckbOffer": "10000",
+      "ickbPayment": "5000",
+      "ickbBefore": "25163.01435128",
+      "ickbAfter": "25163.01435128",
+      "ickbChange": "20163.01435128",
+      "feeCKB": "0.00066378"
+    },
+    {
+      "endpoint": "https://testnet.ckbapp.dev",
+      "status": "committed",
+      "makerAddress": "ckt1qrfrwcdnvssswdwpn3s9v8fp87emat306ctjwsm3nmlkjg8qyza2cqgqq9qha8uqganyw9aavyyqeltvrlg59lp4svl02uvq",
+      "makerLockHash": "0xe75d9c7a62d06c1e063eead8d13e8ef6cd08a864b3e4f481e82df0798fdd15a0",
+      "indexedMakerPayment": true,
+      "ownerRecovery": false,
+      "funderEqualsMaker": true,
+      "allOutputsBelongToMaker": true,
+      "ckbOffer": "10000",
+      "ickbPayment": "5000",
+      "ickbBefore": "25163.01435128",
+      "ickbAfter": "25163.01435128",
+      "ickbChange": "20163.01435128",
+      "feeCKB": "0.00066378"
+    }
+  ]
+}

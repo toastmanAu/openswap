@@ -1,0 +1,29 @@
+{
+  "verifiedAt": "2026-09-16T15:18:27.124Z",
+  "transactions": {
+    "create_cancel": "0x677e24e12184b3511d5c5180603ed888734de36992e5ce1fe45da6493630b9ef",
+    "cancel": "0x0f270e0592435d74ab83581dd69e5e7cd709d61343305ccd07dea6543ad7bce0",
+    "create_swap": "0x55bfb24153cc0c8bab327f92d99149b6e49097aedb5a646b7981a0401e618962",
+    "swap": "0x38bd1aa708615eea377e3e9cbc0b70cc1e637ea86cb858929ebf85bb6515a6fd"
+  },
+  "checks": [
+    {
+      "endpoint": "https://testnet.ckb.dev",
+      "createCancel": true,
+      "routedSwap": true,
+      "indexedMakerPayment": true,
+      "tokenConservation": true,
+      "ordersSpent": true,
+      "totalFeeShannon": "87443"
+    },
+    {
+      "endpoint": "https://testnet.ckbapp.dev",
+      "createCancel": true,
+      "routedSwap": true,
+      "indexedMakerPayment": true,
+      "tokenConservation": true,
+      "ordersSpent": true,
+      "totalFeeShannon": "87443"
+    }
+  ]
+}
