@@ -1,0 +1,29 @@
+{
+  "maker": "ckt1qzda0cr08m85hc8jlnfp3zer7xulejywt49kt2rr0vthywaa50xwsqgp9mnd6kevd2wgrenv6c09zk7qe9g2vjsyhqsv2",
+  "taker": "ckt1qzda0cr08m85hc8jlnfp3zer7xulejywt49kt2rr0vthywaa50xwsqdvvr0ashqtljk5nsf38fuym7juh2rq3dg4lyz5s",
+  "create": "0xf6dd78a0fe8fa6db45bd1aa1f8ca0cbe2af38d2821c41e240fbca3a6c313efb4",
+  "fill": "0x359c85d196f1151e7f33b5b00f5c0cdf77b64fbe9e772f976bfd21b032dbe0f1",
+  "checks": [
+    {
+      "makerAndTakerDiffer": true,
+      "indexedMakerPayment": true,
+      "tokenConservation": true,
+      "takerTokenIncrease": "1",
+      "takerCkbDebitShannon": "26579",
+      "feeShannon": "26578",
+      "issuerInputAbsent": true,
+      "orderSpent": true
+    },
+    {
+      "makerAndTakerDiffer": true,
+      "indexedMakerPayment": true,
+      "tokenConservation": true,
+      "takerTokenIncrease": "1",
+      "takerCkbDebitShannon": "26579",
+      "feeShannon": "26578",
+      "issuerInputAbsent": true,
+      "orderSpent": true
+    }
+  ],
+  "completedAt": "2026-09-17T22:03:18.184Z"
+}

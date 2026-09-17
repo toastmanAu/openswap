@@ -1,6 +1,7 @@
-# OpenSwap v0.1
+# ToastDEX
 
-Clean-room implementation of the OpenSwap full-lot CKB lock:
+ToastDEX is a permissionless CKB exchange with a static frontend and a clean-room
+OpenSwap v0.1 full-lot lock contract:
 
 **ONE CELL · ONE LOT · ONE FILL · ONE MAKER PAYMENT**
 
@@ -34,8 +35,8 @@ regressions. See [implementation status](docs/STATUS.md),
 The immutable Data1 contract is deployed on CKB testnet. Recorded checks cover
 JoyID/secp cancellation, indexed maker payments, reciprocal solver settlement,
 three competing-solver rounds, and browser create/cancel/swap flows.
-The current suites contain **88 Rust tests**, **60 SDK/solver/UI-helper tests**,
-and **7 browser tests**. A fresh two-wallet app test was also reported successful
+The current suites contain **88 Rust tests**, **68 SDK/solver/UI-helper tests**,
+and **8 browser tests**. A fresh two-wallet app test was also reported successful
 by the user after the wallet-switch fix; its transaction hashes are not recorded.
 
 This is a testnet reference implementation, not an audited mainnet release.
@@ -51,13 +52,18 @@ npm ci
 npm run dev:frontend
 ```
 
-Open **http://127.0.0.1:5173**. The app scans the CKB indexer directly; there is
+Open **http://127.0.0.1:5173**. The ToastDEX wordmark and brown/cream palette are
+placeholders for the forthcoming logo. The app scans the CKB indexer directly; there is
 no mandatory hosted order API. The development server is local only—this GitHub
 repository does not deploy or host a public trading website.
 
 - **Swap:** choose pay/receive tokens, enter the receive amount, and review the
   automatically quoted payment. Live lots also have direct review buttons.
 - **Orders:** place orders, split them into lots, or cancel your own orders.
+- **Activity:** recent wallet transactions from the indexer, plus locally saved
+  submission hashes and fresh node status. History is scoped to the account.
+- Prices use token decimals. Reviews separate network fees, order capacity,
+  recoverable token-cell storage and net wallet CKB change.
 - CKB amounts are entered/displayed in **CKB**, with exact decimal conversion.
   Existing orders retain their original on-chain amounts.
 - Built-in catalog: iCKB, the explorer's top 20 sUDTs by holder count, and
@@ -81,6 +87,18 @@ npm run build:frontend
 # With the development server running and Chrome installed:
 npm run test:frontend
 ```
+
+## Static hosting and independent review
+
+Cloudflare Pages is the selected host for `toastdex.org`. The configuration and
+[deployment runbook](docs/CLOUDFLARE_PAGES.md) are ready; domain setup and live
+hosting are pending owner access/DNS details. `npm run release:frontend` builds
+twice, compares output hashes and produces a static archive under `release/`.
+
+The [independent-review brief](docs/EXTERNAL_REVIEW.md) identifies the exact
+contract, security questions and evidence. No external audit has been completed.
+A new [two-wallet trade](deployments/two-wallet-trade-result.json) was verified on
+both nodes with distinct maker/taker accounts; the lock binary remains unchanged.
 
 ## Key handling
 

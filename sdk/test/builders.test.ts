@@ -63,3 +63,13 @@ test('wallet preparation mutation is rejected before requesting a signature', as
   await assert.rejects(()=>sdk.submit(built,f.signer),/Pinned|changed/);
   assert.equal(f.signed(),false);
 });
+test('broadcast boundary records signed transaction before an ambiguous RPC failure',async()=>{
+ const f=setup();f.fund();const built=await sdk.createOrder(f.context,{offerAsset:sdk.CKB,askAsset:sdk.udt(b),lots:[{offerAmount:100n,askAmount:10n}]});
+ const seen:string[]=[];f.client.sendTransaction=async()=>{throw new Error('RPC timeout');};
+ await assert.rejects(()=>sdk.submit(built,f.signer,{beforeBroadcast:hash=>seen.push(hash)}),/RPC timeout/);
+ assert.equal(f.signed(),true);assert.deepEqual(seen,[built.tx.hash()]);
+});
+test('spent inputs never reach the broadcast boundary',async()=>{
+ const f=setup();f.fund();const built=await sdk.createOrder(f.context,{offerAsset:sdk.CKB,askAsset:sdk.udt(b),lots:[{offerAmount:100n,askAmount:10n}]});f.cells.length=0;let broadcast=false;
+ await assert.rejects(()=>sdk.submit(built,f.signer,{beforeBroadcast:()=>{broadcast=true;}}),/spent/);assert.equal(broadcast,false);assert.equal(f.signed(),false);
+});

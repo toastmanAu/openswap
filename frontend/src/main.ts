@@ -2,30 +2,42 @@ import {ccc,WebComponentConnector,ConnectorConnectionEvent,SelectClientEvent} fr
 import * as swap from '@openswap/sdk';
 import deploymentJson from '../../deployments/testnet.json';
 import './style.css';
-import {parseUnits,formatUnits} from './amounts.js';
+import {parseUnits,formatUnits,unitPrice} from './amounts.js';
+import {explainError} from './errors.js';
+import {capacityReview} from './review.js';
 import {isOwnOrder,assertExternalFill} from './ownership.js';
+import {readActivity,mergeActivity,fetchActivity,accountKey,type Activity} from './activity.js';
 const deployment=deploymentJson as swap.Deployment;
 const el=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id)! as T;
 const value=(id:string)=>(el<HTMLInputElement>(id)).value;
 const text=(id:string,message:string)=>{el(id).textContent=message;};
-const report=(error:unknown)=>{text('status',error instanceof Error?error.message:String(error));el('status').classList.add('notice');};
+const report=(error:unknown)=>{text('status',explainError(error));el('status').classList.add('notice');};
 const run=(fn:()=>Promise<void>)=>{void fn().catch(report);};
 let rpcOwner=ccc.ClientPublicTestnet.open({urls:['https://testnet.ckb.dev']});
 let indexerOwner=ccc.ClientPublicTestnet.open({urls:['https://testnet.ckb.dev']});
 let client:ccc.Client=rpcOwner.value,signer:ccc.Signer|undefined,owner:ccc.Script|undefined;
 let walletLocks:ccc.Script[]=[];
+let connectionEpoch=0;
+let scanFresh=false,lastScan=0;
 let generation=0,busy=false,orders:swap.OpenSwapOrder[]=[],scanAbort:AbortController|undefined;
 const bookPages=new Map<string,number>();
-let review:{built:swap.BuiltTransaction;signer:ccc.Signer;generation:number}|undefined;
+let review:{built:swap.BuiltTransaction;signer:ccc.Signer;generation:number;summary:string;account:string;createdAt:number}|undefined;
+let activity:Activity[]=[];try{activity=readActivity(localStorage.getItem('toastdex-activity'));}catch{}
+let historyGeneration=0;
+function saveActivity(item:Activity){activity=mergeActivity(activity,item);try{localStorage.setItem('toastdex-activity',JSON.stringify(activity));}catch{report(new Error('Transaction sent, but this browser could not save activity. Keep the transaction hash.'));}}
+function clearActivity(){historyGeneration++;el('activity-list').replaceChildren();text('activity-status','Connect a wallet to see recent transactions.');}
+function renderActivityRows(rows:Activity[]){const root=el('activity-list');root.replaceChildren();for(const row of rows){const item=document.createElement('div');item.className='activity-row';const title=document.createElement('p');title.textContent=`${row.status.toUpperCase()} · ${row.summary.split('\n')[0]}`;const link=document.createElement('a');link.href=`https://pudge.explorer.nervos.org/transaction/${row.hash}`;link.target='_blank';link.rel='noopener noreferrer';link.textContent=`${row.hash.slice(0,18)}…${row.hash.slice(-8)}`;item.append(title,link);if(row.block){const block=document.createElement('small');block.textContent=` · Block ${row.block}`;item.append(block);}root.append(item);}}
+async function refreshActivity(){const selected=signer,locks=[...walletLocks],id=++historyGeneration;if(!selected||!locks.length){clearActivity();return;}renderActivityRows(activity.filter(r=>r.account===accountKey(locks)&&r.network===deployment.genesisHash).slice(-20).reverse());text('activity-status','Loading recent activity…');try{const rows=await fetchActivity(selected.client,locks,deployment.genesisHash,activity);if(id!==historyGeneration||selected!==signer)return;renderActivityRows(rows);for(const row of rows)if(activity.some(a=>a.hash===row.hash&&a.account===row.account))saveActivity(row);text('activity-status',rows.length?'Recent wallet transactions. Unknown means the node has not confirmed the transaction; it does not prove failure.':'No recent transactions found.');}catch(error){console.warn('Activity refresh failed',error);if(id===historyGeneration)text('activity-status','Activity unavailable. Your transaction hashes remain saved; try Refresh activity.');}}
+el('refresh-activity').onclick=()=>run(refreshActivity);
 const assets=new Map<string,{label:string;asset:swap.AssetId}>([['ckb',{label:'CKB',asset:swap.CKB}]]);
-const connector=new WebComponentConnector();connector.client=client;connector.name='OpenSwap Testnet';
+const connector=new WebComponentConnector();connector.client=client;connector.name='ToastDEX Testnet';
 connector.addEventListener('select-client',event=>{const selected=(event as SelectClientEvent).client;if(selected.addressPrefix!=='ckt'){report(new Error('Only testnet is supported'));return;}connector.client=selected;client=selected;});
 connector.addEventListener('connection',event=>{
- const connection=(event as ConnectorConnectionEvent).connectionOwner;
- signer=connection?.value.signerInfo.signer;owner=undefined;walletLocks=[];text('connect',signer?'Loading account…':'Connect wallet');text('connected-account','');text('wallet-address',signer?'Loading account…':'Browse without connecting.');invalidate();renderBook();
+ const connection=(event as ConnectorConnectionEvent).connectionOwner,epoch=++connectionEpoch;
+ signer=connection?.value.signerInfo.signer;owner=undefined;walletLocks=[];clearActivity();text('connect',signer?'Loading account…':'Connect wallet');text('connected-account','');text('wallet-address',signer?'Loading account…':'Browse without connecting.');invalidate();renderBook();
  const selected=signer;run(async()=>{if(!selected){text('wallet-address','Browse without connecting.');text('connect','Connect wallet');text('connected-account','');renderBook();return;}
- const [address,addresses]=await Promise.all([selected.getRecommendedAddressObj(),selected.getAddressObjs()]);if(signer!==selected)return;walletLocks=addresses.map(a=>a.script);
- owner=address.script;text('wallet-address',address.toString());text('connected-account',`Account: ${address.toString()}`);text('connect','Switch wallet');renderBook();});
+ const [address,addresses]=await Promise.all([selected.getRecommendedAddressObj(),selected.getAddressObjs()]);if(signer!==selected||epoch!==connectionEpoch)return;walletLocks=addresses.map(a=>a.script);
+ owner=address.script;text('wallet-address',address.toString());text('connected-account',`Account: ${address.toString()}`);text('connect','Switch wallet');renderBook();void refreshActivity();});
 });
 connector.addEventListener('close',()=>el<HTMLDialogElement>('wallet-dialog').close());
 el('wallet-host').append(connector);
@@ -48,18 +60,28 @@ function selected(id:string){const result=assets.get(value(id));if(!result)throw
 function label(asset:swap.AssetId){return assets.get(swap.assetKey(asset))?.label??`${swap.assetKey(asset).slice(0,10)}…`;}
 function decimals(asset:swap.AssetId){return asset.kind==='ckb'?8:swap.tokensForNetwork('testnet').find(t=>t.typeHash===swap.assetKey(asset))?.decimals??0;}
 function amount(n:bigint,asset:swap.AssetId){return `${formatUnits(n,decimals(asset))} ${label(asset)}`;}
-function showView(view:string){for(const name of ['swap','orders','settings'])el(`view-${name}`).hidden=name!==view;for(const b of document.querySelectorAll<HTMLButtonElement>('[data-view]'))b.setAttribute('aria-pressed',String(b.dataset.view===view));}
+function showView(view:string){if(view==='activity')void refreshActivity();for(const name of ['swap','orders','activity','settings'])el(`view-${name}`).hidden=name!==view;for(const b of document.querySelectorAll<HTMLButtonElement>('[data-view]'))b.setAttribute('aria-pressed',String(b.dataset.view===view));}
 for(const b of document.querySelectorAll<HTMLButtonElement>('[data-view]'))b.onclick=()=>showView(b.dataset.view!);
 el('reverse').onclick=()=>{const base=value('base');el<HTMLSelectElement>('base').value=value('quote');el<HTMLSelectElement>('quote').value=base;el<HTMLInputElement>('swap-output').value='';el<HTMLInputElement>('swap-budget').value='';invalidate();renderBook();};
 function swapAssets(){const base=selected('base'),quote=selected('quote');return value('swap-direction')==='buy'?{assetOut:base,assetIn:quote}:{assetOut:quote,assetIn:base};}
-function localQuote(){const {assetIn,assetOut}=swapAssets();return swap.quoteSwap(orders.filter(o=>!isOwnOrder(o,walletLocks)),{assetIn,assetOut,amountOut:parseUnits(value('swap-output'),decimals(assetOut)),maxAmountIn:value('swap-budget').trim()?parseUnits(value('swap-budget'),decimals(assetIn)):swap.U128_MAX,tipBlock:0n,genesisHash:deployment.genesisHash});}
+function localQuote(){if(!scanFresh)throw new Error('Refresh live orders before requesting a quote.');const {assetIn,assetOut}=swapAssets();return swap.quoteSwap(orders.filter(o=>!isOwnOrder(o,walletLocks)),{assetIn,assetOut,amountOut:parseUnits(value('swap-output'),decimals(assetOut)),maxAmountIn:value('swap-budget').trim()?parseUnits(value('swap-budget'),decimals(assetIn)):swap.U128_MAX,tipBlock:0n,genesisHash:deployment.genesisHash});}
 function updateQuote(){
  text('pay-estimate','—');
  if(!value('swap-output').trim()){text('quote-status','Enter the amount you want to receive, or choose an available swap below.');return;}
- try{const q=localQuote();text('pay-estimate',formatUnits(q.amountIn,decimals(q.assetIn)));text('quote-status',`Receive ${amount(q.amountOut,q.assetOut)} for ${amount(q.amountIn,q.assetIn)} · ${q.selectedOrders.length} whole lot${q.selectedOrders.length===1?'':'s'}${q.overfill?` · includes ${amount(q.overfill,q.assetOut)} extra`:''}. Fees and storage are additional.`);}
+ try{const q=localQuote();text('pay-estimate',formatUnits(q.amountIn,decimals(q.assetIn)));text('quote-status',`Receive ${amount(q.amountOut,q.assetOut)} for ${amount(q.amountIn,q.assetIn)} · ${q.selectedOrders.length} whole lot${q.selectedOrders.length===1?'':'s'}${q.overfill?` · includes ${amount(q.overfill,q.assetOut)} extra`:''}. Price ≈ ${unitPrice(q.amountIn,q.amountOut,decimals(q.assetIn),decimals(q.assetOut))} ${label(q.assetIn)} per ${label(q.assetOut)}. Fees and storage are additional.`);}
  catch(error){text('quote-status',String(error).includes('No whole-lot')?'No available swap for this amount and direction. Try a listed swap below, reverse the tokens, or place an order.':error instanceof Error?error.message:String(error));}
 }
-for(const id of ['swap-output','swap-budget','swap-direction','offer','ask','lots','direction'])el(id).oninput=()=>{invalidate();updateQuote();};
+for(const id of ['swap-output','swap-budget','swap-direction','offer','ask','lots','direction'])el(id).oninput=()=>{invalidate();updateQuote();updateOrderPreview();};
+function updateOrderPreview(){
+ if(!owner){text('order-estimate','Connect a wallet to estimate the CKB capacity needed for your order.');return;}
+ if(!value('offer')||!value('ask')){text('order-estimate','Enter your offer and ask to see the price and storage reserve.');return;}
+ try{const base=selected('base'),quote=selected('quote'),offer=value('direction')==='sell'?base:quote,ask=value('direction')==='sell'?quote:base;
+ const offered=parseUnits(value('offer'),decimals(offer)),wanted=parseUnits(value('ask'),decimals(ask));const plan=swap.plan({totalOffer:offered,priceNumerator:wanted,priceDenominator:offered,candidateCounts:[Number(value('lots'))]})[0];if(!plan)throw new Error('Offer must contain at least one unit per lot');
+ const capacity=plan.offers.reduce((n,v,i)=>n+swap.estimateCapacity(deployment,{ownerLock:owner!,nonce:new Uint8Array(16),askAsset:ask,askAmount:plan.asks[i]!},offer,v).cell.cellOutput.capacity,0n);
+ const reserve=capacity-(offer.kind==='ckb'?offered:0n);
+ text('order-estimate',`Price ≈ ${unitPrice(plan.totalAsk,offered,decimals(ask),decimals(offer))} ${label(ask)} per ${label(offer)}. CKB locked: ${formatUnits(capacity,8)} (${formatUnits(reserve,8)} storage reserve). Storage reserve returns on fill or cancellation. Network fee calculated at review.`);
+ }catch(error){text('order-estimate',error instanceof Error?error.message:String(error));}
+}
 async function tokenBalance(wallet:ccc.Signer,asset:swap.AssetId){
  if(asset.kind==='ckb')return wallet.getBalance();
  let total=0n,count=0;const seen=new Set<string>();
@@ -74,8 +96,9 @@ async function checkFunding(wallet:ccc.Signer,asset:swap.AssetId,required:bigint
  const available=await tokenBalance(wallet,asset);if(available<required)throw new Error(`You need ${amount(required,asset)} to fill this swap. This wallet has ${amount(available,asset)} available. Receive this testnet token in your connected wallet, or choose a swap that accepts a token you hold.`);
 }
 let balanceGeneration=0;
-function showBalance(){const generation=++balanceGeneration,wallet=signer;if(!wallet){text('pay-balance','Connect to see your balance');return;}const {assetIn}=swapAssets();text('pay-balance','Checking balance…');void tokenBalance(wallet,assetIn).then(n=>{if(generation===balanceGeneration&&signer===wallet)text('pay-balance',`Wallet: ${amount(n,assetIn)}${assetIn.kind==='ckb'?' total capacity':''}`);}).catch(()=>{if(generation===balanceGeneration)text('pay-balance','Balance unavailable; checked again when preparing');});}
-function renderAvailable(){const root=el('available-orders');root.replaceChildren();text('available-note',orders.length?`${orders.length} live lots across testnet markets. Choose one to review its exact payment.`:'No live swaps yet. Place an order in the Orders tab.');
+function showBalance(){const generation=++balanceGeneration,wallet=signer;if(!wallet||!owner){text('pay-balance','Connect to see your balance');text('receive-balance','');return;}const {assetIn,assetOut}=swapAssets();
+ for(const [id,asset] of [['pay-balance',assetIn],['receive-balance',assetOut]] as const){text(id,'Checking balance…');void tokenBalance(wallet,asset).then(n=>{if(generation===balanceGeneration&&signer===wallet)text(id,`Wallet: ${amount(n,asset)}${asset.kind==='ckb'?' total capacity (includes cell storage)':''}`);}).catch(()=>{if(generation===balanceGeneration)text(id,'Balance unavailable; checked again when preparing');});}}
+function renderAvailable(){const root=el('available-orders');root.replaceChildren();text('quote-age',scanFresh?`Orders checked ${new Date(lastScan).toLocaleTimeString()}`:'Live orders need refreshing.');text('available-note',orders.length?`${orders.length} live lots across testnet markets. Choose one to review its exact payment.`:'No live swaps yet. Place an order in the Orders tab.');
  for(const order of orders.slice(0,30)){const row=document.createElement('div');row.className='quote-row';const copy=document.createElement('span');copy.textContent=`Pay ${amount(order.askAmount,order.askAsset)} → Receive ${amount(order.offerAmount,order.offerAsset)}`;if(isOwnOrder(order,walletLocks)){copy.textContent+=' · Your order';row.append(copy,button('Manage order',async()=>showView('orders')));root.append(row);continue;}row.append(copy,button('Review swap',async()=>{await buildReview(async ctx=>{await assertExternalFill(ctx.signer,[order]);await checkFunding(ctx.signer,order.askAsset,order.askAmount);return swap.fillOrders(ctx,[order.outPoint]);},`You pay: ${amount(order.askAmount,order.askAsset)}\nYou receive: ${amount(order.offerAmount,order.offerAsset)}`);}));root.append(row);}
 }
 
@@ -102,6 +125,7 @@ async function configure(rpc:string,indexer:string){
   const result=await response.json();if(!response.ok||result.error||!result.result)throw new Error('Indexer tip unavailable');
   const header=await nextRpc.value.getHeaderByNumber(BigInt(result.result.block_number));if(header?.hash!==result.result.block_hash)throw new Error('RPC and indexer are on different chains or the indexer tip is unavailable');
   nextRpc.value.findCellsPagedNoCache=(...args)=>nextIndexer.value.findCellsPagedNoCache(...args);
+  nextRpc.value.findTransactionsPaged=nextIndexer.value.findTransactionsPaged.bind(nextIndexer.value);
  }catch(error){await nextRpc.dispose();await nextIndexer.dispose();throw error;}
  scanAbort?.abort();invalidate();connector.disconnect();signer=undefined;owner=undefined;walletLocks=[];text('connected-account','');orders=[];
  const oldRpc=rpcOwner,oldIndexer=indexerOwner;rpcOwner=nextRpc;indexerOwner=nextIndexer;client=nextRpc.value;connector.client=client;
@@ -110,14 +134,19 @@ async function configure(rpc:string,indexer:string){
 el('endpoints').onsubmit=e=>{e.preventDefault();if(busy)return;run(async()=>{await configure(value('rpc'),value('indexer'));await scan();});};
 el('add-token').onsubmit=e=>{e.preventDefault();run(async()=>{const script=ccc.Script.from(JSON.parse(value('token-script')));const result=await new swap.CatalogAssetResolver(client).identify(script);if(!result.supported)throw new Error(result.reason??'This token needs an AssetResolver');addAsset(value('token-label'),script);saveAssets();});};
 for(const id of ['base','quote'])el(id).onchange=()=>{invalidate();renderBook();};
-async function scan(){scanAbort?.abort();const abort=new AbortController();scanAbort=abort;const current=client;const found:swap.OpenSwapOrder[]=[];let malformed=0;text('scan-status','Scanning live cells…');
+async function scan(){scanFresh=false;scanAbort?.abort();const abort=new AbortController();scanAbort=abort;const current=client;const found:swap.OpenSwapOrder[]=[];let malformed=0;text('scan-status','Scanning live cells…');
  try{for await(const order of swap.scan(current,deployment,new swap.CatalogAssetResolver(current),{maxCells:10000,signal:abort.signal,onMalformed:()=>malformed++}))found.push(order);
- if(abort.signal.aborted||client!==current)return;orders=found;for(const o of found)for(const a of [o.offerAsset,o.askAsset])if(a.kind==='udt'&&!assets.has(swap.assetKey(a)))addAsset(`Token ${a.scriptHash.slice(0,8)}…`,a.script);text('scan-status',`${found.length} supported live orders · ${malformed} malformed cells skipped · scan cap 10,000 cells`);renderBook();}catch(error){if(!abort.signal.aborted){text('scan-status','Scan failed. Previously loaded orders may be stale.');throw error;}}
+ if(abort.signal.aborted||client!==current)throw new Error('Order scan replaced; refresh and try again');scanFresh=true;lastScan=Date.now();orders=found;for(const o of found)for(const a of [o.offerAsset,o.askAsset])if(a.kind==='udt'&&!assets.has(swap.assetKey(a)))addAsset(`Token ${a.scriptHash.slice(0,8)}…`,a.script);text('scan-status',`${found.length} supported live orders · ${malformed} malformed cells skipped · scan cap 10,000 cells`);renderBook();}catch(error){if(!abort.signal.aborted){text('scan-status','Scan failed. Previously loaded orders may be stale.');throw error;}throw error;}
 }
-el('refresh').onclick=()=>run(scan);
+el('refresh').onclick=()=>run(async()=>{await scan();await refreshActivity();});
 function button(title:string,action:()=>Promise<void>){const b=document.createElement('button');b.disabled=busy;b.textContent=title;b.onclick=()=>{if(!busy)run(action);};return b;}
+function renderOwnOrders(){
+ const mine=el('my-orders');mine.replaceChildren();if(!owner){mine.textContent='Connect a wallet to manage your orders.';return;}
+ const owned=orders.filter(o=>isOwnOrder(o,walletLocks));if(!owned.length)mine.textContent='No live orders for this wallet.';
+ for(const order of owned){const row=document.createElement('p');row.textContent=`Offer ${amount(order.offerAmount,order.offerAsset)} for ${amount(order.askAmount,order.askAsset)} `;row.append(button('Cancel',async()=>buildReview(ctx=>swap.cancelOrders(ctx,[order.outPoint]),`Recover order ${swap.orderKey(order)}. A separate plain owner cell pays the fee.`)));mine.append(row);}
+}
 function renderBook(){
- renderAvailable();updateQuote();if(assets.has(value('base'))&&assets.has(value('quote'))){showBalance();text('order-pair',`${label(selected('base'))} / ${label(selected('quote'))}`);const direction=el<HTMLSelectElement>('direction');direction.options[0]!.textContent=`Offer ${label(selected('base'))}, ask ${label(selected('quote'))}`;direction.options[1]!.textContent=`Offer ${label(selected('quote'))}, ask ${label(selected('base'))}`;}
+ renderOwnOrders(); renderAvailable();updateQuote();updateOrderPreview();if(assets.has(value('base'))&&assets.has(value('quote'))){showBalance();text('order-pair',`${label(selected('base'))} / ${label(selected('quote'))}`);const direction=el<HTMLSelectElement>('direction');direction.options[0]!.textContent=`Offer ${label(selected('base'))}, ask ${label(selected('quote'))}`;direction.options[1]!.textContent=`Offer ${label(selected('quote'))}, ask ${label(selected('base'))}`;}
  const root=el('book');root.replaceChildren();const base=assets.get(value('base'))?.asset,quote=assets.get(value('quote'))?.asset;
  if(!base||!quote||swap.assetKey(base)===swap.assetKey(quote)){root.textContent='Choose two different assets to view a market.';return;}
  for(const [title,offer,ask]of [['Asks · base offered',base,quote],['Bids · quote offered',quote,base]] as const){
@@ -129,9 +158,7 @@ function renderBook(){
   const navigation=document.createElement('p');navigation.textContent=`Lots ${page*50+1}–${Math.min(rows.length,page*50+50)} of ${rows.length} `;if(page>0)navigation.append(button('Previous page',async()=>{bookPages.set(pageKey,page-1);renderBook();}));if((page+1)*50<rows.length)navigation.append(button('Next page',async()=>{bookPages.set(pageKey,page+1);renderBook();}));root.append(navigation);
   for(const order of shown){const tr=document.createElement('tr');for(const content of [amount(order.offerAmount,order.offerAsset),amount(order.askAmount,order.askAsset),`${order.askAmount}/${order.offerAmount}`,`${order.outPoint.txHash.slice(0,12)}…:${order.outPoint.index}`]){const td=document.createElement('td');td.textContent=content;tr.append(td);}const td=document.createElement('td');td.append(isOwnOrder(order,walletLocks)?button('Your order',async()=>showView('orders')):button('Fill lot',async()=>buildReview(async ctx=>{await assertExternalFill(ctx.signer,[order]);await checkFunding(ctx.signer,order.askAsset,order.askAmount);return swap.fillOrders(ctx,[order.outPoint]);},`You pay: ${amount(order.askAmount,order.askAsset)}\nYou receive: ${amount(order.offerAmount,order.offerAsset)}`)));tr.append(td);body.append(tr);}table.append(body);wrap.append(table);root.append(wrap);
  }
- const mine=el('my-orders');mine.replaceChildren();if(!owner){mine.textContent='Connect a wallet to manage your orders.';return;}
- const owned=orders.filter(o=>isOwnOrder(o,walletLocks));if(!owned.length)mine.textContent='No live orders for this wallet.';
- for(const order of owned){const row=document.createElement('p');row.textContent=`Offer ${amount(order.offerAmount,order.offerAsset)} for ${amount(order.askAmount,order.askAsset)} `;row.append(button('Cancel',async()=>buildReview(ctx=>swap.cancelOrders(ctx,[order.outPoint]),`Recover order ${swap.orderKey(order)}. A separate plain owner cell pays the fee.`)));mine.append(row);}
+
 }
 function context():swap.BuildContext{if(!signer)throw new Error('Connect a wallet first');if(busy)throw new Error('Wait for the current transaction');if(!owner)throw new Error('Wait for the connected account to load');return{signer,deployment,resolver:new swap.CatalogAssetResolver(client)};}
 
@@ -140,10 +167,10 @@ el('create').onsubmit=e=>{e.preventDefault();run(async()=>{
  const offered=parseUnits(value('offer'),decimals(offer)),wanted=parseUnits(value('ask'),decimals(ask));const plan=swap.plan({totalOffer:offered,priceNumerator:wanted,priceDenominator:offered,candidateCounts:[Number(value('lots'))]})[0];if(!plan)throw new Error('Offer must contain at least one unit per lot');
  const built=await swap.createOrder(ctx,{offerAsset:offer,askAsset:ask,lots:plan.offers.map((offerAmount,i)=>({offerAmount,askAmount:plan.asks[i]!}))});
  if(start!==generation)throw new Error('Wallet or market changed; prepare again');
- await prepare(built,`Create ${plan.count} independent lots.\nOffer: ${amount(offered,offer)}\nTotal ask: ${amount(plan.totalAsk,ask)}\nRounding premium: ${plan.roundingPremium} units\nOrder capacity: ${ccc.fixedPointToString(built.tx.outputs.slice(0,plan.count).reduce((n,o)=>n+o.capacity,0n))} CKB`);
+ await prepare(built,`Create ${plan.count} independent lots.\nOffer: ${amount(offered,offer)}\nTotal ask: ${amount(plan.totalAsk,ask)}\nRounding premium: ${amount(plan.roundingPremium,ask)}\nOrder capacity: ${ccc.fixedPointToString(built.tx.outputs.slice(0,plan.count).reduce((n,o)=>n+o.capacity,0n))} CKB`);
  });};
 async function buildReview(build:(ctx:swap.BuildContext)=>Promise<swap.BuiltTransaction>,summary:string){const ctx=context(),start=generation;await assertActiveAccount(ctx.signer,start);const built=await build(ctx);if(start!==generation||ctx.signer!==signer)throw new Error('Wallet changed; prepare again');await prepare(built,summary);}
-async function prepare(built:swap.BuiltTransaction,summary:string){if(!signer)throw new Error('Wallet disconnected');built.assertLayout();const selected=signer,start=generation;const fee=await built.tx.getFee(selected.client);const addresses=await selected.getAddressObjs();const mine=(script:ccc.Script)=>addresses.some(a=>a.script.eq(script));let walletCapacityIn=0n;for(const input of built.tx.inputs){const cell=await input.getCell(selected.client);if(mine(cell.cellOutput.lock))walletCapacityIn+=cell.cellOutput.capacity;}const walletCapacityOut=built.tx.outputs.filter(o=>mine(o.lock)).reduce((n,o)=>n+o.capacity,0n);await assertActiveAccount(selected,start);if(start!==generation||signer!==selected)throw new Error('Wallet changed; prepare again');review={built,signer:selected,generation:start};text('review-text',`${summary}\n\nNetwork fee: ${ccc.fixedPointToString(fee)} CKB\nNet CKB capacity leaving wallet: ${ccc.fixedPointToString(walletCapacityIn-walletCapacityOut)} CKB (negative means received)\nInputs: ${built.tx.inputs.length} · Outputs: ${built.tx.outputs.length}\nNetwork: CKB TESTNET\nConnected account: ${ccc.Address.fromScript(owner!,selected.client).toString()}`);text('review-raw',ccc.stringify(built.tx));el<HTMLDialogElement>('review').showModal();}
+async function prepare(built:swap.BuiltTransaction,summary:string){if(!signer)throw new Error('Wallet disconnected');built.assertLayout();const selected=signer,start=generation;const fee=await built.tx.getFee(selected.client);const addresses=await selected.getAddressObjs();const costs=await capacityReview(built.tx,selected.client,addresses.map(a=>a.script),deployment);await assertActiveAccount(selected,start);if(start!==generation||signer!==selected)throw new Error('Wallet changed; prepare again');review={built,signer:selected,generation:start,summary,account:accountKey(addresses.map(a=>a.script)),createdAt:Date.now()};text('review-text',`${summary}\n\nNetwork fee: ${ccc.fixedPointToString(fee)} CKB\nProtocol fee: 0 CKB\nWallet CKB change: ${formatUnits(costs.walletChange,8)} CKB (negative means leaving wallet; includes network fee)\nCKB locked in new orders: ${formatUnits(costs.orderLocked,8)}\nCKB released from your orders: ${formatUnits(costs.orderReleased,8)}\nChange in token-cell storage reserve: ${formatUnits(costs.tokenReserveChange,8)} CKB (recoverable capacity, not a fee)\nInputs: ${built.tx.inputs.length} · Outputs: ${built.tx.outputs.length}\nNetwork: CKB TESTNET\nConnected account: ${ccc.Address.fromScript(owner!,selected.client).toString()}`);text('review-raw',ccc.stringify(built.tx));el<HTMLDialogElement>('review').showModal();}
 el('swap').onsubmit=e=>{e.preventDefault();run(async()=>{
  const ctx=context(),start=generation;await assertActiveAccount(ctx.signer,start);const base=selected('base'),quote=selected('quote');
  const assetOut=value('swap-direction')==='buy'?base:quote,assetIn=value('swap-direction')==='buy'?quote:base;
@@ -160,8 +187,8 @@ el('swap').onsubmit=e=>{e.preventDefault();run(async()=>{
 });};
 el('dismiss').onclick=()=>{review=undefined;el<HTMLDialogElement>('review').close();};
 function setBusy(value:boolean){busy=value;for(const button of document.querySelectorAll<HTMLButtonElement>('#create button,#swap button,#refresh,#endpoints button,#connect,#book button,#my-orders button,#dismiss,#sign,#available-orders button,#reverse'))button.disabled=value;}
-el('sign').onclick=()=>run(async()=>{const pending=review;if(!pending||pending.generation!==generation||pending.signer!==signer)throw new Error('Review is stale; prepare again');setBusy(true);text('status','Preparing wallet signature…');let submittedHash:string|undefined;
- try{await assertActiveAccount(pending.signer,pending.generation);const hash=await swap.submit(pending.built,pending.signer);submittedHash=hash;review=undefined;el<HTMLDialogElement>('review').close();text('status',`Submitted: ${hash}. Waiting for confirmation…`);await pending.signer.client.waitTransaction(hash,1);text('status',`Committed: ${hash}`);await scan();}catch(error){if(submittedHash)throw new Error(`Transaction ${submittedHash} was submitted. Confirmation or refresh failed: ${String(error)}`);throw error;}finally{setBusy(false);}
+el('sign').onclick=()=>run(async()=>{const pending=review;if(!pending||pending.generation!==generation||pending.signer!==signer)throw new Error('Review is stale; prepare again');if(Date.now()-pending.createdAt>60000){invalidate();throw new Error('Review is over one minute old. Refresh and prepare it again.');}setBusy(true);text('status','Preparing wallet signature…');let submittedHash:string|undefined;
+ try{await assertActiveAccount(pending.signer,pending.generation);const hash=await swap.submit(pending.built,pending.signer,{beforeBroadcast:hash=>{submittedHash=hash;saveActivity({hash,account:pending.account,network:deployment.genesisHash,summary:pending.summary.slice(0,2000),status:'unknown',createdAt:Date.now()});}});submittedHash=hash;saveActivity({hash,account:pending.account,network:deployment.genesisHash,summary:pending.summary.slice(0,2000),status:'submitted',createdAt:Date.now()});void refreshActivity();review=undefined;el<HTMLDialogElement>('review').close();text('status',`Submitted: ${hash}. Waiting for confirmation…`);await pending.signer.client.waitTransaction(hash,1);text('status',`Committed: ${hash}`);saveActivity({hash,account:pending.account,network:deployment.genesisHash,summary:pending.summary.slice(0,2000),status:'committed',createdAt:Date.now()});void refreshActivity();await scan();}catch(error){if(submittedHash){review=undefined;el<HTMLDialogElement>('review').close();void refreshActivity();throw new Error(`Transaction ${submittedHash} was sent to the node, but its final status is not confirmed here. Check Activity or the explorer before retrying. ${String(error)}`);}throw error;}finally{setBusy(false);}
 });
 run(async()=>{
  try{for(const item of JSON.parse(localStorage.getItem('openswap-assets')??'[]'))addAsset(String(item.label),ccc.Script.from(item.script));}catch{report(new Error('Stored token list was invalid; add the tokens again.'));}

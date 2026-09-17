@@ -41,12 +41,12 @@ test('switching wallets clears owned orders and self-fills are excluded',async({
  await page.evaluate(address=>(globalThis as any).OpenSwapBrowserTest.installAddress(address),maker);
  await expect(page.locator('#connected-account')).toContainText(maker);await expect(page.locator('#available-orders')).toContainText('Your order');
  await page.locator('#swap-output').fill('0.0000001');await expect(page.locator('#quote-status')).toContainText('No available swap');
- await page.getByRole('button',{name:'Orders',exact:true}).click();await expect(page.locator('#my-orders button')).toHaveCount(120);
+ await page.locator('#base').selectOption(await page.locator('#quote').inputValue());await page.getByRole('button',{name:'Orders',exact:true}).click();await expect(page.locator('#my-orders button')).toHaveCount(120);
  await page.getByRole('button',{name:'Switch wallet',exact:true}).click();await expect(page.locator('#my-orders')).toHaveText('Connect a wallet to manage your orders.');await expect(page.locator('#connected-account')).toHaveText('');
  expect(await page.evaluate(()=>(globalThis as any).openswapDisconnects)).toBeGreaterThan(0);
  await page.locator('#close-wallet').click();
  const taker='ckt1qzda0cr08m85hc8jlnfp3zer7xulejywt49kt2rr0vthywaa50xwsqgp9mnd6kevd2wgrenv6c09zk7qe9g2vjsyhqsv2';
  await page.evaluate(address=>(globalThis as any).OpenSwapBrowserTest.installAddress(address),taker);
  await expect(page.locator('#connected-account')).toContainText(taker);await expect(page.locator('#my-orders')).toHaveText('No live orders for this wallet.');
- await page.getByRole('button',{name:'Swap',exact:true}).click();await expect(page.locator('#quote-status')).toContainText('Receive 0.0000001 CKB');await expect(page.locator('#available-orders').getByRole('button',{name:'Review swap'})).toHaveCount(30);
+ await page.getByRole('button',{name:'Swap',exact:true}).click();await page.locator('#base').selectOption('ckb');await expect(page.locator('#quote-status')).toContainText('Receive 0.0000001 CKB');await expect(page.locator('#available-orders').getByRole('button',{name:'Review swap'})).toHaveCount(30);
 });

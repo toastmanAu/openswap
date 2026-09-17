@@ -141,3 +141,31 @@ remained under that account's control. This was valid settlement, not cancellati
 the order had no type script, while the indexed payment output had the iCKB type.
 The fee was 0.00066378 CKB. This audit does not identify which account the user
 intended to select in the wallet UI. No audit or regression check signs transactions.
+
+## ToastDEX usability update
+
+The application now uses a cream/toasted-brown palette and temporary ToastDEX
+wordmark. Both swap assets display wallet balances; CKB is explicitly total
+capacity, including cell storage. Activity is scoped by genesis and the full
+connected script set. It queries up to 20 transactions for each of eight wallet
+addresses, merges the last 20 local submissions, and shows at most 40 rows.
+Local storage retains at most 200 entries. This is recent activity, not a complete
+wallet/accounting export. Unknown status includes node lookup failures and is
+never presented as confirmed failure. Saved links remain visible during outages.
+
+Order creation estimates recoverable CKB storage before transaction building.
+Reviews show protocol fee (zero), actual network fee, net wallet CKB change,
+new/released order capacity and the change in token-cell storage reserves.
+Displayed decimal unit prices are rounded down to eight places and marked as
+approximate; settlement always uses exact integer amounts.
+
+A review expires in the app after one minute (not an on-chain expiry). Every
+submission still rechecks live cells. A callback records the transaction hash
+immediately before broadcasting, so an ambiguous RPC timeout directs the user
+to Activity instead of encouraging an automatic duplicate transaction.
+
+Validation: 68 TypeScript tests, eight browser tests, and a read-only review test
+cover account changes, insufficient funding, expired reviews and zero signature
+requests. The new live two-wallet trade is recorded in
+`deployments/two-wallet-trade-result.json`. External audit and deployed-origin
+JoyID acceptance remain separate gates.

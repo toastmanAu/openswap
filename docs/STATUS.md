@@ -27,7 +27,7 @@ Testnet deployment committed and independently checked through two RPC endpoints
   owner-proof cancellation, fee caps and live-input checks before signing.
 - Bounded reciprocal/multi-lot matcher and reference solver with local pending
   tracking and fresh scans. Dry-run by default; execution needs a supplied signer.
-- 60 TypeScript tests; 88 Rust tests (87 VM tests plus shared-vector test).
+- 68 TypeScript tests; 88 Rust tests (87 VM tests plus shared-vector test).
 
 ## Live JoyID cancellation verified
 
@@ -145,3 +145,14 @@ flow and self-fill prevention were added. Transaction hashes for that new test
 have not been supplied, so this is user acceptance evidence rather than a new
 independently verified chain journal. Seven browser regressions pass, including
 account switching and stale-order clearing. See docs/FRONTEND.md.
+
+## ToastDEX usability and release preparation
+
+- Account-scoped indexer/local activity with pending/unknown status and links.
+- Pay/receive balances, decimal unit prices and separate fee/storage accounting.
+- Quote freshness, review timeout, actionable errors and pre-broadcast hash storage.
+- ToastDEX cream/toasted-brown styling; final logo pending.
+- A new bounded two-account trade committed and was verified on both nodes;
+  see deployments/two-wallet-trade-result.json.
+- External-review brief and Cloudflare Pages configuration prepared. Actual
+  independent review and public custom-domain deployment are not completed.

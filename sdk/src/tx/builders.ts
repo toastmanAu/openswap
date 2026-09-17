@@ -136,7 +136,7 @@ export async function cancelOrders(context: BuildContext, points: ccc.OutPointLi
   }, cells.length);
 }
 /** Sign only after rechecking the raw layout, network and every input's liveness. */
-export async function submit(built: BuiltTransaction, signer: ccc.Signer): Promise<ccc.Hex> {
+export async function submit(built: BuiltTransaction, signer: ccc.Signer, options: { beforeBroadcast?: (hash: ccc.Hex) => void } = {}): Promise<ccc.Hex> {
   await assertNetwork(signer.client, built.deployment);
   built.assertLayout();
   for (const input of built.tx.inputs) {
@@ -150,5 +150,6 @@ export async function submit(built: BuiltTransaction, signer: ccc.Signer): Promi
   const signed = await signer.signOnlyTransaction(prepared);
   built.assertLayout(signed);
   if (signed.hash() !== rawHash) throw new Error('Wallet modified transaction contents');
+  options.beforeBroadcast?.(signed.hash());
   return signer.client.sendTransaction(signed);
 }

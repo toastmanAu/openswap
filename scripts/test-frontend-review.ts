@@ -15,6 +15,9 @@ try{
  await page.locator('#status').filter({hasText:'This wallet has 0 iCKB available'}).waitFor();
  assert.equal(signingRequests,0);
  await review();
+ await page.evaluate(()=>{(globalThis as any).originalDateNow=Date.now;Date.now=()=>((globalThis as any).originalDateNow() as number)+61001;});
+ await page.locator('#sign').click();await page.locator('#review').waitFor({state:'hidden'});assert.match(await page.locator('#status').innerText(),/one minute/);assert.equal(signingRequests,0);
+ await page.evaluate(()=>{Date.now=(globalThis as any).originalDateNow;});await review();
  await connect('0x0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798');await page.locator('#review').waitFor({state:'hidden'});
  await page.evaluate(()=>document.getElementById('sign')!.click());await page.locator('#status').filter({hasText:'Review is stale'}).waitFor();assert.equal(signingRequests,0);
  await connect(publicKey);await review();
@@ -22,5 +25,5 @@ try{
  await page.evaluate(()=>{(document.getElementById('rpc') as HTMLInputElement).value='https://testnet.ckbapp.dev';(document.getElementById('indexer') as HTMLInputElement).value='https://testnet.ckbapp.dev';(document.getElementById('endpoints') as HTMLFormElement).requestSubmit();});
  await page.locator('#review').waitFor({state:'hidden',timeout:30000});await page.locator('#connect').filter({hasText:'Connect wallet'}).waitFor();
  await page.evaluate(()=>document.getElementById('sign')!.click());await page.locator('#status').filter({hasText:'Review is stale'}).waitFor();assert.equal(signingRequests,0);
- const result={verifiedAt:new Date().toISOString(),accountChangeInvalidatesReview:true,endpointSwitchInvalidatesReview:true,staleReviewCannotSign:true,insufficientTokenExplainedBeforeSigning:true,signingRequests};await writeFile(new URL('../deployments/frontend-review-verification.json',import.meta.url),JSON.stringify(result,null,2)+'\n');console.log(JSON.stringify(result,null,2));
+ const result={verifiedAt:new Date().toISOString(),accountChangeInvalidatesReview:true,endpointSwitchInvalidatesReview:true,staleReviewCannotSign:true,insufficientTokenExplainedBeforeSigning:true,expiredReviewCannotSign:true,signingRequests};await writeFile(new URL('../deployments/frontend-review-verification.json',import.meta.url),JSON.stringify(result,null,2)+'\n');console.log(JSON.stringify(result,null,2));
 }finally{await browser.close();await owned.dispose();}

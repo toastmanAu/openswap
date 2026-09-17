@@ -17,7 +17,8 @@
     "build:smoke": "node scripts/build-smoke.mjs",
     "build:frontend": "npm run build -w @openswap/frontend",
     "dev:frontend": "npm run dev -w @openswap/frontend",
-    "test:frontend": "playwright test -c frontend/playwright.config.ts"
+    "test:frontend": "playwright test -c frontend/playwright.config.ts",
+    "release:frontend": "node scripts/release-frontend.mjs"
   },
   "dependencies": {
     "@ckb-ccc/shell": "1.3.12"
