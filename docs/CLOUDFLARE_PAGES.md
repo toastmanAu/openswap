@@ -8,7 +8,7 @@ CKB RPC/indexer and wallets remain external.
 
 The [deployment record](../deployments/frontend-pages.json) identifies the deployed
 source commit, immutable deployment URL and verified asset hashes. The supplied
-`toastdex.png` is included unchanged in the static build.
+`toastDexLogo.png` is included unchanged in the static build.
 
 ## Verify and publish a static artifact
 
