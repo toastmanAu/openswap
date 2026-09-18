@@ -9,7 +9,8 @@ npm run dev:frontend
 
 Open http://127.0.0.1:5173. The build emits static files in `frontend/dist`;
 there is no application backend or hosted OpenSwap order API. The development
-server binds only to localhost. No public deployment has been performed.
+server binds only to localhost. The public testnet app is live at
+https://toastdex.org on Cloudflare Pages; see [deployment instructions](CLOUDFLARE_PAGES.md).
 
 ## Trading flow
 
@@ -109,7 +110,7 @@ This extra human acceptance check uses the user's passkey and is not automated:
 
 This checks the new app's passkey UX; earlier JoyID create/cancel and fill have
 already committed using the same SDK via Playground. No private key, recovery
-phrase or passkey export is required. No mainnet or public-hosting claim is made.
+phrase or passkey export is required. Trading remains on testnet.
 
 ## Wallet switching and self-fill prevention
 
@@ -144,8 +145,8 @@ intended to select in the wallet UI. No audit or regression check signs transact
 
 ## ToastDEX usability update
 
-The application now uses a cream/toasted-brown palette and temporary ToastDEX
-wordmark. Both swap assets display wallet balances; CKB is explicitly total
+The application uses a cream/toasted-brown palette and the supplied ToastDEX
+logo. Both swap assets display wallet balances; CKB is explicitly total
 capacity, including cell storage. Activity is scoped by genesis and the full
 connected script set. It queries up to 20 transactions for each of eight wallet
 addresses, merges the last 20 local submissions, and shows at most 40 rows.
@@ -169,3 +170,11 @@ cover account changes, insufficient funding, expired reviews and zero signature
 requests. The new live two-wallet trade is recorded in
 `deployments/two-wallet-trade-result.json`. External audit and deployed-origin
 JoyID acceptance remain separate gates.
+
+All eight browser regressions also passed against both public origins,
+`https://toastdex.org` and `https://toastdex.pages.dev`. These checks open the wallet
+selector but do not complete a human passkey signature. To repeat:
+
+```sh
+TOASTDEX_BASE_URL=https://toastdex.org npm run test:frontend
+```

@@ -1,0 +1,38 @@
+{
+  "project": "toastdex",
+  "url": "https://toastdex.org",
+  "pagesUrl": "https://toastdex.pages.dev",
+  "deploymentUrl": "https://d0130197.toastdex.pages.dev",
+  "sourceCommit": "ffbc23d22ff10fe402e86aa48cd8fcd57def6885",
+  "network": "testnet",
+  "customDomain": {
+    "name": "toastdex.org",
+    "httpsVerified": true
+  },
+  "verifiedAt": "2026-09-18T04:27:04.244Z",
+  "files": {
+    "https://toastdex.org": {
+      "index.html": "c2df584a5d1dc04cdc08eefee8872e5912dbdda9db5cf7ecc1cc981f219c2503",
+      "main.js": "e8c503d365638fdaf9ce640c93d24970b66ca1d4b410ecd8c9173a67c8689639",
+      "main.css": "d7f08c2bee6d81165bfddff71d48e03a0d0178e30567d61e9d572d5072cfa0a7",
+      "toastdex.png": "49682b9b009476d2be43f5d246b9832b984bbaef28ca722c05d88cafd49b26bf"
+    },
+    "https://toastdex.pages.dev": {
+      "index.html": "c2df584a5d1dc04cdc08eefee8872e5912dbdda9db5cf7ecc1cc981f219c2503",
+      "main.js": "e8c503d365638fdaf9ce640c93d24970b66ca1d4b410ecd8c9173a67c8689639",
+      "main.css": "d7f08c2bee6d81165bfddff71d48e03a0d0178e30567d61e9d572d5072cfa0a7",
+      "toastdex.png": "49682b9b009476d2be43f5d246b9832b984bbaef28ca722c05d88cafd49b26bf"
+    }
+  },
+  "browserTests": {
+    "https://toastdex.org": {
+      "passed": 8,
+      "failed": 0
+    },
+    "https://toastdex.pages.dev": {
+      "passed": 8,
+      "failed": 0
+    }
+  },
+  "deployedOriginPasskeySigningVerified": false
+}

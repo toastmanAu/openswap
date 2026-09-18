@@ -52,10 +52,10 @@ npm ci
 npm run dev:frontend
 ```
 
-Open **http://127.0.0.1:5173**. The ToastDEX wordmark and brown/cream palette are
-placeholders for the forthcoming logo. The app scans the CKB indexer directly; there is
-no mandatory hosted order API. The development server is local only—this GitHub
-repository does not deploy or host a public trading website.
+Open **http://127.0.0.1:5173**, or use the live testnet app at **https://toastdex.org**.
+The app uses the supplied ToastDEX logo and a brown/cream palette. It scans the
+CKB indexer directly; there is no mandatory hosted order API. The development
+server binds only to localhost.
 
 - **Swap:** choose pay/receive tokens, enter the receive amount, and review the
   automatically quoted payment. Live lots also have direct review buttons.
@@ -70,7 +70,7 @@ repository does not deploy or host a public trading website.
   UTXOSwap featured tokens. **Mainnet catalog entries are preview-only**;
   current trading is testnet. Bitcoin-bound RGB++ spending requires a separate
   leap integration. See [catalog provenance and compatibility](docs/TOKEN_CATALOG.md).
-- Use **Switch wallet inside OpenSwap** when changing accounts. The app clears
+- Use **Switch wallet inside ToastDEX** when changing accounts. The app clears
   the old session and displays the actual connected CKB address. Changing the
   account in a separate JoyID tab alone does not replace CCC's cached connection.
   Own orders are excluded from the app's swap routes.
@@ -90,9 +90,11 @@ npm run test:frontend
 
 ## Static hosting and independent review
 
-Cloudflare Pages is the selected host for `toastdex.org`. The configuration and
-[deployment runbook](docs/CLOUDFLARE_PAGES.md) are ready; domain setup and live
-hosting are pending owner access/DNS details. `npm run release:frontend` builds
+The testnet app is live at **https://toastdex.org** on Cloudflare Pages, with
+**https://toastdex.pages.dev** as an alternate URL. HTTPS and release asset hashes
+were verified on both origins; all eight browser tests passed on each. See the
+[deployment record](deployments/frontend-pages.json) and
+[deployment runbook](docs/CLOUDFLARE_PAGES.md). `npm run release:frontend` builds
 twice, compares output hashes and produces a static archive under `release/`.
 
 The [independent-review brief](docs/EXTERNAL_REVIEW.md) identifies the exact

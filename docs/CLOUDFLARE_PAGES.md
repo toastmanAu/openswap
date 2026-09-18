@@ -1,27 +1,14 @@
 # ToastDEX static deployment on Cloudflare Pages
 
-The site is prepared for Cloudflare Pages. **No public deployment or domain binding
-has been performed by this change.** There are no Pages Functions, Workers, D1,
-server secrets or hosted order services. CKB RPC/indexer and wallets remain external.
+The testnet app is live at **https://toastdex.org**, with
+**https://toastdex.pages.dev** as an alternate URL. The Pages project `toastdex`
+uses direct uploads; pushing Git commits does not automatically deploy it.
+There are no Pages Functions, Workers, D1, server secrets or hosted order services.
+CKB RPC/indexer and wallets remain external.
 
-## Git-connected project
-
-In Workers & Pages → Create application → Pages → Import a Git repository:
-
-| Setting | Value |
-| --- | --- |
-| Repository | `toastmanAu/openswap` (ToastDEX application; OpenSwap lock) |
-| Production branch | `main` |
-| Framework preset | None |
-| Root directory | Repository root |
-| Build command | `npm ci && npm run typecheck && npm run build:frontend` |
-| Build output directory | `frontend/dist` |
-| Node version | `22` |
-| Project name | `toastdex`, subject to availability |
-
-No environment secrets are required. `wrangler.jsonc` describes the same output
-for a direct-upload workflow if preferred. Use a Pages Git connection for automatic
-builds, or direct uploads; choose one deliberately when creating the project.
+The [deployment record](../deployments/frontend-pages.json) identifies the deployed
+source commit, immutable deployment URL and verified asset hashes. The supplied
+`toastdex.png` is included unchanged in the static build.
 
 ## Verify and publish a static artifact
 
@@ -40,18 +27,28 @@ The extracted contents can be hosted by any static server or mirrored independen
 Headers enforce revalidation, MIME checking, no framing and no referrer leakage.
 Wallet popup messaging remains enabled; no restrictive opener policy is set.
 
+After verification, publish using the authenticated Wrangler account:
+
+```sh
+npm exec --yes --package=wrangler@4.134.0 -- wrangler pages deploy frontend/dist --project-name toastdex --branch main
+TOASTDEX_BASE_URL=https://toastdex.org npm run test:frontend
+```
+
+`wrangler.jsonc` specifies the static output directory. No application environment
+secrets are required. Keep Wrangler credentials outside the repository.
+
 ## Domain and acceptance
 
-After the Pages preview works, add `toastdex.org` through the project's **Custom
-domains** flow. For an apex domain, Cloudflare requires the domain to be a zone
-in the same account with Cloudflare nameservers. Do not guess or replace DNS
-records; preserve existing mail and unrelated records. DNS details and access
-are still needed from the owner. Do not paste API tokens into chat or source files.
+The custom domain is registered with the Pages project. The domain owner set the
+proxied apex CNAME `@` to `toastdex.pages.dev`; mail and unrelated records should
+remain intact. The deployment account had Pages access but no DNS write access.
+Both public origins serve HTTPS and byte-identical HTML, JavaScript, CSS and logo
+matching the local release. All eight browser regressions passed on both origins.
 
-Before switching the domain, verify preview and production HTTPS, mobile layout,
-JoyID connect/switch/sign from the deployed origin, CKB decimal amounts, history,
-custom endpoints, and a bounded two-wallet create/fill/cancel. Local browser and
-chain tests cannot prove a new origin's passkey popup behavior.
+Human JoyID connect/switch/sign acceptance from the deployed origin remains to be
+completed. Existing browser tests open the wallet selector; earlier live chain
+tests do not prove a new origin's passkey popup behavior. Follow the bounded
+create/fill/cancel recipe in [the frontend guide](FRONTEND.md).
 
 Rollback: select the previous successful deployment in Pages. Published contract
 code and outstanding order cells remain unchanged by frontend rollbacks.

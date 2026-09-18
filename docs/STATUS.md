@@ -126,7 +126,7 @@ See `docs/GOAL_VALIDATION.md` for the requirement-by-requirement evidence and
   already passed via Playground); no agent can complete a user's passkey prompt.
 - Longer endurance runs, broader fuzzing, independent-machine reproducibility
   and external review. The three-round bounded soak is not a long-duration soak.
-- Public hosting and mainnet release are not performed or claimed.
+- Mainnet trading is not deployed; the public frontend trades on testnet.
 
 ## Source verification
 
@@ -151,8 +151,12 @@ account switching and stale-order clearing. See docs/FRONTEND.md.
 - Account-scoped indexer/local activity with pending/unknown status and links.
 - Pay/receive balances, decimal unit prices and separate fee/storage accounting.
 - Quote freshness, review timeout, actionable errors and pre-broadcast hash storage.
-- ToastDEX cream/toasted-brown styling; final logo pending.
+- ToastDEX cream/toasted-brown styling and supplied logo deployed.
 - A new bounded two-account trade committed and was verified on both nodes;
   see deployments/two-wallet-trade-result.json.
-- External-review brief and Cloudflare Pages configuration prepared. Actual
-  independent review and public custom-domain deployment are not completed.
+- Cloudflare Pages deployment is live at https://toastdex.org and
+  https://toastdex.pages.dev. HTTPS and matching release assets were verified,
+  and all eight browser regressions passed on each origin. See
+  deployments/frontend-pages.json.
+- External-review brief prepared; independent review and human JoyID signing
+  acceptance from the deployed origin remain outstanding.
