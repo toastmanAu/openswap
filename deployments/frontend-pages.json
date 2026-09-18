@@ -2,28 +2,29 @@
   "project": "toastdex",
   "url": "https://toastdex.org",
   "pagesUrl": "https://toastdex.pages.dev",
-  "deploymentUrl": "https://d0130197.toastdex.pages.dev",
-  "sourceCommit": "ffbc23d22ff10fe402e86aa48cd8fcd57def6885",
+  "deploymentUrl": "https://d52df91a.toastdex.pages.dev",
+  "sourceCommit": "98ae54cf8b74dddca3c09083db9d4d14410106d0",
   "network": "testnet",
   "customDomain": {
     "name": "toastdex.org",
     "httpsVerified": true
   },
-  "verifiedAt": "2026-09-18T04:27:04.244Z",
+  "verifiedAt": "2026-09-18T05:18:31.444Z",
   "files": {
     "https://toastdex.org": {
-      "index.html": "c2df584a5d1dc04cdc08eefee8872e5912dbdda9db5cf7ecc1cc981f219c2503",
-      "main.js": "e8c503d365638fdaf9ce640c93d24970b66ca1d4b410ecd8c9173a67c8689639",
-      "main.css": "d7f08c2bee6d81165bfddff71d48e03a0d0178e30567d61e9d572d5072cfa0a7",
-      "toastdex.png": "49682b9b009476d2be43f5d246b9832b984bbaef28ca722c05d88cafd49b26bf"
+      "index.html": "348f30312285f452272c9eb046f85914bd51a06e30549e6e798832d7c98ec0ea",
+      "main.js": "62e5b3f36d582ee820af3e7bef616e42826de40cd2f9aeac4309c2da18314960",
+      "main.css": "a71d7f069cedf844388d14cc4ec8fec062eb416e377dccaa96d0f92d1c0f6890",
+      "toastDexLogo.png": "92b7f6e15d9a0aa168a5ffd7b6d093c1c88dc39f315729a0d5f33415d152c9d7"
     },
     "https://toastdex.pages.dev": {
-      "index.html": "c2df584a5d1dc04cdc08eefee8872e5912dbdda9db5cf7ecc1cc981f219c2503",
-      "main.js": "e8c503d365638fdaf9ce640c93d24970b66ca1d4b410ecd8c9173a67c8689639",
-      "main.css": "d7f08c2bee6d81165bfddff71d48e03a0d0178e30567d61e9d572d5072cfa0a7",
-      "toastdex.png": "49682b9b009476d2be43f5d246b9832b984bbaef28ca722c05d88cafd49b26bf"
+      "index.html": "348f30312285f452272c9eb046f85914bd51a06e30549e6e798832d7c98ec0ea",
+      "main.js": "62e5b3f36d582ee820af3e7bef616e42826de40cd2f9aeac4309c2da18314960",
+      "main.css": "a71d7f069cedf844388d14cc4ec8fec062eb416e377dccaa96d0f92d1c0f6890",
+      "toastDexLogo.png": "92b7f6e15d9a0aa168a5ffd7b6d093c1c88dc39f315729a0d5f33415d152c9d7"
     }
   },
+  "deployedOriginPasskeySigningVerified": false,
   "browserTests": {
     "https://toastdex.org": {
       "passed": 8,
@@ -33,6 +34,5 @@
       "passed": 8,
       "failed": 0
     }
-  },
-  "deployedOriginPasskeySigningVerified": false
+  }
 }
