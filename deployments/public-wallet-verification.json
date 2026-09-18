@@ -1,0 +1,62 @@
+{
+  "network": "testnet",
+  "verifiedAt": "2026-09-18T12:35:38.013Z",
+  "originAcceptance": {
+    "origin": "https://toastdex.org",
+    "humanConfirmed": true,
+    "confirmedAt": "2026-09-18T12:37:44.702026+00:00",
+    "confirmation": "User confirmed create, fill and cancellation all signed through toastdex.org with wallet prompts completing normally.",
+    "cancelUsedExistingOrder": true,
+    "chainCannotEstablishOrigin": true
+  },
+  "hashes": {
+    "createFillHash": "0xf31bff26908063d31dc7b87ae9e166060be799b493d5e141a26dbe1e21a9b200",
+    "fillHash": "0xbe54c8f6630dfc2978bb9c074a5d538af749639dc0089bb8c1575ea6c6add047",
+    "createCancelHash": "0x272c8c89e8a16f5feac88ff1a3777d4d84afb4b332c099b46c946acfe150c33e",
+    "cancelHash": "0x95643e1b550d484df824c0d34bcb6359eba5f66ef374d9122dede201e627a30d"
+  },
+  "checks": [
+    {
+      "endpoint": "https://testnet.ckb.dev",
+      "makerLockHash": "0xe75d9c7a62d06c1e063eead8d13e8ef6cd08a864b3e4f481e82df0798fdd15a0",
+      "takerFundingLockHashes": [
+        "0x21ea19b046900321550056f32138001015b58ba6d5d84484df09821da89b3fdc"
+      ],
+      "fillIndex": 0,
+      "cancelIndex": 0,
+      "ownerProofIndex": 1,
+      "indexedMakerPayment": true,
+      "tokenConservation": true,
+      "distinctTakerFunding": true,
+      "ownerCancellation": true,
+      "ordersSpent": true,
+      "feesShannon": [
+        "68238",
+        "62890",
+        "57840",
+        "54485"
+      ]
+    },
+    {
+      "endpoint": "https://testnet.ckbapp.dev",
+      "makerLockHash": "0xe75d9c7a62d06c1e063eead8d13e8ef6cd08a864b3e4f481e82df0798fdd15a0",
+      "takerFundingLockHashes": [
+        "0x21ea19b046900321550056f32138001015b58ba6d5d84484df09821da89b3fdc"
+      ],
+      "fillIndex": 0,
+      "cancelIndex": 0,
+      "ownerProofIndex": 1,
+      "indexedMakerPayment": true,
+      "tokenConservation": true,
+      "distinctTakerFunding": true,
+      "ownerCancellation": true,
+      "ordersSpent": true,
+      "feesShannon": [
+        "68238",
+        "62890",
+        "57840",
+        "54485"
+      ]
+    }
+  ]
+}

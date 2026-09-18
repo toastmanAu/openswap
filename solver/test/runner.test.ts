@@ -65,3 +65,31 @@ test('an unknown node status releases reservations despite cached sent status',a
  assert(await solver.tick(true));assert(await solver.tick());
  assert.equal(cachedReads,0);assert(events.includes('settlement_conflict'));
 });
+
+test('accepted broadcast with a lost reply stays reserved through status outages',async()=>{
+ const f=market();let broadcasts=0,statusUnavailable=true;const events:string[]=[];
+ f.client.sendTransaction=async()=>{broadcasts++;throw new Error('RPC response lost after acceptance');};
+ f.client.getTransactionNoCache=async()=>{
+  if(statusUnavailable)throw new Error('Status endpoint unavailable');
+  return {status:'pending'} as ccc.ClientTransactionResponse;
+ };
+ const solver=new ReferenceSolver(f.context,event=>events.push(event));
+ await assert.rejects(()=>solver.tick(true),/response lost/);
+ for(let i=0;i<20;i++)await assert.rejects(()=>solver.tick(true),/Status endpoint unavailable/);
+ statusUnavailable=false;
+ for(let i=0;i<20;i++)assert.equal(await solver.tick(true),undefined);
+ assert.equal(broadcasts,1,'Ambiguous submission must not produce another broadcast');
+ f.client.getTransactionNoCache=async()=>({status:'committed'}) as ccc.ClientTransactionResponse;
+ f.client.findCells=async function*(){};
+ assert.equal(await solver.tick(true),undefined);assert(events.includes('settlement_committed'));
+});
+test('repeated indexer outages release the tick guard and recovery permits a later build',async()=>{
+ const f=market(),scan=f.client.findCells;let broadcasts=0;
+ f.client.findCells=async function*(){throw new Error('Indexer disconnected');};
+ f.client.sendTransaction=async tx=>{broadcasts++;return ccc.Transaction.from(tx).hash();};
+ const solver=new ReferenceSolver(f.context);
+ for(let i=0;i<20;i++)await assert.rejects(()=>solver.tick(true),/Indexer disconnected/);
+ assert.equal(f.signed(),false);assert.equal(broadcasts,0);
+ f.client.findCells=scan;
+ assert(await solver.tick(true));assert.equal(broadcasts,1);
+});

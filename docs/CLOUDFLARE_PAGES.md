@@ -45,10 +45,12 @@ remain intact. The deployment account had Pages access but no DNS write access.
 Both public origins serve HTTPS and byte-identical HTML, JavaScript, CSS and logo
 matching the local release. All eight browser regressions passed on both origins.
 
-Human JoyID connect/switch/sign acceptance from the deployed origin remains to be
-completed. Existing browser tests open the wallet selector; earlier live chain
-tests do not prove a new origin's passkey popup behavior. Follow the bounded
-create/fill/cancel recipe in [the frontend guide](FRONTEND.md).
+Human JoyID create/fill/cancel acceptance on `https://toastdex.org` completed on
+2026-09-18. The user confirmed normal wallet prompts and two nodes independently
+verified distinct taker funding, indexed maker payment and owner cancellation.
+See [wallet evidence](../deployments/public-wallet-verification.json). Browser
+tests alone do not establish passkey signing; follow the repeatable recipe in
+[the frontend guide](FRONTEND.md) after wallet integration changes.
 
 Rollback: select the previous successful deployment in Pages. Published contract
 code and outstanding order cells remain unchanged by frontend rollbacks.

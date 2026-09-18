@@ -49,12 +49,21 @@ Use docs/TEST_COVERAGE.md and docs/BENCHMARKS.md for local VM coverage/cycles.
 Deployment journals record public transaction data. In particular:
 
 - `solver-integration-verification.json`: separate-wallet reciprocal settlement.
-- `race-soak-result.json`: three competing-solver rounds (not an endurance test).
+- `race-soak-result.json`: original three competing-solver rounds.
+- `race-endurance-result.json`: extended bounded run, including its original
+  three-round baseline and separate process invocations; inspect `runs` and
+  `completedAt` rather than assuming an hours/days endurance test.
+- `race-funding-consolidation.json`: same-owner maintenance after the extended
+  run exposed token-cell capacity fragmentation; check conserved tokens and fee.
+- `public-wallet-verification.json`: human-confirmed deployed-origin JoyID
+  create/fill/cancel and independent two-node checks.
+- `remote-reproducibility.json`: separate GitHub-hosted machine matched the
+  immutable deployed binary using the pinned toolchain.
 - `frontend-review-verification.json`: read-only account/review checks, no signing.
 - `reported-fill-verification.json`: diagnosed self-payment; it was valid
   settlement, not an unpaid fill. The app now prevents this misleading UX.
 - `two-wallet-trade-result.json`: explicit maker/taker distinction, token gain,
-  CKB debit, exact maker output and two-node verification, when completed.
+  CKB debit, exact maker output and two-node verification.
 
 Only dedicated ignored local test keys may run live integration scripts. A fresh
 reviewer can run VM/unit/browser tests without those keys. Never send keys or
@@ -66,3 +75,26 @@ Record the reviewed commit and binary hashes, methods and tool versions, finding
 with reproducible cases and severity, remediation verification, and unresolved
 assumptions. A passing test suite is not an audit opinion. Mainnet release remains
 blocked on an explicitly accepted review outcome and separate deployment plan.
+
+## Review handoff
+
+Use [REVIEW_REPORT_TEMPLATE.md](REVIEW_REPORT_TEMPLATE.md) to record findings and
+an explicit release conclusion. The implementation team's tests and fixes are
+preparation for review, not an independent review opinion.
+
+Create a review source snapshot from a specific committed revision:
+
+```sh
+mkdir -p release
+review_commit=$(git rev-parse HEAD)
+git archive --format=tar --prefix=toastdex/ --output="release/toastdex-review-${review_commit}.tar" "$review_commit"
+sha256sum "release/toastdex-review-${review_commit}.tar"
+```
+
+`git archive` includes committed sources and public evidence; ignored test keys,
+wallet state, node_modules and build output are excluded. Supply the commit, archive
+hash, deployed binary identity and this brief to the chosen reviewer. No reviewer
+has been contacted and no paid engagement has been initiated by these checks.
+
+A [candidate shortlist and draft inquiry](REVIEW_CANDIDATES.md) is prepared from
+primary published CKB audit evidence. No outreach or engagement has occurred.

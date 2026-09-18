@@ -1,0 +1,19 @@
+{
+  "verifiedAt": "2026-09-18T12:22:50.390698+00:00",
+  "sourceCommit": "e86e6bb6b7e188ae961aab734fe24d1ed006777b",
+  "provider": "GitHub Actions hosted runner",
+  "runnerImage": "ubuntu-24.04",
+  "runnerImageVersion": "20260907.300.1",
+  "runUrl": "https://github.com/toastmanAu/openswap/actions/runs/35310357111",
+  "jobUrl": "https://github.com/toastmanAu/openswap/actions/runs/35310357111/job/105490948475",
+  "logSha256": "894f03cd281ee7859332b2d839351d20138abce8947005351d35cc65c55ef0ac",
+  "contract": {
+    "binarySha256": "060b0b73f91a960a965fcfaeb68dc40ada0557ff24e0c086c89611dd471340ab",
+    "codeHash": "0x1d4e322540cbec1d1fdf2ca4a13b12521401d6c1ed5f0432c01cce84ea94eddf",
+    "binaryBytes": 28592,
+    "hashType": "data1"
+  },
+  "remoteCleanBuildsMatch": true,
+  "remoteMatchesLocalAndDeployedIdentity": true,
+  "scope": "Separate GitHub-hosted Ubuntu machine with pinned toolchain; not a claim of cross-toolchain or cross-platform reproducibility."
+}

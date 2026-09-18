@@ -9,3 +9,11 @@ condition = "AND"
 paths = ['''(^|/)deployments/race-soak-result\.json$''']
 regexTarget = "line"
 regexes = ['''^\s*"tokenOrder": "(0x993d265c78801443d2fbeafa2e269ff715704acddf874a27d380d9fedff3bc6b|0x844be369466df584e00853deda5d61c8ebb32806e180b23dc5e1367421cac0b0|0xea728e595d0e1e94eebadddc9c080c391155144428cdfa015d0e56395f80b833)",?\s*$''']
+
+# Extended race journal: exact public token-order transaction hashes.
+[[allowlists]]
+description = "Public committed token-order hashes in the extended race journal"
+condition = "AND"
+paths = ['''(^|/)deployments/race-endurance-result\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"tokenOrder": "(0x993d265c78801443d2fbeafa2e269ff715704acddf874a27d380d9fedff3bc6b|0x844be369466df584e00853deda5d61c8ebb32806e180b23dc5e1367421cac0b0|0xea728e595d0e1e94eebadddc9c080c391155144428cdfa015d0e56395f80b833|0x1a79218c1475ed4167c4cf1f468b9b3193067415ebc3f01da264cebcaa5de7a9|0x820988d3bfcfc2ad9d235b486b14e700c993864ebebd073bd5095ab98439092b|0xf39a7830958d3c2d89286b275bc6d66c0dc79ee2172da14e51dc01a7ea6c3999|0xa2135f6f13b640960585b83c4287ed71594aa95a34aac91c84ef7a81581866ba|0xe8b278802877e20a4e7b116a979b5f725e028b3a03d4f518bfc7a7ea64e8ab35|0x6f759a66705a4cfa105e1ac531dff6b72be1e71adf9e6e7825a24e1a66884303|0xec2b7230b2e9b95bb9e7aec3cdc46e2430f927b1eb80bc5d3ef09e6ce4690973|0xf5166abb36933384aae6cdb9532207c052e3fc7c2ae83dd1ccc3fe58ca666e9f|0xb7671070b893fdc5482dcd49f21098e1d9abffdb365e0b21edec8431941d9dac)",?\s*$''']

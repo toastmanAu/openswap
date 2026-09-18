@@ -1,18 +1,23 @@
 # Current consensus coverage
 
-`cargo test --locked -p openswap-tests`: **88 test functions**, including
+`cargo test --locked -p openswap-tests`: **90 test functions**, including
 parameterized hostile-length cases and every truncated prefix of a valid args
-encoding. 87 execute the compiled RISC-V contract in CKB-VM using Data1;
-one verifies shared wire vectors against the Rust parser.
+encoding. 88 execute the compiled RISC-V contract in CKB-VM using Data1;
+one verifies shared wire vectors and one runs a fixed-seed 20,000-case malformed
+corpus against the host Rust parser. Structural byte mutations are also checked
+in CKB-VM for stable errors without panics or cycle exhaustion.
 
-`npm run test:sdk`: **55 tests** covering shared vectors, hostile codec inputs,
+`npm run test:sdk`: **70 tests** covering shared vectors, hostile codec inputs,
 capacity and lot arithmetic, asset profiles, builder ordering/conservation,
 malformed-tail recovery, spent inputs, wallet mutations, bounded matching,
 scanner filtering/bounds, pending reservations and competing solver races.
+Lost broadcast replies retain reservations; repeated status/indexer outages
+recover without duplicate broadcast or a stuck tick guard.
 Router coverage adds budget/overfill bounds, exact arithmetic, live quote
 revalidation and successful routed funding.
-The deterministic solver race is supplemented by three live two-wallet races
-verified on two nodes; see `deployments/race-soak-result.json`. Cache recovery
+The deterministic solver race is supplemented by 12 live two-wallet races
+(three baseline plus nine new), verified on two nodes; see
+`deployments/race-endurance-result.json`. Cache recovery
 and chain-only scanning regressions cover the defect found during that run.
 Builder tests use real CCC transaction completion with deterministic mock cells;
 they do not replace signed full-node integration.
@@ -60,4 +65,7 @@ they do not replace signed full-node integration.
   `deployments/solver-integration-verification.json`. Additional wallet variants, mainnet
   fixtures, property fuzzing, permutation fuzzing,
   longer endurance runs and additional live adversarial coverage remain release
-  work. Three bounded race/soak rounds and frontend create/cancel/swap now pass.
+  work. Twelve bounded race rounds and deployed JoyID create/fill/cancel now pass.
+
+Latest deployed JoyID acceptance, remote binary reproduction and bounded race
+evidence are summarized in [RELEASE_VALIDATION.md](RELEASE_VALIDATION.md).

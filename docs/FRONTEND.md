@@ -77,7 +77,7 @@ network availability. Screenshots are saved under ignored `frontend/test-results
 
 ## Recorded live and adversarial validation
 
-- Six isolated-browser tests pass, including decimal quote/reversal and catalog selection. Existing coverage includes: live scan/JoyID selector, mobile/input handling,
+- Eight isolated-browser tests pass, including decimal quote/reversal and catalog selection. Existing coverage includes: live scan/JoyID selector, mobile/input handling,
   a synthetic 120-lot book with malformed data and pagination, and endpoint mismatch.
 - `scripts/test-frontend-live.ts` drove four actual UI transactions using a local
   secp signer restricted to the test wallet, four signatures and 0.01 CKB fees.
@@ -96,21 +96,33 @@ verification is in `deployments/frontend-live-verification.json`.
 
 This extra human acceptance check uses the user's passkey and is not automated:
 
-1. Open http://127.0.0.1:5173 and keep the **CKB TESTNET** endpoints.
-2. Select **Connect wallet → JoyID** and check the connected public address.
-3. On Swap, select receive **CKB** and pay **Test xUDT**. Open **Orders** and
-   choose **Offer CKB, ask Test xUDT**.
-4. Enter offer **0.00000001**, ask **1**, and **1** lot. Choose **Review order**.
-5. Review capacity (about 249.00000001 CKB for the tested JoyID lock) and fee,
-   then **Sign and submit** and complete the wallet prompt.
-6. After confirmation, use **Cancel** under **Your orders**, review, and sign.
-7. Retain both committed hashes from the status message. The order capacity returns on
-   cancellation; fees are spent. A separate ordinary JoyID CKB cell is needed
-   for the cancellation proof.
+1. Open **https://toastdex.org** and keep the **TESTNET** endpoints.
+2. Connect wallet A with JoyID and check its displayed public address.
+3. Choose a small CKB/token trade using a token wallet B already holds. Create
+   **one lot** from wallet A; review the amounts, recoverable capacity and fee.
+4. Use the app's **Switch wallet** button to connect wallet B. Check the address
+   changed and wallet A's own orders disappeared. Fill the lot from B and verify
+   both wallets' received/payment amounts in Activity and their wallets.
+5. Switch back to A, check the address, create another single small lot and cancel
+   it. Cancellation needs a separate ordinary CKB cell for the owner proof.
+6. Save four hashes labelled **create-for-fill**, **fill**, **create-for-cancel**,
+   **cancel**, and confirm the browser origin was `https://toastdex.org`.
 
-This checks the new app's passkey UX; earlier JoyID create/cancel and fill have
-already committed using the same SDK via Playground. No private key, recovery
-phrase or passkey export is required. Trading remains on testnet.
+The token payment belongs to the maker; order capacity is recoverable and network
+fees are spent. Use the app's decimal token units, not raw shannons. No private
+key, recovery phrase or passkey export is needed. Trading remains on testnet.
+
+Read-only two-node verification (no signatures or broadcasts):
+
+```sh
+npx tsx scripts/verify-public-wallet.ts <create-for-fill> <fill> <create-for-cancel> <cancel>
+```
+
+The verifier checks deployed Data1 identity, indexed maker payment, distinct
+non-maker funding, exact 16-byte token conservation, owner cancellation proof
+and spent orders. It writes `deployments/public-wallet-verification.json` only
+when both nodes agree. Human confirmation of origin and passkey UX is recorded
+separately: those facts cannot be inferred from a transaction hash.
 
 ## Wallet switching and self-fill prevention
 
@@ -125,7 +137,7 @@ Own orders are marked **Your order / Manage order**, excluded from swap quotes,
 and rejected by a fresh address check before direct fills. Ownership checks use
 all CKB scripts exposed by the signer, not wallet names. The low-level permissionless
 SDK/contract still permits self-settlement; the frontend prevents presenting it
-as an economic trade. Seven browser tests now include switching between distinct
+as an economic trade. Browser tests include switching between distinct
 accounts, clearing owned orders and restoring external quotes.
 
 ### Reported fill audit
@@ -165,11 +177,11 @@ submission still rechecks live cells. A callback records the transaction hash
 immediately before broadcasting, so an ambiguous RPC timeout directs the user
 to Activity instead of encouraging an automatic duplicate transaction.
 
-Validation: 68 TypeScript tests, eight browser tests, and a read-only review test
+Validation: 70 TypeScript tests, eight browser tests, and a read-only review test
 cover account changes, insufficient funding, expired reviews and zero signature
 requests. The new live two-wallet trade is recorded in
-`deployments/two-wallet-trade-result.json`. External audit and deployed-origin
-JoyID acceptance remain separate gates.
+`deployments/two-wallet-trade-result.json`. Deployed-origin JoyID acceptance is recorded in
+`deployments/public-wallet-verification.json`; independent audit remains outstanding.
 
 All eight browser regressions also passed against both public origins,
 `https://toastdex.org` and `https://toastdex.pages.dev`. These checks open the wallet
@@ -178,3 +190,11 @@ selector but do not complete a human passkey signature. To repeat:
 ```sh
 TOASTDEX_BASE_URL=https://toastdex.org npm run test:frontend
 ```
+
+## Deployed wallet acceptance evidence
+
+On 2026-09-18 the user confirmed normal JoyID prompts on `https://toastdex.org`
+for creation, a distinct-wallet fill and cancellation of an existing order. Both
+testnet nodes agreed on exact maker payment, token conservation, separate taker
+funding and the cancellation owner proof. See
+[the verification journal](../deployments/public-wallet-verification.json).

@@ -35,7 +35,7 @@ regressions. See [implementation status](docs/STATUS.md),
 The immutable Data1 contract is deployed on CKB testnet. Recorded checks cover
 JoyID/secp cancellation, indexed maker payments, reciprocal solver settlement,
 three competing-solver rounds, and browser create/cancel/swap flows.
-The current suites contain **88 Rust tests**, **68 SDK/solver/UI-helper tests**,
+The current suites contain **90 Rust tests**, **70 SDK/solver/UI-helper tests**,
 and **8 browser tests**. A fresh two-wallet app test was also reported successful
 by the user after the wallet-switch fix; its transaction hashes are not recorded.
 
@@ -96,6 +96,10 @@ were verified on both origins; all eight browser tests passed on each. See the
 [deployment record](deployments/frontend-pages.json) and
 [deployment runbook](docs/CLOUDFLARE_PAGES.md). `npm run release:frontend` builds
 twice, compares output hashes and produces a static archive under `release/`.
+
+Deployed-origin JoyID create/fill/cancel passed with distinct-wallet funding and
+two-node verification. A separate GitHub-hosted runner reproduced the deployed
+contract binary; see [release validation](docs/RELEASE_VALIDATION.md).
 
 The [independent-review brief](docs/EXTERNAL_REVIEW.md) identifies the exact
 contract, security questions and evidence. No external audit has been completed.

@@ -8,7 +8,7 @@
 - Owner cancellation/rescue before tail parsing.
 - CKB and exactly-16-byte UDT offers, both ask settlement paths, same-asset and
   exact-order recreation rejection, stable assigned errors.
-- 87 CKB-VM test functions, including real xUDT, secp and ACP fixtures.
+- 88 CKB-VM test functions, including real xUDT, secp and ACP fixtures.
 - CI formatting/clippy/test/fixture integrity checks.
 - Cycle and binary-size report; two clean local builds match byte-for-byte.
 - Direct testnet deployment preparation with CCC, unsigned transaction and
@@ -27,7 +27,8 @@ Testnet deployment committed and independently checked through two RPC endpoints
   owner-proof cancellation, fee caps and live-input checks before signing.
 - Bounded reciprocal/multi-lot matcher and reference solver with local pending
   tracking and fresh scans. Dry-run by default; execution needs a supplied signer.
-- 68 TypeScript tests; 88 Rust tests (87 VM tests plus shared-vector test).
+- 70 TypeScript tests; 90 Rust tests (88 VM tests plus shared vectors and
+  a fixed-seed 20,000-case host parser corpus).
 
 ## Live JoyID cancellation verified
 
@@ -122,11 +123,13 @@ See `docs/GOAL_VALIDATION.md` for the requirement-by-requirement evidence and
 
 ## Remaining release limitations
 
-- Human JoyID passkey acceptance from the new frontend (live JoyID SDK signing
-  already passed via Playground); no agent can complete a user's passkey prompt.
-- Longer endurance runs, broader fuzzing, independent-machine reproducibility
-  and external review. The three-round bounded soak is not a long-duration soak.
+- Independent security review and a separate mainnet release decision.
+- Hours/days endurance testing, broader continuous fuzzing and additional wallet
+  variants remain beyond the bounded integration evidence.
 - Mainnet trading is not deployed; the public frontend trades on testnet.
+
+Deployed-origin JoyID signing and separate-machine binary reproducibility now
+have recorded evidence. See [release validation](RELEASE_VALIDATION.md).
 
 ## Source verification
 
@@ -140,11 +143,10 @@ See `docs/GOAL_VALIDATION.md` for the requirement-by-requirement evidence and
 
 ## Latest app acceptance
 
-The user reported a successful two-wallet app test after the explicit wallet-switch
-flow and self-fill prevention were added. Transaction hashes for that new test
-have not been supplied, so this is user acceptance evidence rather than a new
-independently verified chain journal. Seven browser regressions pass, including
-account switching and stale-order clearing. See docs/FRONTEND.md.
+The user confirmed a successful two-wallet JoyID trade and existing-order
+cancellation through toastdex.org with normal wallet prompts. All transactions
+passed independent two-node checks; see deployments/public-wallet-verification.json.
+Eight browser regressions also pass on both public origins.
 
 ## ToastDEX usability and release preparation
 
@@ -158,5 +160,25 @@ account switching and stale-order clearing. See docs/FRONTEND.md.
   https://toastdex.pages.dev. HTTPS and matching release assets were verified,
   and all eight browser regressions passed on each origin. See
   deployments/frontend-pages.json.
-- External-review brief prepared; independent review and human JoyID signing
-  acceptance from the deployed origin remain outstanding.
+- Human JoyID signing on toastdex.org confirmed, with distinct-wallet fill and
+  existing-order cancellation verified through both nodes. See
+  deployments/public-wallet-verification.json.
+- Separate GitHub-hosted runner matched the deployed binary; CI enforces identity.
+- Independent-review brief and report template prepared; external review remains
+  outstanding. See docs/RELEASE_VALIDATION.md for current evidence.
+
+## Release hardening completed
+
+- 12 live race rounds verified on both nodes (three baseline plus nine new), with
+  one winner each, conserved tokens, correct maker payments and spent orders.
+- Three process invocations resumed journaled work. A safe funding stop exposed
+  token-cell fragmentation; one same-owner consolidation released capacity and
+  allowed the final rounds to finish without new wallet funding.
+- Fixed solver tracking after a lost broadcast reply. Repeated outage recovery,
+  20,000 bounded parser mutations and CKB-VM byte-mutation checks pass.
+- 90 Rust tests, 70 TypeScript tests, required lint/type checks, unchanged binary
+  identity and separate-machine reproducibility evidence.
+- Independent reviewer selection and review remain outstanding. The review brief,
+  sourced candidate shortlist, report template and evidence are ready.
+
+See [RELEASE_VALIDATION.md](RELEASE_VALIDATION.md).

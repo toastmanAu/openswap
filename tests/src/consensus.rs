@@ -559,3 +559,26 @@ fn ckb_overpayment() {
     f.payments[0].0 = cell(&f.owner, None, CAP + 101);
     f.check(None);
 }
+
+#[test]
+fn malformed_byte_mutations_match_vm_errors() {
+    let original = Fixture::new().args;
+    let mut rejected = 0;
+    for offset in 0..original.len() {
+        let mut bytes = original.clone();
+        bytes[offset] ^= 0x80;
+        let parsed = crate::wire_parser::owner_prefix(&bytes)
+            .and_then(|owner| crate::wire_parser::terms(&bytes, &owner));
+        if let Err(error) = parsed {
+            let mut fixture = Fixture::new();
+            fixture.args = bytes;
+            // VM must return the assigned parser error, not panic or exhaust cycles.
+            fixture.check(Some(error as i8));
+            rejected += 1;
+        }
+    }
+    assert!(
+        rejected > 30,
+        "Corpus must exercise structural rejection paths"
+    );
+}

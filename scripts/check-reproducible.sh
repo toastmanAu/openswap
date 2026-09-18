@@ -8,4 +8,5 @@ CARGO_TARGET_DIR="$build_root/second" ./scripts/build-reproducible.sh
 cmp "$build_root/first/riscv64imac-unknown-none-elf/release/openswap-lock" \
     "$build_root/second/riscv64imac-unknown-none-elf/release/openswap-lock"
 ./scripts/hash-contract.sh "$build_root/first/riscv64imac-unknown-none-elf/release/openswap-lock"
+python3 scripts/check-contract-identity.py "$build_root/first/riscv64imac-unknown-none-elf/release/openswap-lock"
 echo 'Two clean local target directories produced identical binaries.'

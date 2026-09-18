@@ -13,8 +13,8 @@ jobs:
         run: make check
       - name: Build and execute CKB-VM tests
         run: make test
-      - name: Binary identity
-        run: make hash
+      - name: Match immutable testnet binary
+        run: python3 scripts/check-contract-identity.py
       - name: Rebuild in independent target directories
         run: ./scripts/check-reproducible.sh
   sdk:

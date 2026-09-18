@@ -29,8 +29,10 @@ export class ReferenceSolver {
       built.assertLayout();
       this.emit('settlement_built', { txHash: built.tx.hash() });
       if (execute) {
-        const hash = await submit(built, this.context.signer);
-        this.pending.set(hash,{orders:bundle.orders.map(orderKey),tx:built.tx.clone()});
+        const hash = await submit(built, this.context.signer, {
+          // Reserve before sending: a lost RPC reply does not mean rejection.
+          beforeBroadcast: hash => this.pending.set(hash,{orders:bundle.orders.map(orderKey),tx:built.tx.clone()}),
+        });
         this.emit('settlement_submitted',{txHash:hash});
       }
       return built.tx;

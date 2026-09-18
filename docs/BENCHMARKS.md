@@ -34,9 +34,13 @@ make hash
 ./scripts/check-reproducible.sh
 ```
 
-Two fresh local target directories produced byte-identical binaries. This checks
-local clean-build reproducibility, not the stronger requirement for two independent
-machines/environments before mainnet. CI performs the same comparison.
+Two fresh local target directories produced byte-identical binaries. A separate
+GitHub-hosted Ubuntu 24.04 runner also produced the same SHA256, CKB code hash and
+28,592-byte binary, including its own two clean builds. See
+[remote build evidence](../deployments/remote-reproducibility.json). CI now fails
+if the rebuilt binary differs from the immutable testnet deployment. This verifies
+separate machines using the pinned toolchain, not arbitrary operating systems or
+compiler versions.
 
 Toolchain: Rust 1.98.1, riscv64imac-unknown-none-elf, rust-lld bundled with Rust,
 release opt-level=s, LTO, one codegen unit, aborting panic, overflow checks,

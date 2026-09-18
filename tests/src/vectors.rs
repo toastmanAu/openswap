@@ -44,3 +44,48 @@ fn shared_wire_vectors() {
         }
     }
 }
+
+#[test]
+fn seeded_malformed_wire_corpus_never_panics() {
+    // Fixed seed and bounded buffers make failures reproducible without a fuzzer runtime.
+    let vectors: serde_json::Value =
+        serde_json::from_str(include_str!("../vectors/wire.json")).unwrap();
+    let seeds: Vec<Vec<u8>> = vectors
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| hex(v["expectedArgsHex"].as_str().unwrap()))
+        .collect();
+    let mut state = 0x746f_6173_7464_6578_u64;
+    let mut next = || {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        state
+    };
+    for case in 0..20_000 {
+        let mut bytes = if case % 2 == 0 {
+            seeds[next() as usize % seeds.len()].clone()
+        } else {
+            vec![0; next() as usize % 4097]
+        };
+        for _ in 0..1 + next() % 16 {
+            if bytes.is_empty() {
+                break;
+            }
+            let index = next() as usize % bytes.len();
+            bytes[index] = next() as u8;
+        }
+        if case % 5 == 0 {
+            bytes.truncate(next() as usize % (bytes.len() + 1));
+        }
+        if let Ok(owner) = crate::wire_parser::owner_prefix(&bytes) {
+            assert!(owner.end <= crate::wire_parser::MAX_OWNER_SCRIPT_BYTES);
+            assert!(owner.end <= bytes.len());
+            if let Ok(terms) = crate::wire_parser::terms(&bytes, &owner) {
+                assert!(terms.ask_amount > 0);
+                assert!(bytes.len() <= owner.end + 48 + crate::wire_parser::MAX_ASK_SCRIPT_BYTES);
+            }
+        }
+    }
+}

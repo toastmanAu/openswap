@@ -13,9 +13,9 @@ binary were not changed by this milestone.
 | Create/fill/cancel | Existing SDK builders and explicit transaction review | `deployments/frontend-live-verification.json`: four UI-originated transactions independently checked on two nodes |
 | Full-lot swap router | `sdk/src/quote.ts`, `sdk/src/tx/swap.ts` | Budget, overfill, integer precision, bounded tail improvement, stale/altered quote and funded-output tests; live UI routed swap |
 | Indexed maker payments | Builder assertions retained through signing | Both-node verification of exact output index/payment and token conservation for UI swap and race winners |
-| Broader adversarial integration | Scanner, quote, pending-cache, review and endpoint regressions | 55 SDK/solver tests; four browser tests; `frontend-review-verification.json` proves zero signing requests after account/endpoint changes |
+| Broader adversarial integration | Scanner, quote, pending-cache, review and endpoint regressions | 70 SDK/solver/UI-helper tests; eight browser tests; `frontend-review-verification.json` proves zero signing requests after account/endpoint changes |
 | Competing-solver race | `scripts/run-race-soak.ts` | Two different fee wallets and disjoint funding; both candidates submitted via different nodes; exactly one committed winner per round, verified on both nodes |
-| Bounded soak | Three resumable create/pair/race/verify/rescan rounds | `deployments/race-soak-result.json`; all three rounds complete, six orders consumed |
+| Bounded soak | 12 total resumable create/pair/race/verify/rescan rounds | `deployments/race-endurance-result.json`; three baseline plus nine new, with process restarts and same-owner funding consolidation |
 | Reproducible local app build | Pinned npm graph, esbuild build, workspace type-check | `npm run typecheck`, `npm run build:frontend`, `npm run test:sdk`, `npm run test:frontend` pass |
 | Wallet steps prepared | `docs/FRONTEND.md` | Concrete JoyID UI acceptance recipe; no secrets requested or bundled |
 
@@ -47,11 +47,14 @@ binary were not changed by this milestone.
   all destinations were restricted to the test wallet or its one-shannon orders,
   and the fee cap was 0.01 CKB per transaction. No production test hook or secret
   was added to the frontend bundle.
-- JoyID passkey signing was previously validated live through CCC Playground.
-  Its new frontend selector and integration are tested, but a human completing
-  a passkey prompt from this frontend is a separate acceptance check. A concrete
-  recipe is provided; the agent cannot perform a user's passkey interaction.
-- The app runs locally. Public hosting, mainnet operation, independent-machine
-  contract reproducibility, extended fuzzing and external audit are not claimed.
+- JoyID passkey signing is now confirmed by the user on `https://toastdex.org`.
+  The create/fill/cancel transactions passed independent two-node checks in
+  `deployments/public-wallet-verification.json`; the fill has distinct taker funding.
+- The static testnet site is publicly hosted on Cloudflare Pages. A separate
+  GitHub-hosted Ubuntu runner reproduced the deployed contract binary; see
+  `deployments/remote-reproducibility.json`.
+- Mainnet operation, hours/days endurance testing and an independent external
+  security review remain outside the completed checks. The fixed-seed mutation
+  corpus is bounded regression coverage, not continuous fuzzing.
 - Both solver wallets retain their unspent testnet funds under ignored local
   key files. Do not delete `.local` while those wallets hold funds.

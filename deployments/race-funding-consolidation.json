@@ -1,0 +1,23 @@
+{
+  "hash": "0x04e75f66116dd5b4575ae84d2a7afd424d8ed1a8ee87f6ed23302479e052d251",
+  "inputCells": 6,
+  "tokenAmount": "98",
+  "checks": [
+    {
+      "sameOwner": true,
+      "tokenConservation": true,
+      "inputCells": 6,
+      "tokenAmount": "98",
+      "releasedPlainCapacityShannon": "123499972691",
+      "feeShannon": "27309"
+    },
+    {
+      "sameOwner": true,
+      "tokenConservation": true,
+      "inputCells": 6,
+      "tokenAmount": "98",
+      "releasedPlainCapacityShannon": "123499972691",
+      "feeShannon": "27309"
+    }
+  ]
+}
