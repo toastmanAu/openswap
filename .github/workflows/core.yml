@@ -28,5 +28,6 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run test:sdk
+      - run: npm run test:pool-model
       - run: npm run build:smoke
       - run: npm run release:frontend

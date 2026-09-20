@@ -142,3 +142,10 @@ implementation README. No Nervina SDL implementation code was used.
 
 New implementation code is MIT. External test fixtures retain their upstream
 license and provenance in `tests/fixtures`.
+
+## Liquidity-pool research
+
+A separate [draft pool specification](docs/research/POOL_TRANSITIONS.md) and
+[integer accounting model](pool-model/README.md) explore permissionless CKB/xUDT
+pools alongside existing orders. Run `npm run test:pool-model` or
+`npm run demo:pool-model`. This is off-chain research, not deployed pool support.
