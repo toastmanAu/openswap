@@ -4,6 +4,39 @@ Saved 2026-09-23 (Australia/Adelaide). Read this first when resuming.
 
 ## Current request and stopping point
 
+### Resumption update (2026-09-23)
+
+The user requested continuation, then authorized committing this milestone.
+The following changes are included in the pool arithmetic/codec milestone;
+no push or deployment is part of that commit request:
+
+- `docs/research/POOL_WIRE_FORMAT.md`: draft exact state/args/action layouts,
+  shared Data1 role tags, genesis/sibling identity, LP authentication, scan bounds
+  and error assignments. Still draft ABI, with no on-chain validator.
+- `pool-arithmetic`: isolated no_std Rust accounting, exact-pinned uint 0.10.0,
+  host vector checker, and CKB RISC-V library compilation.
+- `pool-model/src/cross-check.ts`: 42,155 deterministic TypeScript/Rust cases,
+  including all state/flow fields, rejection codes and square roots. Run with
+  `npm run test:pool-cross`; `--emit` emits reusable JSONL vectors.
+- Dedicated pool CI job and pool Clippy check. Typecheck, the 13 TS model tests,
+  Rust arithmetic tests and cross-language comparison passed locally.
+- `make check` and all 90 existing order Rust tests passed. Rebuilt order binary
+  matches the immutable testnet SHA256/code hash and remains 28,592 bytes.
+- Follow-up goal requested by the user: bounded pool wire codecs. Implemented
+  `pool-arithmetic/src/wire.rs` for args/state/actions, canonical pool Script and
+  WitnessArgs with phase-specific selection; no allocation or CKB syscalls.
+- Ten pool Rust tests cover numeric/structural bounds, all truncations, 103,936
+  state/action single-byte mutations and 20,000 fixed-seed arbitrary byte cases.
+  `npm run test:pool-wire` compares 3,291 independent TypeScript wire vectors;
+  CI now runs that command as well. Codec lint and RISC-V compilation pass.
+
+Next step is common state/custody/LP validators and adversarial
+real-xUDT VM tests. Select and verify the profile's immutable xUDT code hash before
+enabling it; the wire draft deliberately leaves this unassigned. No pool deployment,
+funded transactions or frontend work was performed or authorized by this stage.
+
+The earlier stopping-point narrative below is retained as historical context.
+
 The user asked to save details for a clean handoff. Do not launch transactions or
 start deploying pools merely because this file exists.
 

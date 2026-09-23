@@ -1,5 +1,20 @@
 # Implementation status
 
+## Isolated pool arithmetic and wire draft (2026-09-23)
+
+- Draft [pool wire format](research/POOL_WIRE_FORMAT.md): bounded state/args/action
+  layouts, exact sibling OutPoints, shared Data1 role authentication and LP rules.
+- Separate `no_std` Rust arithmetic with exact-pinned `uint` 0.10.0; no order-lock
+  dependency or implementation change. Compiles for the CKB RISC-V target.
+- 42,155 deterministic TypeScript/Rust vectors compare complete states, flows,
+  rejection codes and square roots; all 13 original pool-model tests pass.
+- CI includes Rust tests, RISC-V library compilation and cross-language checks.
+- Bounded no_std codecs for args/state/actions, pool Script and WitnessArgs.
+  Ten pool Rust tests include 103,936 single-byte state/action mutations and
+  20,000 arbitrary-byte cases; 3,291 TypeScript/Rust wire vectors also pass.
+- No custody/state/LP validators or pool deployment yet. The xUDT
+  profile's immutable code hash still requires selection and real-script VM tests.
+
 ## Implemented and locally verified
 
 - MIT Rust workspace, exact direct dependencies, Cargo.lock and toolchain pin.

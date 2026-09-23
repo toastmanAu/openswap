@@ -1,6 +1,20 @@
 name: Contract core
 on: [push, pull_request]
 jobs:
+  pool-arithmetic:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: rustup show
+      - run: npm ci
+      - run: cargo test --locked -p openswap-pool-arithmetic
+      - run: cargo check --locked -p openswap-pool-arithmetic --lib --target riscv64imac-unknown-none-elf
+      - run: npm run test:pool-cross
+      - run: npm run test:pool-wire
   contract:
     runs-on: ubuntu-24.04
     steps:

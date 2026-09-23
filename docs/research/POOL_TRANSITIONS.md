@@ -282,5 +282,11 @@ Then define byte layouts, script-role binding, scan bounds and stable error code
 implement isolated Rust arithmetic and cross-language vectors before custody code.
 No funding or deployment is authorized merely by passing this off-chain model.
 
+Follow-up (2026-09-23): [wire/role draft revision 1](POOL_WIRE_FORMAT.md) now
+specifies layouts, shared-binary role authentication, scan bounds and error codes.
+The isolated `pool-arithmetic` Rust crate implements accounting and is compared
+with the TypeScript model using `npm run test:pool-cross`. Neither artifact
+implements custody validators or freezes production parameters.
+
 Research provenance: [LIQUIDITY_POOLS.md](LIQUIDITY_POOLS.md). Mathematical reference
 ideas are implemented clean-room; no external contract implementation was copied.
