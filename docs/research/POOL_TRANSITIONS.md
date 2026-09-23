@@ -285,8 +285,10 @@ No funding or deployment is authorized merely by passing this off-chain model.
 Follow-up (2026-09-23): [wire/role draft revision 1](POOL_WIRE_FORMAT.md) now
 specifies layouts, shared-binary role authentication, scan bounds and error codes.
 The isolated `pool-arithmetic` Rust crate implements accounting and is compared
-with the TypeScript model using `npm run test:pool-cross`. Neither artifact
-implements custody validators or freezes production parameters.
+with the TypeScript model using `npm run test:pool-cross`. The separate
+[shared-role validator](../../contracts/openswap-pool/README.md) now implements
+the draft custody/state/LP checks with 20 real-xUDT VM tests (`make pool-test`).
+This remains an undeployed prototype and does not freeze production parameters.
 
 Research provenance: [LIQUIDITY_POOLS.md](LIQUIDITY_POOLS.md). Mathematical reference
 ideas are implemented clean-room; no external contract implementation was copied.

@@ -1,5 +1,5 @@
 [workspace]
-members = ["contracts/openswap-lock", "tests", "pool-arithmetic"]
+members = ["contracts/openswap-lock", "tests", "pool-arithmetic", "contracts/openswap-pool", "pool-tests"]
 resolver = "2"
 
 [profile.release]

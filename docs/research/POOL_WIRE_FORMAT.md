@@ -1,7 +1,7 @@
 # Pool wire format and role binding — draft revision 1
 
-2026-09-23. Proposed ABI for the isolated pool prototype, not frozen consensus,
-an implemented validator, or a deployment authorization. Accounting is specified
+2026-09-23. Draft ABI used by the isolated pool validator prototype, not frozen
+consensus or a deployment authorization. Accounting is specified
 in [POOL_TRANSITIONS.md](POOL_TRANSITIONS.md). This document selects the shared
 binary candidate and makes its required authentication rules explicit.
 
@@ -75,11 +75,16 @@ in state bytes. This avoids two competing balance sources.
 
 The reserved bytes allow a fixed initial size, not silent future interpretation;
 using them requires another ABI version and code identity. The complete Y Script
-is reconstructed from its fields and compared byte-for-byte to the reserve type.
-The prototype must bind profile 0 to an explicitly reviewed xUDT binary hash in
-the future validator; arbitrary code hashes must not be accepted merely because
-their data is 16 bytes. That deployment-specific hash is intentionally unassigned
-at this stage. Extended xUDT, Type-addressed/upgradable token code, iCKB and RGB++
+is reconstructed from its fields and compared by the CKB hash of the complete
+serialized Script to the reserve type. The prototype binds profile 0 to the
+vendored devnet xUDT Data1 code hash
+`0x50bd8d6680b8b9cf98b73f3c08faf8b2a21914311954118ad6609be6e78a1b95`.
+The fixture's SHA256 and CKB data hash are checked against its
+[manifest](../../tests/fixtures/manifest.json), and VM tests establish 32-byte
+args compatibility and non-owner conservation. This is a local prototype profile;
+an independently reviewed production deployment profile is still unassigned.
+Arbitrary code hashes are not accepted merely because their data is 16 bytes.
+Extended xUDT, Type-addressed/upgradable token code, iCKB and RGB++
 are outside this draft profile. A catalog entry cannot expand it.
 
 Y's owner hash must differ from the hashes of this pool's three custody locks;
@@ -175,8 +180,8 @@ not recursive script execution or an assumption about another group's result.
 
 Reserve the following positive i8 exit codes. These assignments are stable within
 this draft. The host/no_std codecs implement codes 2, 3, 4, 5, 7 and 21 where
-applicable to local byte validation; transaction-level custody checks remain
-unimplemented.
+applicable to local byte validation; `contracts/openswap-pool` implements the
+transaction checks and arithmetic/transition/supply errors.
 
 | Code | Meaning |
 | --- | --- |
@@ -198,8 +203,11 @@ unimplemented.
 | 27 | SHARES |
 | 29 | Claimed successor differs from calculated transition |
 
-Validate bounded decoding and role placement, cardinality/lineage, immutable
-fields and actual cell shape, arithmetic, successor comparison, then LP delta.
+The prototype validates bounded running-script decoding, input/output scans
+(role placement, state cardinality and LP amount bounds), successor metadata and
+cell shape, then input lineage/immutability or genesis identity, action/arithmetic,
+successor comparison and LP delta. Successor shape/economic checks can precede
+input-state errors; multi-fault precedence must be reviewed before freezing.
 Within arithmetic, validation order follows model revision 1 (parameters, pre-state,
 operation domains, operation-specific checks, post-state). Multi-fault structural
 precedence needs fixed traversal-order VM vectors before becoming consensus.
@@ -221,7 +229,8 @@ index, backing's occupied capacity and L²<=x*y need cell context. Actions requi
 positive values with X<=u64::MAX-1, Y<=2^112-1 and shares<=u128::MAX; the exact
 CKB limit u64::MAX-Bx and economic constraints are checked by arithmetic later.
 `StateData::accounting` validates arithmetic after caller-supplied balances;
-those balances must eventually come from authenticated reserve cells.
+those balances must come from authenticated reserve cells. The new validator
+does so through exact input sibling OutPoints and bounded successor indexes.
 
 Codec error precedence: reject an overall size bound first, then structural
 header/version/tag/container rules, then local domains. Args/state lengths above
@@ -233,10 +242,14 @@ Identity (5). Local range failures use 21; out-of-bound sibling indexes use 2,
 equal sibling indexes use 7. Witness phase/action mismatch uses 4. Absent and
 Some(empty) witness fields are distinct canonical BytesOpt forms; neither is a
 valid selected action. Encoders validate typed values before producing bytes.
-This decoder-local precedence is tested; multi-fault transaction ordering remains
-part of the future validator work.
+This decoder-local precedence is tested; the validator adds exact cell-data shape
+errors (9, including overlong/truncated state/token/LP data) before decoding the
+contents. A missing witness syscall uses code 1; an overlong witness uses code 2.
 
-Next gate: common state/custody/LP validation with adversarial
-real-xUDT CKB-VM tests, occupied-capacity checks, malformed bytes, fake counterparts,
-duplicate successors, independent pools, witness placement and scan-bound tests.
-No contract safety or real-xUDT compatibility follows from accounting/codec tests.
+The [shared-role validator](../../contracts/openswap-pool/README.md) now enforces
+state/custody/LP checks, with real-xUDT CKB-VM coverage of occupied capacity,
+malformed bytes, fake counterparts, duplicate successors, independent pools,
+witness placement and scan bounds. No pool has been deployed. Next work is
+independent hardening/review and direct scanners/builders with wallet-signing
+coverage before any separately authorized live pool testing. Bounded tests do
+not establish general contract safety.

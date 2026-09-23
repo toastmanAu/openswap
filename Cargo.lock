@@ -1184,11 +1184,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "openswap-pool"
+version = "0.1.0"
+dependencies = [
+ "ckb-hash",
+ "ckb-std",
+ "openswap-pool-arithmetic",
+]
+
+[[package]]
 name = "openswap-pool-arithmetic"
 version = "0.1.0"
 dependencies = [
  "serde_json",
  "uint",
+]
+
+[[package]]
+name = "openswap-pool-tests"
+version = "0.1.0"
+dependencies = [
+ "ckb-hash",
+ "ckb-testtool",
+ "openswap-pool-arithmetic",
 ]
 
 [[package]]

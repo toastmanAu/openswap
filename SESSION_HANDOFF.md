@@ -4,6 +4,42 @@ Saved 2026-09-23 (Australia/Adelaide). Read this first when resuming.
 
 ## Current request and stopping point
 
+### Pool validator goal update (2026-09-23)
+
+Arithmetic/codec work was committed locally as **682bab3**. It was not pushed.
+The next user-authorized goal implemented the isolated draft pool validator.
+The user authorized committing these changes after verification; they are included
+in the validator milestone commit. No push or deployment was requested:
+
+- `contracts/openswap-pool`: one Data1 binary with five role tags and a common
+  bounded verifier. Authenticates first-input/index genesis, exact sibling
+  OutPoints, immutable metadata/backing, actual occupied capacity, and LP deltas.
+- `pool-tests`: 20 passing CKB-VM tests using real xUDT. Covers all operations,
+  forged role/code identities and reserves, dep-only state, missing/duplicate
+  successors, storage theft, LP inflation/burn/overflow, malformed bytes,
+  256-cell/512-byte bounds, re-entry after full withdrawal, independent pools,
+  reordered indexes and genesis/transition sharing one witness.
+- Prototype profile selects the existing devnet xUDT fixture Data1 hash
+  `0x50bd8d6680b8b9cf98b73f3c08faf8b2a21914311954118ad6609be6e78a1b95`.
+  Manifest SHA256/CKB hash checks pass; VM confirms 32-byte owner args and
+  non-owner conservation. This is not a production token-profile approval.
+- `make pool-test` builds the new binary through `scripts/build-pool.sh`.
+  CI and `make check` include the new crates. Existing 90 order tests pass;
+  rebuilt order binary still matches immutable testnet identity (28,592 bytes).
+- Pool binary currently 42,176 bytes; SHA256
+  `d3a6520f08859787e34b5497d0f0f4c893b81b96fe7aaa280e50584024f67829`.
+  Observed genesis ~1.15M cycles, normal transitions ~2.20–2.24M; tested
+  256-input/output genesis boundaries ~7.25M/~6.83M. Not worst-case guarantees.
+
+Read `contracts/openswap-pool/README.md` and the updated wire specification next.
+Remaining work: deeper independent hardening/review, direct scanner/builders and
+wallet-signing coverage before separately authorized live pool testing. Test
+wallet locks are always-success fixtures; no user signing is implemented by them.
+No funded transaction, deployment, frontend change or mainnet work occurred.
+
+Earlier milestones below are historical; their "next step" text is superseded
+by this update.
+
 ### Resumption update (2026-09-23)
 
 The user requested continuation, then authorized committing this milestone.

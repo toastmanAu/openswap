@@ -1,0 +1,17 @@
+[package]
+name = "openswap-pool"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[dependencies]
+ckb-std = { version = "=1.1.0", default-features = false, features = ["ckb-types", "allocator", "calc-hash"] }
+ckb-hash = { version = "=1.1.1", default-features = false, features = ["ckb-contract"] }
+openswap-pool-arithmetic = { path = "../../pool-arithmetic" }
+
+[[bin]]
+name = "openswap-pool"
+path = "src/main.rs"
+test = false
+bench = false

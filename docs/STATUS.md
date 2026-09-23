@@ -12,8 +12,15 @@
 - Bounded no_std codecs for args/state/actions, pool Script and WitnessArgs.
   Ten pool Rust tests include 103,936 single-byte state/action mutations and
   20,000 arbitrary-byte cases; 3,291 TypeScript/Rust wire vectors also pass.
-- No custody/state/LP validators or pool deployment yet. The xUDT
-  profile's immutable code hash still requires selection and real-script VM tests.
+- Isolated [pool validator](../contracts/openswap-pool/README.md) now implements
+  shared Data1 state/custody/LP roles, exact sibling lineage, immutable backing
+  and exact issuance/burn deltas. Twenty CKB-VM tests pass, including real xUDT,
+  forged roles/reserves, duplicate/missing successors, storage theft, LP inflation,
+  zero-supply re-entry, two pools and scan/witness bounds. CI runs `make pool-test`.
+- Prototype profile pins the hash-verified vendored devnet xUDT binary with
+  32-byte owner args. No pool deployment, independent pool audit, wallet-signing
+  integration or live pool contention testing yet. Order binary identity remains
+  unchanged and all 90 original Rust tests pass.
 
 ## Implemented and locally verified
 
