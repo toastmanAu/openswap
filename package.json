@@ -22,7 +22,9 @@
     "test:pool-model": "tsx --test pool-model/test/*.test.ts",
     "demo:pool-model": "tsx pool-model/src/example.ts",
     "test:pool-cross": "tsx pool-model/src/cross-check.ts",
-    "test:pool-wire": "tsx pool-model/src/wire-vectors.ts"
+    "test:pool-wire": "tsx pool-model/src/wire-vectors.ts",
+    "test:pool-sdk": "tsx --test pool-sdk/test/*.test.ts",
+    "pools": "tsx pool-sdk/src/cli.ts"
   },
   "dependencies": {
     "@ckb-ccc/shell": "1.3.12"

@@ -19,6 +19,11 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
       - name: Install pinned toolchain
         run: rustup show
       - name: Verify external fixtures
@@ -45,5 +50,6 @@ jobs:
       - run: npm run typecheck
       - run: npm run test:sdk
       - run: npm run test:pool-model
+      - run: npm run test:pool-sdk
       - run: npm run build:smoke
       - run: npm run release:frontend

@@ -1,8 +1,120 @@
 # ToastDEX — next-session handoff
 
-Saved 2026-09-23 (Australia/Adelaide). Read this first when resuming.
+Saved 2026-10-01 (Australia/Adelaide). Read this first when resuming.
 
 ## Current request and stopping point
+
+### Commit and next milestone (2026-10-01)
+
+The user authorized committing the SDK and hardening milestones together and
+continuing to the next piece. This commit contains both milestones below;
+their earlier uncommitted-status statements are historical. No push was requested.
+Next: an offline evidence-based protocol/SDK review with reproducible findings,
+coverage gaps and explicit release-readiness gates. This is an internal review,
+not independent audit certification. No live deployment or wallet integration
+is authorized by this next milestone.
+
+### Adversarial pool SDK hardening (2026-09-30)
+
+The user authorized the next offline hardening goal after the SDK milestone.
+Both milestones remain uncommitted; no commit, push or deployment was requested.
+
+- Reproduced and fixed queued RPC dispatch after cancellation and successful
+  freshness completion after raw transaction mutation during an RPC await.
+  Integrity now runs at both ends; `assertFresh(client, options, candidate)`
+  can check the exact wallet-prepared transaction copy.
+- Isolated RPC OutPoint arguments, returned cell snapshots, indexer candidates
+  and recipient scripts from mutable caller/client objects. Tests cover wrong
+  OutPoints, aliased state changes and simulated reorg removal during funding reads.
+- Added bounded read-only HTTP transport for the CLI: only three required read
+  methods, no redirects/fallbacks, 4 MiB streamed response cap, 15-second deadline,
+  cancellation, HTTP failure and JSON-RPC envelope validation. Post-decoding
+  bounds include 1 MiB live data and 2,048-byte cursors. Amount strings cap at
+  39 digits; CLI stdin retains its 1 MB cap.
+- Added actual CLI subprocess and local HTTP adversarial tests. No external node
+  was contacted. SDK callers injecting another transport remain responsible for
+  its pre-JSON byte limits and cancellation behavior.
+- Extended real-xUDT/real-secp VM bridge with 32 chained randomized transitions:
+  seeds `0xc0ffee` and `0xdeadbeef`, 16 steps each, all four variants covered,
+  spending actual preceding transaction output OutPoints. Public fixture keys only.
+- Existing CI gates automatically run the expanded SDK and VM tests. Typecheck,
+  20 pool SDK/CLI/transport tests, `make check`, 21 pool VM tests, all 90 order VM
+  tests, existing SDK/model suites, cross-language vectors and fixture checks pass.
+  Both binary hashes remain unchanged: pool SHA256
+  `d3a6520f08859787e34b5497d0f0f4c893b81b96fe7aaa280e50584024f67829`;
+  order immutable deployment identity check also passes.
+
+Remaining limitations: simulated races are not live-network reorg testing;
+freshness is not atomic and cannot reserve inputs; a coherent dishonest node is
+not detected without a chain proof. Normal pool witnesses remain outside the
+wallet signing group; the SDK guard is not an on-chain commitment. Random tests
+are finite and do not replace independent review. No contract/ABI, frontend,
+funded transaction, user-key, deployment or mainnet work occurred.
+
+Suggested next milestone: independent review of the draft pool protocol and
+SDK, with explicit findings and release-readiness criteria before any separately
+authorized wallet integration or live deployment. Earlier next-goal suggestions
+below are historical and superseded by this update.
+
+### Pool SDK and unsigned CLI goal (2026-09-29)
+
+The user requested the next goal after pushing the validator milestone. Commits
+`682bab3` and `9105e59` were pushed to `main`; the last verified remote head was
+`9105e59a8bdd4296914670723c6fd6974e482bfe`. Earlier statements below that they were
+not pushed describe their historical stopping points and are superseded here.
+
+The next goal implemented the isolated off-chain SDK and read-only CLI. These
+new changes are **uncommitted**; no commit or push was requested for this goal.
+
+- `pool-sdk/src/codec.ts`: canonical TS codecs checked against all 3,291 shared
+  independent wire vectors; existing Rust wire cross-check also passes.
+- `pool-sdk/src/pools.ts`: bounded uncached direct node/indexer discovery,
+  explicit genesis binding, exact state/reserve sibling OutPoints, full role,
+  asset-profile, capacity/backing and accounting checks. Deadlines/cancellation,
+  duplicate/page/cursor bounds, malformed reporting and stale-state checks.
+- `pool-sdk/src/builders.ts`: explicit-input unsigned create, both exact-input
+  swap directions, deposit and withdrawal. Explicit recipients/minima, preserved
+  permanent backing, Y/LP/CKB change, storage top-up disclosure, fee caps,
+  dependency/witness placement, exact transaction integrity and fresh-input
+  guards. Freshness checks also verify direct pool/xUDT dependency data hashes.
+- `npm run --silent pools < request.json`: read-only JSON CLI for scan/create/
+  transition. Requires explicit endpoint/genesis/deps/funding/recipients; exports
+  canonical unsigned transaction bytes and an accounting summary. Does not sign,
+  submit, deploy, connect a wallet, load keys or invoke remote VM execution.
+- `pool-tests/src/sdk.rs` invokes the actual TS builders and verifies their bytes
+  with real xUDT and bundled secp256k1 in CKB-VM, without `complete_tx` repairing
+  deps. All operations pass; unsigned/wrong signatures, recipient redirection,
+  economically meaningful action tampering and missing xUDT deps reject. A
+  separate LP recipient withdraws without a creator/operator input or signature.
+- CI runs pool SDK tests and installs Node/npm dependencies for the VM bridge.
+  `make pool-test` therefore now requires `npm ci` and Node 22 as well as Rust.
+
+Important signing boundary: normal pool action witnesses are outside the wallet
+secp signing group. Signed raw outputs bind recipients and amounts; the pool
+checks accounting. A nonbinding minimum/budget witness change can still validate
+on-chain. The SDK guard rejects those changes too, but is not an on-chain witness
+commitment. Do not claim that every action-byte mutation breaks the signature.
+Creation's action shares the first wallet witness and is covered there.
+
+Verification: typecheck, pool SDK tests, 70 existing SDK/solver tests, 13 model
+tests, 42,155 TS/Rust accounting vectors, 3,291 wire vectors, fixture manifest,
+`make check`, 21 pool VM tests and all 90 order VM tests pass. Rebuilt order ELF
+still matches the immutable testnet binary (28,592 bytes; SHA256
+`060b0b73f91a960a965fcfaeb68dc40ada0557ff24e0c086c89611dd471340ab`).
+No contract code/ABI changes, deployment, broadcasts, user-key access, funded
+transactions, frontend changes or mainnet work occurred.
+
+Read [pool-sdk/README.md](pool-sdk/README.md) for input schema, signing constraints
+and explicit trust boundaries. This is a single 65-byte secp-compatible wallet
+group builder, not JoyID/ACP/custom-wallet integration. Discovery trusts the
+selected node; freshness is not an atomic reservation. No live contention or
+reorg behavior was established by these in-memory tests.
+
+Suggested next goal (not started): adversarial hardening of the off-chain/chain
+boundary, particularly stale/reorg races, malicious RPC responses, witness
+integrity across wallet preparation, and randomized SDK-to-VM operation sequences.
+Keep it offline and preserve both binary identities. Separately authorize any
+chosen-network deployment/profile approval or funded wallet integration.
 
 ### Pool validator goal update (2026-09-23)
 

@@ -8,6 +8,7 @@ The existing OpenSwap order contract is a separate binary with unchanged identit
 
 ```sh
 python3 scripts/verify-fixtures.py
+npm ci
 make pool-test
 make check
 ```
@@ -44,9 +45,11 @@ This pins a local test fixture, not a production deployment choice or token audi
 | Per-pool isolation | Two simultaneous pools, cross-pool reserve/LP substitutions, shared witness fields |
 | Bounded parsing/scans | Malformed executing args, data, witnesses, exact 256-cell and 512-byte Script limits |
 
-These are bounded VM tests. Ordinary wallet locks use always-success test owners;
-wallet signature coverage, live contention, scanners/builders, and independent
-security review remain separate work. The pool accounts for reserve movements
+These are bounded VM tests. The original cases use always-success test owners;
+`pool-tests/src/sdk.rs` additionally executes actual [pool SDK](../../pool-sdk/README.md)
+transactions using real xUDT and standard secp wallet signatures, including a
+different LP holder withdrawing without a creator signature. Live contention
+and independent security review remain separate work. The pool accounts for reserve movements
 and LP deltas; wallet signatures/builders must bind user recipients. No on-chain
 intent or recipient-authentication layer is introduced here.
 
