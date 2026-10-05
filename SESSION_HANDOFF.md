@@ -1,8 +1,89 @@
 # ToastDEX — next-session handoff
 
-Saved 2026-10-01 (Australia/Adelaide). Read this first when resuming.
+Saved 2026-10-05 (Australia/Adelaide). Read this first when resuming.
 
 ## Current request and stopping point
+
+### Review/fix commit and next milestone (2026-10-05)
+
+The user authorized committing the internal review and R1/R2 SDK fixes together
+and moving to the next piece. This commit includes that review, remediation,
+regression tests and documentation. Earlier uncommitted-status statements below
+are historical. No push was requested.
+
+Next milestone: offline combined resource-envelope measurements and broader
+deterministic randomized SDK-to-VM coverage. Exercise high input/output counts,
+wide scripts, multiple pools and real signatures together; record reproducible
+cycle/size measurements and conservative operational guidance, not a formal
+worst-case proof. Preserve both contract binaries and the ABI. No deployment,
+funded transactions, user-key access or frontend work is authorized.
+
+### SDK findings R1/R2 fixed (2026-10-02)
+
+The user authorized fixing both internal-review findings. `builders.ts` now
+requires an own valid witness entry at every numeric index, rejecting sparse,
+inherited, malformed, missing and extra entries (R1). It also takes independent
+reviewed input snapshots and checks each supplied candidate cache against them
+before and after freshness RPC awaits (R2). Capacity, lock, type or data changes
+reject. Either cache may be `undefined` for raw-deserialized/partially cached
+transactions; null caches reject. The signature slot still accepts exactly 65
+bytes without changing raw transaction fields or other witness fields.
+
+The two characterization tests have become four rejection/policy regression
+tests, covering both genesis and transition witness layouts, honest/partial/
+absent caches, signature replacement, asynchronous cache mutation and mutation
+of the original transaction's caches. README and review report now document
+the policy and distinguish the historical findings from remediation.
+
+Verification for this fix: typecheck, all 24 pool SDK/CLI tests, all 70 existing
+SDK/solver tests and all 21 pool VM tests pass, including the 32 randomized
+real-signature transitions. The immutable order identity verifier passes and
+the pool SHA256 remains
+`d3a6520f08859787e34b5497d0f0f4c893b81b96fe7aaa280e50584024f67829`.
+
+Changes remain uncommitted; no push, deployment or live transaction is authorized.
+Contract code, ABI, order behavior, frontend and user keys remain untouched.
+The remaining release gates in the review report still apply; fixing two SDK
+findings is not independent audit or production approval. Earlier next-step and
+unfixed-status statements below are historical.
+
+### Internal review completed (2026-10-01)
+
+SDK/hardening milestone committed locally as
+`85731fe78371ee1d35d54ec056a9ee3d9ccce890`; it has not been pushed by this session.
+The subsequent offline internal review is documented in
+[POOL_INTERNAL_REVIEW.md](docs/research/POOL_INTERNAL_REVIEW.md). It includes a
+threat model, requirement/code/test matrix, severity-ranked findings, evidence,
+coverage gaps and explicit release-readiness gates. It is not an independent
+audit or production approval.
+
+Two low-severity SDK findings were reproduced in `pool-sdk/test/review.test.ts`:
+
+- **R1:** deleting a witness array element keeps its length but makes `forEach`
+  skip that slot, so the integrity guard accepts a sparse missing witness.
+- **R2:** a prepared transaction copy can carry false cached input capacity/data
+  while raw OutPoints/hash stay unchanged; integrity and freshness validate the
+  signed fields/original inputs, not that copy's advisory caches.
+
+Neither reproduction demonstrates an on-chain reserve-theft or inflation path.
+The characterization tests intentionally pass when the findings reproduce;
+they are not evidence of remediation. No production code or protocol fixes were
+made. The report proposes SDK-only fixes and a clear cache/display trust policy
+as the next implementation milestone, subject to user authorization.
+
+Current verification: typecheck, `make check`, 22 pool SDK tests, 70 existing
+SDK/solver tests, 13 model tests, 10 Rust arithmetic/wire tests, 21 pool VM tests,
+90 order VM tests, 42,155 accounting vectors, 3,291 wire vectors and fixture
+checks pass. Both contract hashes are unchanged and the immutable order identity
+verifier passes. VM tests use existing binaries and public fixture keys; RPC
+tests use local mocks only. Review changes consist only of this handoff, the
+report and the new test file, and remain uncommitted. No push, deployment,
+funded transaction, user-key access, frontend or mainnet work was performed.
+
+Open release gates remain independent review, combined worst-case resource
+measurements, token/issuer and economic-parameter approval, actual target-wallet
+integration, separately authorized live race/reorg testing, and deployment
+approval. Earlier suggested next milestones below are historical.
 
 ### Commit and next milestone (2026-10-01)
 

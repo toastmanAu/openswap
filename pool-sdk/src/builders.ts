@@ -14,7 +14,7 @@ export interface Recipients {ckb:ccc.ScriptLike;token:ccc.ScriptLike;lp:ccc.Scri
 export interface CreateRequest {parameters:Parameters;x:bigint;y:bigint;minShares:bigint;tokenOwner:ccc.Hex}
 export interface BuiltPoolTransaction {
  transaction:ccc.Transaction;poolId:ccc.Hex;result:Result;fee:bigint;ckbReceiptTopUp:bigint;walletWitnessIndex:number;
- /** Rejects all mutations except replacing the wallet's 65-byte signature. */
+ /** Pins raw bytes/witnesses except the signature; optional input caches must match reviewed inputs. */
  assertIntegrity:(transaction?:ccc.Transaction)=>void;
  /** Recheck immediately before signing/submitting; liveness is never a reservation. */
  assertFresh:(client:PoolClient,options?:ReadOptions,candidate?:ccc.Transaction)=>Promise<void>;
@@ -94,25 +94,38 @@ function build(deployment:PoolDeployment,wallet:Wallet,recipients:Recipients,id:
  transaction.outputs[transaction.outputs.length-1]!.capacity=remaining-fee;
  for(let i=0;i<transaction.outputs.length;i++)validateCell(ccc.CellAny.from({cellOutput:transaction.outputs[i]!,outputData:transaction.outputsData[i]!}));
  const rawHash=transaction.hash(),savedWitnesses=[...transaction.witnesses];
+ // CCC input caches can alias the transaction's mutable objects. Keep independent
+ // snapshots for both cache comparisons and subsequent live-input checks.
+ const reviewedInputs=inputs.map(cell=>cell.clone());
  const assertIntegrity=(tx=transaction)=>{
   requireBuild(tx.hash()===rawHash,'raw transaction changed');
-  requireBuild(tx.witnesses.length===savedWitnesses.length,'witness count changed');
-  tx.witnesses.forEach((w,i)=>{
-   if(i!==walletWitnessIndex){requireBuild(w===savedWitnesses[i],'pool action or other witness changed');return;}
+  for(let i=0;i<reviewedInputs.length;i++){
+   const candidate=tx.inputs[i]!,expected=reviewedInputs[i]!;
+   // Raw-deserialized inputs have no caches. Validate each cache when supplied;
+   // never normalize or repair candidate values while checking them.
+   requireBuild(candidate.cellOutput===undefined||(candidate.cellOutput instanceof ccc.CellOutput&&candidate.cellOutput.eq(expected.cellOutput)),'cached input output changed');
+   requireBuild(candidate.outputData===undefined||candidate.outputData===expected.outputData,'cached input data changed');
+  }
+  requireBuild(Array.isArray(tx.witnesses)&&tx.witnesses.length===savedWitnesses.length,'witness count changed');
+  for(let i=0;i<savedWitnesses.length;i++){
+   requireBuild(Object.hasOwn(tx.witnesses,i),'missing witness slot');
+   const w=tx.witnesses[i];
+   requireBuild(typeof w==='string'&&w.length===savedWitnesses[i]!.length&&/^0x(?:[0-9a-fA-F]{2})*$/.test(w),'invalid witness bytes');
+   if(i!==walletWitnessIndex){requireBuild(w===savedWitnesses[i],'pool action or other witness changed');continue;}
    const args=ccc.WitnessArgs.fromBytes(w);
    requireBuild(args.lock!==undefined&&ccc.bytesFrom(args.lock).length===65,'wallet signature must be 65 bytes');
    args.lock=ccc.hexFrom(new Uint8Array(65));
    requireBuild(ccc.hexFrom(args.toBytes())===savedWitnesses[i],'wallet witness fields changed');
-  });
+  }
  };
  const capturedDeployment={...deployment,poolDep:ccc.CellDep.from(deployment.poolDep).clone(),tokenDep:ccc.CellDep.from(deployment.tokenDep).clone()};
  return {transaction,poolId:id,result,fee,ckbReceiptTopUp,walletWitnessIndex,assertIntegrity,
   assertFresh:async(client,options={},candidate=transaction)=>{
    assertIntegrity(candidate);await assertPoolNetwork(client,capturedDeployment,options);
    await assertPoolDependencies(client,capturedDeployment,options);
-   for(const cell of inputs)requireBuild(sameCell(cell,await liveCell(client,cell.outPoint,options)),'live input content changed');
+   for(const cell of reviewedInputs)requireBuild(sameCell(cell,await liveCell(client,cell.outPoint,options)),'live input content changed');
    // Recheck state last to detect a transition racing the wallet reads.
-   if(previous)requireBuild(sameCell(inputs[0]!,await liveCell(client,inputs[0]!.outPoint,options)),'pool changed during freshness check');
+   if(previous)requireBuild(sameCell(reviewedInputs[0]!,await liveCell(client,reviewedInputs[0]!.outPoint,options)),'pool changed during freshness check');
    // Wallet preparation or application code may mutate the transaction during RPC awaits.
    assertIntegrity(candidate);
   }};

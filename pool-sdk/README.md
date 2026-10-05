@@ -31,14 +31,25 @@ Import from `pool-sdk/src/index.ts` using the repository's pinned CCC version.
   pinned xUDT profile are checked. Reserve lookalikes are not accepted.
 - `buildCreate` / `buildTransition`: synchronous, offline **unsigned** builders
   for creation, exact-input swaps in either direction, deposit and withdrawal.
-- `assertIntegrity`: permits only replacement of the designated 65-byte wallet
-  signature, rejecting changes to raw fields, action fields or witness layout.
+- `assertIntegrity`: pins raw fields and all witness positions except replacement
+  of the designated 65-byte wallet signature. Sparse/inherited slots, invalid
+  bytes, changed action fields and changed witness layouts reject. Optional CCC
+  input caches are checked against isolated reviewed input snapshots: any supplied
+  `cellOutput` or `outputData` must match exactly. Either cache may be absent
+  (`undefined`), including after raw deserialization; `null` is not an absent cache.
 - `assertFresh`: verifies explicit genesis and direct pool/xUDT dependency data
   hashes, re-reads every selected input, and rechecks pool state last. Call just
   before signing; freshness is not an atomic snapshot or an input reservation.
   Integrity is checked before and after RPC awaits. Pass a wallet-prepared copy
   as `assertFresh(client, options, candidate)` to check that exact transaction;
   only its designated 65-byte signature may differ.
+
+Cached input metadata is advisory, not signed transaction data. Honest or absent
+caches are supported; false capacity, lock, type or data caches reject before
+and after freshness RPC awaits. Applications should derive displays from validated
+inputs and transaction outputs, not arbitrary mutable result/summary objects.
+Removing optional caches does not authenticate a replacement summary. These
+checks do not sandbox arbitrary in-process code or reserve live cells.
 
 Supply exact `PoolDeployment` genesis/code hashes and dependency OutPoints.
 The xUDT Data1 binary is deliberately pinned to the vendored prototype fixture,
