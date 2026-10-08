@@ -1,4 +1,5 @@
 //! Execute the actual TypeScript builder output, without complete_tx repairing deps.
+mod resource;
 use crate::fixture::{CYCLES, FUNDING, TOKENS, amount, cell};
 use ckb_system_scripts::BUNDLED_CELL;
 use ckb_testtool::{
@@ -13,6 +14,7 @@ use ckb_testtool::{
     },
     context::Context,
 };
+use openswap_pool_arithmetic::wire::StateData;
 use serde_json::{Value, json};
 use std::{
     io::Write,
@@ -116,8 +118,119 @@ fn register(context: &mut Context, tx: &TransactionView) -> Vec<OutPoint> {
         .collect()
 }
 
-#[test]
-fn sdk_transactions_real_secp_and_xudt() {
+fn regime_sequences(
+    context: &mut Context,
+    base: &Value,
+    key: &Privkey,
+    lock: &Script,
+    token: &Script,
+) {
+    // Fixed seeds control operations and budgets. Public fixture signatures may
+    // vary in bytes/cost, so ceilings are regression budgets, not exact promises.
+    for (seed, fee, locked, x, y) in [
+        (
+            7_u32,
+            0_u16,
+            1_u128,
+            1_000_000_000_000_u64,
+            4_000_000_000_000_u128,
+        ),
+        (29, 30, 1000, 10_000_000_000, 1_000_000_000_000_000_000),
+        (101, 9999, 1_000_000, 1_000_000_000_000, 4_000_000_000_000),
+        (
+            999,
+            100,
+            1_000_000_000_000,
+            10_000_000_000_000_000,
+            1_u128 << 110,
+        ),
+    ] {
+        let mut request = base.clone();
+        request.as_object_mut().unwrap().remove("previous");
+        request.as_object_mut().unwrap().remove("random");
+        let funding = context.create_cell(cell(lock, Some(token), x * 50), amount(y * 50));
+        request["funding"] = json!([describe(context, &funding)]);
+        request["initial"] = json!({"fee":fee.to_string(),"locked":locked.to_string(),"x":x.to_string(),"y":y.to_string()});
+        let (genesis, first) = build(&request);
+        let genesis = sign(&genesis, key, first);
+        let mut peak = context.verify_tx(&genesis, 6_000_000).unwrap();
+        let mut max_bytes = genesis.data().as_slice().len();
+        let mut current = register(context, &genesis);
+        let mut random = seed;
+        let mut consumed = std::collections::HashSet::new();
+        for step in 0..14 {
+            random = random.wrapping_mul(1664525).wrapping_add(1013904223);
+            let action = if step == 12 {
+                "withdraw"
+            } else if step == 13 {
+                "deposit"
+            } else {
+                ["xToY", "yToX", "deposit", "withdraw"][(step + seed as usize) % 4]
+            };
+            request["previous"] = json!(
+                current[..3]
+                    .iter()
+                    .map(|p| describe(context, p))
+                    .collect::<Vec<_>>()
+            );
+            request["funding"] = json!(
+                current[3..]
+                    .iter()
+                    .map(|p| describe(context, p))
+                    .collect::<Vec<_>>()
+            );
+            request["action"] = json!(action);
+            request["relativeRandom"] = json!(random);
+            request["fullWithdraw"] = json!(step == 12);
+            if step == 13 {
+                request["reenter"] = json!({"x":(x/10).to_string(),"y":(y/10).to_string()});
+            }
+            let (tx, first) = build(&request);
+            for (i, input) in tx.inputs().into_iter().enumerate() {
+                assert_eq!(
+                    input.previous_output(),
+                    current[i],
+                    "seed={seed} step={step} predecessor"
+                );
+                assert!(
+                    consumed.insert(input.previous_output()),
+                    "reused spent fixture input"
+                );
+            }
+            let tx = sign(&tx, key, first);
+            let cycles = context
+                .verify_tx(&tx, 6_000_000)
+                .unwrap_or_else(|e| panic!("seed={seed} step={step} action={action}: {e}"));
+            peak = peak.max(cycles);
+            max_bytes = max_bytes.max(tx.data().as_slice().len());
+            assert!(max_bytes <= 3000, "seed={seed}: sequence byte regression");
+            let state = StateData::decode(&tx.outputs_data().get(0).unwrap().raw_data()).unwrap();
+            if step == 12 {
+                assert_eq!(state.shares, locked);
+            }
+            if step == 13 {
+                assert!(state.shares > locked);
+            }
+            current = register(context, &tx);
+        }
+        println!(
+            "REGIME seed={seed} fee={fee} locked={locked} x={x} y={y} transitions=14 peak_cycles={peak} max_bytes={max_bytes} ceiling=6000000 byte_ceiling=3000"
+        );
+    }
+}
+
+struct SdkFixture {
+    context: Context,
+    creator: Privkey,
+    holder: Privkey,
+    creator_lock: Script,
+    holder_lock: Script,
+    token_script: Script,
+    token: OutPoint,
+    funding: OutPoint,
+    request: Value,
+}
+fn setup() -> SdkFixture {
     let mut context = Context::new_with_deterministic_rng();
     let pool = context.deploy_cell(
         std::fs::read(concat!(
@@ -170,8 +283,53 @@ fn sdk_transactions_real_secp_and_xudt() {
         cell(&creator_lock, Some(&token_script), FUNDING),
         amount(TOKENS),
     );
-    let mut request = json!({"codeHash":hex(pool_script.code_hash().as_slice()),"poolDep":hex(pool.as_slice()),"tokenDep":hex(token.as_slice()),
+    let request = json!({"codeHash":hex(pool_script.code_hash().as_slice()),"poolDep":hex(pool.as_slice()),"tokenDep":hex(token.as_slice()),
         "lock":hex(creator_lock.as_slice()),"lockDeps":[hex(secp.as_slice()),hex(data.as_slice())],"funding":[describe(&context,&funding)]});
+    SdkFixture {
+        context,
+        creator,
+        holder,
+        creator_lock,
+        holder_lock,
+        token_script,
+        token,
+        funding,
+        request,
+    }
+}
+
+#[test]
+fn sdk_combined_resource_envelope() {
+    let SdkFixture {
+        mut context,
+        creator,
+        creator_lock,
+        token_script,
+        request,
+        ..
+    } = setup();
+    resource::run(
+        &mut context,
+        &request,
+        &creator,
+        &creator_lock,
+        &token_script,
+    );
+}
+
+#[test]
+fn sdk_transactions_real_secp_and_xudt() {
+    let SdkFixture {
+        mut context,
+        creator,
+        holder,
+        creator_lock,
+        holder_lock,
+        token_script,
+        token,
+        funding,
+        mut request,
+    } = setup();
     let (genesis, first) = build(&request);
     assert!(context.verify_tx(&genesis, CYCLES).is_err());
     let signed = sign(&genesis, &creator, first);
@@ -281,7 +439,8 @@ fn sdk_transactions_real_secp_and_xudt() {
             request["random"] = json!(random);
             let (tx, first) = build(&request);
             let tx = sign(&tx, &creator, first);
-            let verified = context.verify_tx(&tx, CYCLES);
+            let verified = context.verify_tx(&tx, 6_000_000);
+            assert!(tx.data().as_slice().len() <= 3000);
             assert!(
                 verified.is_ok(),
                 "seed={seed:#x} step={step} action={action}: {verified:?}"
@@ -291,6 +450,13 @@ fn sdk_transactions_real_secp_and_xudt() {
     }
     assert_eq!(covered.len(), 4);
     request.as_object_mut().unwrap().remove("random");
+    regime_sequences(
+        &mut context,
+        &request,
+        &creator,
+        &creator_lock,
+        &token_script,
+    );
     // A different LP recipient can withdraw without a creator/operator input or signature.
     request.as_object_mut().unwrap().remove("previous");
     request["funding"] = json!([describe(&context, &funding)]);

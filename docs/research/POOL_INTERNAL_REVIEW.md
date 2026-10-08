@@ -28,6 +28,13 @@ real-signature transitions. Both binary identities remain unchanged.
 
 ## Decision and scope
 
+Resource-coverage update (2026-10-05):
+[POOL_RESOURCE_ENVELOPE.md](POOL_RESOURCE_ENVELOPE.md) records combined 256-input/
+256-output, 512-byte Script and 4,096-byte witness cases for one, two and four
+pools with real secp/xUDT, explicit over-bound rejection tests, and 56 additional
+regime transitions. This advances the measurement gate but does not establish a
+universal maximum or target-node relay approval.
+
 Keep the milestone an offline prototype. Two low-severity SDK boundary findings
 were reproduced; neither establishes an on-chain reserve theft or supply-inflation
 path. Production release is blocked by the open gates below, regardless of passing
@@ -238,7 +245,7 @@ pool SHA256 matches the baseline above. These results do not close R1 or R2.
 | --- | --- | --- |
 | R1/R2 disposition | Fixed in working tree, 2026-10-02 | SDK-only fixes and rejection/metadata-policy regressions; retain these gates in CI |
 | Independent review | Not performed | Separate reviewer findings, resolution record and reviewed baseline hash |
-| Combined resource envelope | Partial | Real-signature multi-pool/high-count/wide-script combinations, measured cycles and accepted limits with headroom |
+| Combined resource envelope | Measured for 1/2/4 pools; still partial globally | See resource report; larger pool/signature-group combinations and target-node policy headroom remain unmeasured |
 | Economic/profile approval | Not approved | Chosen f/M/backing policy, liquidity/price risk disclosure, exact deployed token hash and owner/extension authority review |
 | Wallet integration | Not implemented | Real target-wallet preparation/signing tests; trusted decoded receipts/fees; reject mutation/stale input and handle cancellation |
 | Live contention/reorg validation | Not performed | Separately authorized controlled network tests with repeatable spent-input, replacement/reorg and ambiguous-submission handling |

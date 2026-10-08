@@ -33,7 +33,9 @@ jobs:
       - name: Build and execute CKB-VM tests
         run: make test
       - name: Build and execute isolated pool CKB-VM tests
-        run: make pool-test
+        run: |
+          make pool-build
+          cargo test --locked -p openswap-pool-tests -- --nocapture
       - name: Match immutable testnet binary
         run: python3 scripts/check-contract-identity.py
       - name: Rebuild in independent target directories

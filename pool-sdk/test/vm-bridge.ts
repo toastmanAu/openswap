@@ -18,6 +18,18 @@ if(input.random!==undefined&&pool){
  actions.xToY.amountIn=x;actions.yToX.amountIn=y;actions.deposit.maxX=x;actions.deposit.maxY=y;
  actions.withdraw.shares=(pool.accounting.totalShares-pool.accounting.lockedShares)*(random%999n+1n)/10000n;
 }
-const built=pool?buildTransition(deployment,wallet,recipients,pool,actions[input.action as keyof typeof actions]):buildCreate(deployment,wallet,recipients,{parameters:{feeBps:30n,lockedShares:1000n,backing:{state:34000000000n,ckb:8000000000n,token:16000000000n}},x:1000000000000n,y:4000000000000n,minShares:1n,tokenOwner:`0x${'11'.repeat(32)}`});
+// Regime tests size operations relative to current reserves, including after a
+// full withdrawal. No production builder or accounting rule is substituted.
+if(input.relativeRandom!==undefined&&pool){
+ const r=BigInt(input.relativeRandom),divisor=20n+r%80n;
+ const x=pool.accounting.x/divisor||1n,y=pool.accounting.y/divisor||1n;
+ actions.xToY.amountIn=x;actions.yToX.amountIn=y;
+ actions.deposit.maxX=x;actions.deposit.maxY=y;
+ actions.withdraw.shares=(pool.accounting.totalShares-pool.accounting.lockedShares)/divisor||1n;
+}
+if(input.fullWithdraw&&pool)actions.withdraw.shares=pool.accounting.totalShares-pool.accounting.lockedShares;
+if(input.reenter){actions.deposit.maxX=BigInt(input.reenter.x);actions.deposit.maxY=BigInt(input.reenter.y);}
+const initial=input.initial??{fee:'30',locked:'1000',x:'1000000000000',y:'4000000000000'};
+const built=pool?buildTransition(deployment,wallet,recipients,pool,actions[input.action as keyof typeof actions]):buildCreate(deployment,wallet,recipients,{parameters:{feeBps:BigInt(initial.fee),lockedShares:BigInt(initial.locked),backing:{state:34000000000n,ckb:8000000000n,token:16000000000n}},x:BigInt(initial.x),y:BigInt(initial.y),minShares:1n,tokenOwner:`0x${'11'.repeat(32)}`});
 built.assertIntegrity();
 console.log(JSON.stringify({transaction:ccc.hexFrom(built.transaction.toBytes()),walletWitnessIndex:built.walletWitnessIndex}));

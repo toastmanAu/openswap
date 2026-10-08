@@ -1,8 +1,62 @@
 # ToastDEX — next-session handoff
 
-Saved 2026-10-05 (Australia/Adelaide). Read this first when resuming.
+Saved 2026-10-08 (Australia/Adelaide). Read this first when resuming.
 
 ## Current request and stopping point
+
+### Resource milestone commit and next piece (2026-10-08)
+
+The user authorized committing the completed resource-measurement milestone and
+moving to the next piece. This commit contains that milestone; uncommitted-status
+statements below are historical. No push was requested.
+
+Next goal: offline measurements of distinct real wallet signing groups and larger
+pool compositions, with missing/wrong-signature rejection tests, explicit fees,
+cycle/byte regression ceilings and documented fixture limits. Preserve both
+contract identities, the ABI and production SDK behavior. Use public fixture keys
+only; no deployment, broadcast, funded transactions, user-key access, frontend or
+mainnet work. Further commits and pushes require a separate request.
+
+### Resource envelope and broader sequence coverage (2026-10-05)
+
+Review and fixes were committed locally as `f5dcc94`; no push was requested.
+The subsequent offline resource/coverage milestone is implemented in tests and
+documentation only, and remains uncommitted. Read
+[POOL_RESOURCE_ENVELOPE.md](docs/research/POOL_RESOURCE_ENVELOPE.md) for exact
+measurements, reproduction commands, fixture assumptions and remaining limits.
+
+- New `pool-tests/src/sdk/resource.rs` composes real SDK deposit transitions for
+  1/2/4 independent pools with 256 inputs AND 256 outputs, 512-byte padding Scripts
+  and 4,096-byte action WitnessArgs. Core wallet inputs use real secp and real
+  xUDT; padding alone uses ALWAYS_SUCCESS. Group-aware signing handles interleaved
+  wallet inputs. Fees are recalculated after composition from wallet change.
+- Final observed peaks: ~63.23M / 123.50M / 241.59M cycles and 155,712 / 157,486 /
+  161,034 bytes. Regression budgets are 80M / 155M / 305M cycles with roughly 25%
+  rounded headroom, plus explicit byte ceilings. Two-pool 257-input, 257-output,
+  513-byte Script and 4,097-byte witness cases reject with bound error 2.
+- Added four seed-budgeted regimes: fee 0/30/9999/100, M from 1 to 10^12,
+  asymmetric reserves and a large y=2^110 case. Each has 12 mixed steps plus full
+  withdrawal and re-entry. Exact predecessor points and non-reuse are asserted;
+  L=M and subsequent L>M are checked. With the original 32 steps, 88 chained
+  SDK-generated transitions are verified. New regime peak ~4.19M cycles and
+  2,358 bytes; regression budgets are 6M cycles / 3,000 bytes.
+- Resource test now runs independently from sequence tests. CI uses `--nocapture`
+  so `ENVELOPE` and `REGIME` measurements remain visible on passing runs.
+- Typecheck, 24 pool SDK tests, 70 existing SDK/solver tests, `make check`, and
+  all 22 pool VM tests pass. Fixture checks and immutable order identity pass;
+  pool SHA256 remains `d3a6520f08859787e34b5497d0f0f4c893b81b96fe7aaa280e50584024f67829`.
+
+These are VM measurements, not a universal worst-case proof or live relay
+approval. The previous 100M allowance was a test budget, not a consensus limit.
+Large fixtures exceed it and may exceed a target node's independent byte/cycle
+policy; that policy was not queried. Four pools/one real owner group is a measured
+sample, not the maximum possible composition. The composer is test-only, not a
+new SDK batching API. Contracts/ABI and production SDK code are unchanged.
+No deployment, broadcast, funded transaction, user-key, frontend or mainnet work.
+
+Next safe milestone: broaden distinct-owner/maximum-composition measurements or
+obtain an independent review; target-wallet/live-node integration still needs
+separate scope and authorization. Earlier next-step statements below are history.
 
 ### Review/fix commit and next milestone (2026-10-05)
 
