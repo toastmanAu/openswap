@@ -197,8 +197,11 @@ reorg safety guarantee is claimed.
 
 The [resource report](../docs/research/POOL_RESOURCE_ENVELOPE.md) adds four
 fee/reserve/share regimes with full withdrawal/re-entry (56 more steps; 88 total)
-and combined 1/2/4-pool boundary measurements. Its test-only composer and resource
-budgets are not a production batching API or target-node relay approval.
+and combined 1/2/4-pool boundary measurements. The distinct-owner extension adds
+interleaved wallet groups and compact 8/16/36-pool compositions, with each owner's
+signature checked and explicit size/cycle budgets. The 36-pool limit applies only
+to the tested unmerged deposit layout, not every possible transaction. These
+test-only composers are not a production batching API or target-node relay approval.
 
 Before any live pool work: independent adversarial review, chosen-network token
 profile/deployment approval, and a wallet integration with reviewed signing and

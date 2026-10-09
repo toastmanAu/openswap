@@ -2,7 +2,7 @@
 use super::*;
 use ckb_testtool::{builtin::ALWAYS_SUCCESS, ckb_types::core::TransactionBuilder};
 
-fn sign_group(
+pub(super) fn sign_group(
     context: &Context,
     tx: &TransactionView,
     key: &Privkey,

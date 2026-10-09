@@ -1,4 +1,5 @@
 //! Execute the actual TypeScript builder output, without complete_tx repairing deps.
+mod composition;
 mod resource;
 use crate::fixture::{CYCLES, FUNDING, TOKENS, amount, cell};
 use ckb_system_scripts::BUNDLED_CELL;
@@ -296,6 +297,12 @@ fn setup() -> SdkFixture {
         funding,
         request,
     }
+}
+
+#[test]
+fn sdk_distinct_owner_compositions() {
+    let mut fixture = setup();
+    composition::run(&mut fixture);
 }
 
 #[test]

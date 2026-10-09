@@ -35,6 +35,16 @@ pools with real secp/xUDT, explicit over-bound rejection tests, and 56 additiona
 regime transitions. This advances the measurement gate but does not establish a
 universal maximum or target-node relay approval.
 
+Distinct-owner update (2026-10-08): the same report now includes a four-pool
+A/B/A/B signing layout and 8/16/36-pool batches with one real secp owner per pool,
+without synthetic padding. The unmerged SDK deposit shape is output-limited to
+36 pools (216 inputs/252 outputs); this is not a protocol-wide maximum. The
+36-pool fixture measures about 1.53B cycles and 71,748 bytes. Each owner is tested
+for missing-signature rejection at its own lock; selected groups also reject
+wrong/tampered signatures and later group-witness mutations. Contract/SDK behavior
+is unchanged. Target-node policy, distinct token types, alternative layouts and
+independent review remain open gates.
+
 Keep the milestone an offline prototype. Two low-severity SDK boundary findings
 were reproduced; neither establishes an on-chain reserve theft or supply-inflation
 path. Production release is blocked by the open gates below, regardless of passing
@@ -174,8 +184,8 @@ another file is specified.
 | Wallet funding, change, storage and fee caps | explicit single wallet group; supported types, no issuer-mode funding; mandatory plain change | builder tests for conservation, dust, fee cap, wrong assets and storage top-up; arbitrary wallet scripts not audited |
 | Discovery and stale-input handling | uncached exact-point reads, state recheck, profile and dependency hash checks | malformed/aliased RPC and simulated reorg tests; coherent dishonest node still trusted |
 | RPC resource/write boundary | transport method allowlist, streamed byte cap, deadline/abort, no redirects; finite scans | local HTTP and actual CLI tests; custom injected transports remain caller responsibility |
-| SDK-generated chained transitions | actual serialized TS builder output signed and verified in VM without dependency repair | 32 steps, two seeds, all four variants; modest domain and one standard owner group |
-| Input/output/script size bounds | bounded raw syscalls, tail probe at index 256 | 256-input and 256-output cases separately, 512/513-byte script tests; combined worst-case cycles unproven |
+| SDK-generated chained transitions | actual serialized TS builder output signed and verified in VM without dependency repair | Updated: 88 steps across six seeds/regimes, full withdrawal/re-entry; finite domain, not exhaustive |
+| Input/output/script size bounds | bounded raw syscalls, tail probe at index 256 | Updated: combined padded 1/2/4-pool cases and compact batches up to 36 pools/owners; universal worst-case cycles unproven |
 | Existing protocol/binary preservation | separate crates and SDK tree; review changes tests/docs only | 90 order VM tests and immutable identity verifier; pool hash unchanged |
 
 ### Arithmetic inspection notes
@@ -243,16 +253,18 @@ pool SHA256 matches the baseline above. These results do not close R1 or R2.
 
 | Gate | Current state | Required evidence before advancing |
 | --- | --- | --- |
-| R1/R2 disposition | Fixed in working tree, 2026-10-02 | SDK-only fixes and rejection/metadata-policy regressions; retain these gates in CI |
+| R1/R2 disposition | Fixed in commit `f5dcc94` | SDK-only fixes and rejection/metadata-policy regressions; retain these gates in CI |
 | Independent review | Not performed | Separate reviewer findings, resolution record and reviewed baseline hash |
-| Combined resource envelope | Measured for 1/2/4 pools; still partial globally | See resource report; larger pool/signature-group combinations and target-node policy headroom remain unmeasured |
+| Combined resource envelope | Padded 1/2/4 pools and compact 4/8/16/36 pools (up to 36 real owners); still partial globally | See resource report; alternate/merged layouts, distinct token types, combined width/owner extremes and target-node policy headroom remain unmeasured |
 | Economic/profile approval | Not approved | Chosen f/M/backing policy, liquidity/price risk disclosure, exact deployed token hash and owner/extension authority review |
 | Wallet integration | Not implemented | Real target-wallet preparation/signing tests; trusted decoded receipts/fees; reject mutation/stale input and handle cancellation |
 | Live contention/reorg validation | Not performed | Separately authorized controlled network tests with repeatable spent-input, replacement/reorg and ambiguous-submission handling |
 | Deployment/release approval | Not authorized | Reviewed/frozen ABI, reproducible artifact identity, deployment manifest and explicit user authorization |
 
-The original recommended R1/R2 SDK-only milestone is now implemented. Next add
-combined resource and broader randomized VM coverage, retaining the explicit
-cache/display trust policy. Contract changes are not justified by either
-confirmed finding. Any new consensus finding must receive its own review and
-authorization rather than silently changing the preserved binary/ABI.
+The R1/R2 SDK fixes, broader sequences and measured resource milestones are now
+implemented, retaining the explicit cache/display trust policy. Independent
+review and the remaining resource/profile/wallet gates still need separate work;
+live integration and deployment need explicit scope and authorization. Contract
+changes are not justified by either confirmed finding. Any new consensus finding
+must receive its own review and authorization rather than silently changing the
+preserved binary/ABI.

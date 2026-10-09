@@ -1,8 +1,56 @@
 # ToastDEX — next-session handoff
 
-Saved 2026-10-08 (Australia/Adelaide). Read this first when resuming.
+Saved 2026-10-09 (Australia/Adelaide). Read this first when resuming.
 
 ## Current request and stopping point
+
+### Distinct-owner milestone commit (2026-10-09)
+
+The user authorized committing the completed distinct-owner composition
+milestone. This commit contains the tests and documentation described below;
+earlier uncommitted-status statements are historical. The goal is complete.
+No push or new goal was requested.
+
+### Distinct-owner composition measurements (2026-10-08)
+
+Resource milestone was committed locally as `714cb69`; it was not pushed.
+The next offline goal is implemented in tests/docs and remains uncommitted.
+Read [POOL_RESOURCE_ENVELOPE.md](docs/research/POOL_RESOURCE_ENVELOPE.md) for
+fixture assumptions, measurements and remaining limits.
+
+- New `pool-tests/src/sdk/composition.rs` builds verified SDK genesis/deposit
+  fixtures with public secp keys and real xUDT. It measures four pools with
+  interleaved owners A/B/A/B, then 8/16/36 pools with one owner each. No synthetic
+  ALWAYS_SUCCESS padding is used in this new compact-action profile.
+- Each unmerged deposit consumes six inputs and produces seven outputs. The
+  test derives a 36-pool layout-specific maximum: 216 inputs/252 outputs; a 37th
+  would require 259 outputs. This is not a universal protocol maximum.
+- Observed sizes/cycles: 7,994 bytes/~25.94M; 16,112/~93.74M; 32,008/~328.00M;
+  71,748/~1.528B. Final regression ceilings: 33M/120M/415M/1.920B cycles and
+  9,000/17,000/34,000/75,000 bytes, with roughly 25% rounded cycle headroom.
+- All 62 measured owner-group instances reject an individually removed
+  signature. Both interleaved owners and the final owner in each larger batch
+  additionally reject wrong-key signatures, one-byte signature mutations and
+  later group-witness mutations: 77 negative cases in total, attributed to the
+  intended input lock rather than accepting cycle exhaustion or pool errors.
+- Asserts exact genesis predecessor points, unique pools/inputs, explicit
+  dependencies, occupied capacities and exact combined fee accounting. Only
+  final plain wallet change is repriced; every owner signs the resulting raw tx.
+- Targeted composition test passed. Typecheck, 24 pool SDK tests, 70 existing
+  SDK/solver tests, 90 order VM tests, fixture hashes and `make check` passed.
+  Final full 23-test pool VM run with tightened ceilings passed, including all
+  77 authorization-negative cases and the existing 88 chained transitions.
+  Both contract identities match baseline; production SDK/ABI are unchanged.
+
+CI's existing full pool-test invocation automatically includes this test and
+prints COMPOSITION/COMPOSITION_AUTH rows. No remote CI result is claimed.
+The largest compact fixture exceeds 1.5B cycles; VM success is not relay or
+production approval. Remaining gaps include distinct tokens, merged/alternative
+layouts, combined wide-witness/many-owner extremes and independent review.
+Live wallet/node integration still needs separate scope and authorization.
+No deployment, broadcast, funded transaction, user-key, frontend or mainnet work.
+No further commit or push without a separate user request. Earlier stopping
+points below are historical.
 
 ### Resource milestone commit and next piece (2026-10-08)
 
