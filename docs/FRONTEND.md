@@ -198,3 +198,60 @@ for creation, a distinct-wallet fill and cancellation of an existing order. Both
 testnet nodes agreed on exact maker payment, token conservation, separate taker
 funding and the cancellation owner proof. See
 [the verification journal](../deployments/public-wallet-verification.json).
+
+## Pools tab (P7, offline only)
+
+Status: **built and tested offline against a mocked node and a mock JoyID
+signer. No live pool deployment, wallet prompt or browser acceptance exists.**
+Live acceptance follows P6.
+
+The tab loads `pool-manifest.json` at runtime. `build.mjs` copies it from
+`deployments/pool-testnet.json` when that file exists. If no manifest is served,
+or the node's genesis differs, the tab says pools are not deployed. A malformed
+manifest is an error, not a silent "not deployed". The strict schema is in
+`frontend/src/pools/manifest.ts` and is roughly:
+
+```json
+{"version":1,"network":"testnet",
+ "deployment":{"genesisHash":"0x…","codeHash":"0x…",
+  "poolDep":{"outPoint":{"txHash":"0x…","index":"0"},"depType":"code"},
+  "tokenDep":{"outPoint":{"txHash":"0x…","index":"0"},"depType":"code"}},
+ "pools":[{"label":"CKB / TOKEN","poolId":"0x…"}],
+ "joyid":{"codeHash":"0x…","hashType":"type","codeDeps":[{"dep":{…},"dataHash":"0x…"}],
+  "cotaType":{…},"proofEndpoint":"https://…"},
+ "policy":{"feeRate":"1000","maxFee":"10000","slippageBps":50,"reviewTtlMs":60000},
+ "create":{"parameters":{"feeBps":"30","lockedShares":"1000","backing":{"state":"…","ckb":"…","token":"…"}},"tokenOwner":"0x…"}}
+```
+
+`cotaType`, `proofEndpoint` (needed for JoyID subkey sessions) and `create` are
+optional. Pools are listed by ID; their current state is always discovered live.
+
+Every pool transaction follows the SDK path:
+1. Reload the pool live and requote. Minimum output is the fresh quote reduced by
+   `slippageBps`.
+2. Run `resolveJoyIdWallet`, `fundPoolTransaction` and JoyID `prepare`.
+3. Run `reviewPoolTransaction`, then show the frozen summary: identity, network,
+   pool, exact pay and receive amounts, minimum, fee and cap, storage top-up, your
+   outputs, pool after, permanent backing and expiry.
+4. On explicit approval, run `bindReview().sign()`, then `PoolSubmissionRecovery.submit`.
+
+Rules:
+- Account, endpoint or network changes, Back and expiry all discard the review
+  and release its funding.
+- A wallet refusal sends and journals nothing.
+- An ambiguous send is shown as unknown, with no retry control. Its inputs,
+  including the pool state, stay reserved across reloads. Preparing against that
+  state is refused with the blocking submission's hash.
+
+`frontend/src/pools/journal.ts` is a localStorage-backed `ArchivableSubmissionJournal`
+with the solver journal's record validation. A write from another tab poisons
+the instance; reload and reconcile. Clearing site data loses it; the node remains
+the authority on what was sent.
+
+CCC 1.21 throws when the node returns null for an unknown transaction. The pool
+UI maps only that null-response TypeError to "absent" for recovery. Network
+failures still throw.
+
+Tests: `frontend/test/pools.spec.ts`, 8 offline cases. They build a real SDK
+genesis, serve it from a mocked node, and sign with a fixed-placeholder mock JoyID
+signer. No signature is cryptographically valid and nothing touches a network.
