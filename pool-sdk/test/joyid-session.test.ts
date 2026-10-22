@@ -10,6 +10,12 @@ import {parsePool,type PoolDeployment,pointKey} from '../src/pools.js';
 import {XUDT_CODE_HASH} from '../src/codec.js';
 import type {JoyIdProofSource} from '../src/joyid-proof.js';
 import {reviewPoolTransaction} from '../src/review.js';
+import {mkdtempSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {PoolFundingReservations} from '../src/funding.js';
+import {PoolSubmissionRecovery,type PoolSubmitClient} from '../src/recovery.js';
+import {FileSubmissionJournal} from '../../solver/src/journal.js';
 
 const oldLocation=Object.getOwnPropertyDescriptor(globalThis,'location');
 before(()=>Object.defineProperty(globalThis,'location',{value:{href:'http://localhost/test'},configurable:true}));
@@ -213,4 +219,123 @@ test('resolution and later freshness have bounded cancellation/deadlines and ign
  assert.ok(finish&&captured);finish(captured);await Promise.resolve();
  const ready=fixture(),lifetime=new AbortController(),resolved=await resolveJoyIdWallet(ready.source,ready.deployment,ready.profile,ready.funding,undefined,{signal:lifetime.signal});
  lifetime.abort(new Error('review cancelled'));await assert.rejects(resolved.assertFresh(),/review cancelled/);
+});
+
+/** Mock signer: only fills the wallet witness lock. No popup, key, RPC or WebAuthn. */
+function mockSign(f:ReturnType<typeof fixture>,during:(input:ccc.Transaction)=>unknown=()=>{}){
+ const state={calls:0};
+ f.signer.signOnlyTransaction=async input=>{
+  state.calls++;const tx=ccc.Transaction.from(input).clone();await during(tx);
+  const index=tx.witnesses.findIndex(w=>{try{return ccc.bytesFrom(ccc.WitnessArgs.fromBytes(w).lock??'0x').length===1000;}catch{return false;}});
+  const args=ccc.WitnessArgs.fromBytes(tx.witnesses[index]!);args.lock=ccc.hexFrom(new Uint8Array(1000).fill(9));
+  tx.witnesses[index]=ccc.hexFrom(args.toBytes());return tx;
+ };
+ return state;
+}
+async function reviewedCreate(f:ReturnType<typeof fixture>,ttlMs?:number){
+ const resolved=await f.resolve(),wallet={...resolved.wallet(),change:f.lock,funding:[f.funding],feeRate:1000n,maxFee:10000n};
+ const prepared=await resolved.prepare(buildCreate(f.deployment,wallet,f.recipients,request));
+ const review=reviewPoolTransaction(f.deployment,wallet,f.recipients,{kind:'create',request},prepared,ttlMs);
+ return {resolved,wallet,prepared,review,bound:resolved.bindReview(review)};
+}
+
+test('primary and subkey sessions sign every lifecycle operation changing only the wallet lock',async()=>{
+ for(const subkey of [false,true]){
+  const f=fixture(subkey),signer=mockSign(f);
+  const {resolved,wallet,prepared,bound}=await reviewedCreate(f);
+  let tx=await bound.sign(),index=bound.summary.stateOutputIndex;
+  const expectSigned=(signed:ccc.Transaction,unsigned:ccc.Transaction,walletIndex:number)=>{
+   assert.equal(signed.hash(),unsigned.hash());
+   signed.witnesses.forEach((w,i)=>{if(i!==walletIndex)assert.equal(w,unsigned.witnesses[i]);});
+   const before=ccc.WitnessArgs.fromBytes(unsigned.witnesses[walletIndex]!),after=ccc.WitnessArgs.fromBytes(signed.witnesses[walletIndex]!);
+   assert.equal(after.outputType,before.outputType);assert.equal(after.inputType,before.inputType);
+   assert.equal(after.outputType,subkey?'0x123456':undefined);
+   assert.ok(ccc.bytesFrom(after.lock!).some(b=>b!==0));
+  };
+  expectSigned(tx,prepared,bound.summary.walletWitnessIndex);
+  for(const kind of ['xToY','yToX','deposit','partial','withdraw','deposit'] as const){
+   for(const input of tx.inputs)f.cells.delete(pointKey(input.previousOutput));
+   const all=tx.outputs.map((cellOutput,i)=>ccc.Cell.from({outPoint:{txHash:tx.hash(),index:i},cellOutput,outputData:tx.outputsData[i]!}));
+   for(const cell of all)f.cells.set(pointKey(cell.outPoint),cell.clone());
+   const pool=parsePool(f.deployment,all[index]!,all[index+1]!,all[index+2]!);
+   const circulating=pool.accounting.totalShares-pool.accounting.lockedShares;
+   const action=kind==='deposit'?{kind:'deposit' as const,maxX:10000000000n,maxY:40000000000n,minShares:1n}:kind==='withdraw'||kind==='partial'?{kind:'withdraw' as const,shares:kind==='partial'?circulating/2n:circulating,minX:1n,minY:1n}:{kind:'swap' as const,direction:kind,amountIn:10000000000n,minOut:1n};
+   const funded={...wallet,funding:all.filter((_,i)=>i<index||i>index+2)};
+   const unsigned=await resolved.prepare(buildTransition(f.deployment,funded,f.recipients,pool,action));
+   const review=reviewPoolTransaction(f.deployment,funded,f.recipients,{kind:'transition',pool,action},unsigned);
+   const step=resolved.bindReview(review);assert.equal(step.summary.action.kind,action.kind);
+   tx=await step.sign();expectSigned(tx,unsigned,step.summary.walletWitnessIndex);
+   review.assertIntegrity(tx);index=step.summary.stateOutputIndex;
+  }
+  assert.equal(signer.calls,7);
+ }
+});
+
+test('cancellation and deadline during the wallet await discard the late signature',async()=>{
+ for(const mode of ['abort','deadline'] as const){
+  const f=fixture(true);let finish:(()=>void)|undefined;
+  const signer=mockSign(f,()=>new Promise<void>(resolve=>{finish=resolve;}));
+  const {bound}=await reviewedCreate(f),controller=new AbortController();
+  const pending=bound.sign(mode==='abort'?{signal:controller.signal}:{timeoutMs:30});
+  while(!finish)await new Promise(resolve=>setTimeout(resolve,1));
+  if(mode==='abort')controller.abort(new Error('user cancelled'));
+  await assert.rejects(pending,mode==='abort'?/user cancelled/:/deadline/);
+  finish();await new Promise(resolve=>setTimeout(resolve,5)); // late wallet result arrives
+  assert.equal(signer.calls,1);await assert.rejects(bound.sign(),/already used/);
+ }
+});
+
+test('review expiry, stale inputs and session/account/network changes around signing fail closed',async()=>{
+ for(const mode of ['expired-before','expires-during','stale-before','stale-during','revision','account','network','proof-cell'] as const){
+  const f=fixture(true);let signer={calls:0};
+  const during=()=>{
+   if(mode==='expires-during')return new Promise(resolve=>setTimeout(resolve,80));
+   if(mode==='stale-during')f.cells.delete(pointKey(f.funding.outPoint));
+   if(mode==='revision')f.setRevision('2');
+   if(mode==='account')f.signer.getAddressObjs=async()=>[ccc.Address.fromScript({...f.lock,args:'0x0001ffff'},f.client)];
+   if(mode==='network')f.setGenesis(hash(99));
+   if(mode==='proof-cell')f.cells.delete(pointKey(f.cota.outPoint));
+  };
+  signer=mockSign(f,during);
+  const {bound}=await reviewedCreate(f,mode.startsWith('expire')?40:120000);
+  if(mode==='expired-before')await new Promise(resolve=>setTimeout(resolve,60));
+  if(mode==='stale-before')f.cells.delete(pointKey(f.funding.outPoint));
+  const reason={'expired-before':/expired/,'expires-during':/expired/,'stale-before':/no longer live/,'stale-during':/no longer live/,revision:/session changed/,account:/account changed/,network:/genesis mismatch/,'proof-cell':/no longer live/}[mode];
+  await assert.rejects(bound.sign({timeoutMs:5000}),reason,mode);
+  // Pre-signature failures never reach the wallet.
+  assert.equal(signer.calls,mode.endsWith('-before')?0:1,mode);
+  await assert.rejects(bound.sign(),/already used/);
+ }
+});
+
+test('bindReview rejects reviews for another network, owner witness or dependency set',async()=>{
+ for(const mode of ['network','proof','deps'] as const){
+  const f=fixture(true),resolved=await f.resolve();
+  const wallet={...resolved.wallet(),change:f.lock,funding:[f.funding],feeRate:1000n,maxFee:10000n};
+  if(mode==='proof')wallet.witness!.outputType='0x99';
+  if(mode==='deps')wallet.deps.push(dep(90));
+  const deployment=mode==='network'?{...f.deployment,genesisHash:hash(99)}:f.deployment;
+  const built=buildCreate(deployment,wallet,f.recipients,request);
+  const review=reviewPoolTransaction(deployment,wallet,f.recipients,{kind:'create',request},built.transaction);
+  assert.throws(()=>resolved.bindReview(review),{network:/account\/network mismatch/,proof:/wallet witness mismatch/,deps:/dependency mismatch/}[mode],mode);
+ }
+});
+
+test('offline end to end: resolve, review, mock-sign and durably submit once',async()=>{
+ const f=fixture(true);mockSign(f);
+ const {bound,review}=await reviewedCreate(f);
+ const scope={genesisHash:f.deployment.genesisHash,accountLockHash:f.lock.hash()};
+ const directory=mkdtempSync(join(tmpdir(),'pool-joyid-submit-')),journal=new FileSubmissionJournal(directory,scope);
+ const reservations=new PoolFundingReservations(),recovery=new PoolSubmissionRecovery(journal,reservations,scope);
+ const sent:ccc.Hex[]=[];
+ const client=Object.assign(Object.create(f.client),{getTransactionNoCache:async()=>undefined,sendTransaction:async(tx:ccc.Transaction)=>{
+  assert.equal(journal.list()[0]?.transaction,ccc.hexFrom(tx.toBytes()));sent.push(tx.hash());return tx.hash();}}) as PoolSubmitClient;
+ try{
+  await recovery.reconcile(client);
+  const signed=await bound.sign(),unsigned=review.transaction();
+  const funded={built:{transaction:unsigned},release:reservations.claim(scope.genesisHash,unsigned.inputs.map(i=>i.previousOutput))} as unknown as Parameters<typeof recovery.submit>[3];
+  assert.deepEqual(await recovery.submit(client,review,signed,funded),{hash:signed.hash(),outcome:'sent'});
+  assert.deepEqual(sent,[signed.hash()]);assert.equal(journal.list()[0]!.status,'unknown');
+  assert.ok(signed.inputs.every(i=>reservations.has(scope.genesisHash,i.previousOutput)));
+ }finally{journal.close();rmSync(directory,{recursive:true,force:true});}
 });

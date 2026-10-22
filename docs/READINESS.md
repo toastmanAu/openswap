@@ -26,7 +26,7 @@ The user selected **JoyID first** for pools. Follow the
 | P1 | Pool profile and acceptance plan | [Plan](research/POOL_INTEGRATION_PLAN.md); JoyID selected. Live parameters/dependencies/issuer remain unapproved. |
 | P2 | JoyID witness/dependency compatibility | Partial: bounded layout, direct-code/CoTA resolution, bounded proof HTTP adapter and installed connector preparation tests pass offline; relocated lifecycle passes unchanged pool VM with secp authentication. Real JoyID proof/authentication remains unproven. |
 | P3 | Funding selection and trusted review | Partial: bounded selection/reservations and lifecycle/concurrency tests pass. Review reconstructs prepared bytes from independent snapshots/policy and freezes decoded disclosures with expiry. Review-to-session/signing orchestration remains missing. |
-| P4 | Wallet orchestration | Partial: session-bound review and one-shot signing implemented following explicit mock-only approval (2026-10-13). Mock refusal/mutation/session/timeout tests pass; broader primary/lifecycle/cancellation/expiry coverage remains. Browser bundle smoke passes; real browser/wallet acceptance remains open. |
+| P4 | Wallet orchestration | Offline coverage complete (2026-10-22, mock signer only). Primary and subkey sessions sign create, both swaps, deposit, partial/full withdrawal and re-entry, changing only the wallet lock. Covered: cancellation/deadline mid-sign with late results discarded, and review expiry before/during signing. Also covered: stale funding/CoTA inputs, session/account/network changes and bindReview mismatches. One end-to-end resolve→review→sign→durable-submit test runs too. Real JoyID authorization and browser/wallet acceptance remain open (P6/P7). |
 | P5 | Submission and recovery | Offline implementation complete (2026-10-22): reconcile-gated `submit` persists exact signed bytes before one send, hands reservations to recovery and records ambiguous sends as unknown; explicit `archiveCommitted` (confirmation depth) and `abandonConflicted` (spent input, acknowledged reorg risk) archive and release. File-journal/mock-chain tests only; live send, contention and reorg evidence belong to P6. |
 | P6 | Live pool lifecycle/admission | Not authorized or demonstrated; VM and mocked connector results cannot close this gate. |
 | P7 | Pool UI and routing | Not implemented; dependent on P6. Keep existing orders usable. |
@@ -44,7 +44,7 @@ production batching API or relay-policy proof; see the
 [resource report](research/POOL_RESOURCE_ENVELOPE.md).
 
 No OTX, gossip or Fiber implementation is required to close this milestone.
-Current offline integration check (2026-10-22, after checkpoint `60e958b` plus P5
-submission/resolution): typecheck, 56 pool SDK, 76 SDK/solver and 14 model tests pass. Synthetic proof
+Current offline integration check (2026-10-22, P5 at `867f297` plus P4 coverage):
+typecheck, 60 pool SDK, 76 SDK/solver and 14 model tests pass. Synthetic proof
 fixtures do not prove JoyID authorization.
 Do not commit or push further changes without a separate request.

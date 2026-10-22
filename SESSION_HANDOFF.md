@@ -4,6 +4,20 @@ Saved 2026-10-12 (Australia/Adelaide). Read this first when resuming.
 
 ## Current request and stopping point
 
+### P4 signing coverage (2026-10-22)
+
+P5 committed locally as `867f297` (not pushed). Uncommitted on top: four new
+`joyid-session.test.ts` tests, mock signer only, plus a plan/readiness update.
+- Primary and subkey sessions sign a seven-step lifecycle. Only the wallet lock
+  changes; the subkey proof is preserved.
+- Cancellation/deadline during the wallet await discard the late result.
+- Expiry before and during signing is rejected.
+- Stale funding/CoTA inputs, revision/account/network changes and bindReview
+  network/witness/dependency mismatches fail with pinned reasons.
+- One end-to-end resolve, review, sign and durable submit flow sends once.
+No source changes were needed. 60 pool SDK, 76 SDK/solver and 14 model tests pass.
+Next: S1 solver operator resolution and production wiring. P6 needs approval.
+
 ### P5 pool submission and resolution (2026-10-22)
 
 User authorized a local checkpoint commit and work on P5. Checkpoint `60e958b`

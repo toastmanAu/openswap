@@ -58,15 +58,15 @@ prove JoyID/WebAuthn authorization; real JoyID acceptance remains a separate gat
 - [ ] **Review:** derive from validated snapshots and final prepared bytes, not
   mutable returned summaries. Show identity, direction, minima, exact receipts,
   fee, storage/top-up, LP changes and permanent backing. Freeze review and expiry.
-- [ ] **Preparation/signing:** reject raw-field/dependency/action/non-wallet witness
+- [x] **Preparation/signing (offline, mock signer 2026-10-22):** reject raw-field/dependency/action/non-wallet witness
   and cache mutations; allow only the reviewed wallet lock field replacement.
   Recheck inputs and session before and after awaits. Account/network/endpoint
   changes, cancellation, expired review and wallet refusal cause no submission.
   Browser bundle smoke must pass without Node-only runtime dependencies.
-- [ ] **Lifecycle:** offline primary/subkey cases for create, both swap directions,
+- [x] **Lifecycle (offline, mock signer 2026-10-22):** offline primary/subkey cases for create, both swap directions,
   deposit, partial/full circulating withdrawal and re-entry. No claim of closing
   the permanent-backed pool or redeeming virtual M.
-- [ ] **Submission:** explicit send boundary, persist signed hash/bytes and input
+- [x] **Submission (offline, file journal/mock chain 2026-10-22):** explicit send boundary, persist signed hash/bytes and input
   reservations before send; journal failure prevents send; uncertain result stays
   unknown, not automatically retried. Reconcile pending/committed/rejected/absent
   transactions and input state; handle restart/reorg without phantom change.
@@ -77,6 +77,10 @@ prove JoyID/WebAuthn authorization; real JoyID acceptance remains a separate gat
 - [ ] **UI/routing (after live path):** add single-pool routing with conservative
   bounds and freshness; LP create/add/remove screens; browser wallet mutation,
   cancellation, errors and existing order regressions; no automatic publishing.
+
+Offline ticks above mean mock-signer/mock-chain evidence only. Real JoyID
+authorization, popup behaviour, node admission and reorg handling stay under
+live acceptance.
 
 ## Threat and evidence limits
 
