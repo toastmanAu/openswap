@@ -43,6 +43,10 @@ fn describe(context: &Context, point: &OutPoint) -> Value {
     json!({"point":hex(point.as_slice()),"output":hex(output.as_slice()),"data":hex(&data)})
 }
 fn build(request: &Value) -> (TransactionView, usize) {
+    build_or_skip(request).unwrap_or_else(|skip| panic!("unexpected builder skip {skip}"))
+}
+/// `Err(code)` only when the request sets `allowSkip` and the builder refused.
+fn build_or_skip(request: &Value) -> Result<(TransactionView, usize), String> {
     let mut child = Command::new("node")
         .args([
             "node_modules/tsx/dist/cli.mjs",
@@ -67,12 +71,15 @@ fn build(request: &Value) -> (TransactionView, usize) {
         String::from_utf8_lossy(&output.stderr)
     );
     let response: Value = serde_json::from_slice(&output.stdout).unwrap();
-    (
+    if let Some(skip) = response["skip"].as_str() {
+        return Err(skip.to_string());
+    }
+    Ok((
         Transaction::from_slice(&unhex(response["transaction"].as_str().unwrap()))
             .unwrap()
             .into_view(),
         response["walletWitnessIndex"].as_u64().unwrap() as usize,
-    )
+    ))
 }
 fn sign(tx: &TransactionView, key: &Privkey, first: usize) -> TransactionView {
     // Builders put all same-wallet funding inputs contiguously after pool inputs.
@@ -218,6 +225,95 @@ fn regime_sequences(
             "REGIME seed={seed} fee={fee} locked={locked} x={x} y={y} transitions=14 peak_cycles={peak} max_bytes={max_bytes} ceiling=6000000 byte_ceiling=3000"
         );
     }
+}
+
+#[test]
+fn sdk_seeded_vm_endurance() {
+    // Campaign target `pool-vm`: one long seeded walk of real SDK transitions,
+    // each spending the previous transaction's outputs. CI runs a short default.
+    // Every 8th step also signs a one-byte state mutation that must be rejected.
+    let campaign = crate::campaign::Campaign::from_env("pool-vm", 6);
+    let SdkFixture {
+        mut context,
+        creator,
+        mut request,
+        ..
+    } = setup();
+    let (genesis, first) = build(&request);
+    let genesis = sign(&genesis, &creator, first);
+    context.verify_tx(&genesis, CYCLES).unwrap();
+    let mut current = register(&mut context, &genesis);
+    let mut random = campaign.state(0x0e4d_u64) as u32;
+    let (mut peak, mut max_bytes, mut tampered) = (0, 0, 0);
+    let mut skips = std::collections::BTreeMap::<String, u64>::new();
+    let mut applied = std::collections::BTreeMap::<&str, u64>::new();
+    let mut consumed = std::collections::HashSet::new();
+    request["allowSkip"] = json!(true);
+    campaign.run(|step| {
+        random = random.wrapping_mul(1664525).wrapping_add(1013904223);
+        let action = ["xToY", "yToX", "deposit", "withdraw"][(random >> 16) as usize % 4];
+        request["previous"] = json!(
+            current[..3]
+                .iter()
+                .map(|p| describe(&context, p))
+                .collect::<Vec<_>>()
+        );
+        request["funding"] = json!(
+            current[3..]
+                .iter()
+                .map(|p| describe(&context, p))
+                .collect::<Vec<_>>()
+        );
+        request["action"] = json!(action);
+        request["relativeRandom"] = json!(random);
+        let (tx, first) = match build_or_skip(&request) {
+            Ok(built) => built,
+            Err(code) => {
+                *skips.entry(format!("{action}:{code}")).or_default() += 1;
+                return;
+            }
+        };
+        for (i, input) in tx.inputs().into_iter().enumerate() {
+            assert_eq!(
+                input.previous_output(),
+                current[i],
+                "step={step} predecessor"
+            );
+            assert!(
+                consumed.insert(input.previous_output()),
+                "step={step} reused input"
+            );
+        }
+        let signed = sign(&tx, &creator, first);
+        let cycles = context
+            .verify_tx(&signed, CYCLES)
+            .unwrap_or_else(|e| panic!("step={step} action={action}: {e}"));
+        peak = peak.max(cycles);
+        max_bytes = max_bytes.max(signed.data().as_slice().len());
+        assert!(max_bytes <= 3000, "step={step}: byte regression");
+        let data = signed.outputs_data().get(0).unwrap().raw_data();
+        assert!(StateData::decode(&data).is_ok(), "step={step} state");
+        if step % 8 == 0 {
+            let mut bytes = data.to_vec();
+            let index = (random as usize >> 3) % bytes.len();
+            bytes[index] ^= 1 << (random % 8);
+            let mut outputs: Vec<_> = tx.outputs_data().into_iter().collect();
+            outputs[0] = Bytes::from(bytes).pack();
+            let mutated = tx.as_advanced_builder().set_outputs_data(outputs).build();
+            assert!(
+                context
+                    .verify_tx(&sign(&mutated, &creator, first), CYCLES)
+                    .is_err(),
+                "step={step} accepted a mutated state byte {index}"
+            );
+            tampered += 1;
+        }
+        *applied.entry(action).or_default() += 1;
+        current = register(&mut context, &signed);
+    });
+    println!(
+        "VM_ENDURANCE applied={applied:?} skipped={skips:?} tampered_rejected={tampered} peak_cycles={peak} max_bytes={max_bytes}"
+    );
 }
 
 struct SdkFixture {

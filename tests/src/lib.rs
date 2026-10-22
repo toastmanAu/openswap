@@ -1,4 +1,6 @@
 #[cfg(test)]
+mod campaign;
+#[cfg(test)]
 mod consensus;
 #[cfg(test)]
 #[path = "../../contracts/openswap-lock/src/error.rs"]

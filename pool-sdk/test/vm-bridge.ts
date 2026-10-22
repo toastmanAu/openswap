@@ -1,9 +1,9 @@
 // Invoked by Rust CKB-VM tests. Only public deterministic in-memory fixture cells.
 import {readFileSync} from 'node:fs';
 import {ccc} from '@ckb-ccc/core';
-import {buildCreate,buildTransition} from '../src/builders.js';
+import {buildCreate,buildTransition,PoolBuildError} from '../src/builders.js';
 import {parsePool} from '../src/pools.js';
-import type {Operation} from '../../pool-model/src/model.js';
+import {ModelError,type Operation} from '../../pool-model/src/model.js';
 const input=JSON.parse(readFileSync(0,'utf8'));
 const dep=(s:ccc.Hex)=>({outPoint:ccc.OutPoint.fromBytes(s),depType:'code' as const});
 const cell=(s:{point:ccc.Hex;output:ccc.Hex;data:ccc.Hex})=>ccc.Cell.from({outPoint:ccc.OutPoint.fromBytes(s.point),cellOutput:ccc.CellOutput.fromBytes(s.output),outputData:s.data});
@@ -30,6 +30,14 @@ if(input.relativeRandom!==undefined&&pool){
 if(input.fullWithdraw&&pool)actions.withdraw.shares=pool.accounting.totalShares-pool.accounting.lockedShares;
 if(input.reenter){actions.deposit.maxX=BigInt(input.reenter.x);actions.deposit.maxY=BigInt(input.reenter.y);}
 const initial=input.initial??{fee:'30',locked:'1000',x:'1000000000000',y:'4000000000000'};
-const built=pool?buildTransition(deployment,wallet,recipients,pool,actions[input.action as keyof typeof actions]):buildCreate(deployment,wallet,recipients,{parameters:{feeBps:BigInt(initial.fee),lockedShares:BigInt(initial.locked),backing:{state:34000000000n,ckb:8000000000n,token:16000000000n}},x:BigInt(initial.x),y:BigInt(initial.y),minShares:1n,tokenOwner:`0x${'11'.repeat(32)}`});
+// Endurance campaigns opt in to reporting builder refusals (exhausted wallet
+// funding, model rejection) as a skip, so the caller can choose another action.
+let built;
+try{built=pool?buildTransition(deployment,wallet,recipients,pool,actions[input.action as keyof typeof actions]):buildCreate(deployment,wallet,recipients,{parameters:{feeBps:BigInt(initial.fee),lockedShares:BigInt(initial.locked),backing:{state:34000000000n,ckb:8000000000n,token:16000000000n}},x:BigInt(initial.x),y:BigInt(initial.y),minShares:1n,tokenOwner:`0x${'11'.repeat(32)}`});}
+catch(error){
+ const code=error instanceof PoolBuildError&&error.code==='FUNDING'?'FUNDING':error instanceof ModelError?error.code:undefined;
+ if(!input.allowSkip||!code)throw error;
+ console.log(JSON.stringify({skip:code}));process.exit(0);
+}
 built.assertIntegrity();
 console.log(JSON.stringify({transaction:ccc.hexFrom(built.transaction.toBytes()),walletWitnessIndex:built.walletWitnessIndex}));

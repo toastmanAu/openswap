@@ -56,14 +56,15 @@ fn seeded_malformed_wire_corpus_never_panics() {
         .iter()
         .map(|v| hex(v["expectedArgsHex"].as_str().unwrap()))
         .collect();
-    let mut state = 0x746f_6173_7464_6578_u64;
+    let campaign = crate::campaign::Campaign::from_env("order-parser", 20_000);
+    let mut state = campaign.state(0x746f_6173_7464_6578_u64);
     let mut next = || {
         state ^= state << 13;
         state ^= state >> 7;
         state ^= state << 17;
         state
     };
-    for case in 0..20_000 {
+    campaign.run(|case| {
         let mut bytes = if case % 2 == 0 {
             seeds[next() as usize % seeds.len()].clone()
         } else {
@@ -87,5 +88,5 @@ fn seeded_malformed_wire_corpus_never_panics() {
                 assert!(bytes.len() <= owner.end + 48 + crate::wire_parser::MAX_ASK_SCRIPT_BYTES);
             }
         }
-    }
+    });
 }

@@ -1,4 +1,6 @@
 use openswap_pool_arithmetic::wire::*;
+#[path = "../../tests/src/campaign.rs"]
+mod campaign;
 
 fn state() -> StateData {
     StateData {
@@ -387,7 +389,8 @@ fn all_single_byte_mutations_are_rejected_or_canonical() {
 
 #[test]
 fn seeded_arbitrary_bytes_never_panic() {
-    let mut seed = 0x746f617374u64;
+    let campaign = campaign::Campaign::from_env("pool-wire", 20000);
+    let mut seed = campaign.state(0x746f617374u64);
     let mut next = || {
         seed ^= seed << 13;
         seed ^= seed >> 7;
@@ -395,7 +398,7 @@ fn seeded_arbitrary_bytes_never_panic() {
         seed
     };
     let mut data = [0; WITNESS_MAX_LEN + 1];
-    for _ in 0..20000 {
+    campaign.run(|_| {
         let len = (next() as usize) % data.len();
         for byte in &mut data[..len] {
             *byte = next() as u8;
@@ -407,5 +410,5 @@ fn seeded_arbitrary_bytes_never_panic() {
         let _ = decode_pool_script(v);
         let _ = decode_witness(v, Phase::Genesis);
         let _ = decode_witness(v, Phase::Transition);
-    }
+    });
 }

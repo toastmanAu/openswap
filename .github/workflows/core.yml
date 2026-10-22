@@ -28,6 +28,8 @@ jobs:
       - run: cargo check --locked -p openswap-pool-arithmetic --lib --target riscv64imac-unknown-none-elf
       - run: npm run test:pool-cross
       - run: npm run test:pool-wire
+      # Fixed-seed smoke of the differential campaign; long campaigns run offline.
+      - run: npm run campaign -- pool-model-diff --seed=1 --cases=20000
   contract:
     runs-on: ubuntu-24.04
     steps:

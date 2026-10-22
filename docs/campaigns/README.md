@@ -1,0 +1,47 @@
+# Offline fuzz and endurance campaigns (T1)
+
+Reproducible, seeded campaigns over the parsers, the pool arithmetic and the
+pool validator. They need no network, keys or deployment. Run them with:
+
+```
+npm run campaign -- <target|all> [--seeds=A..B|--seed=N] [--cases=N] [--seconds=N] [--record]
+```
+
+`make pool-build` must have produced the pinned pool binary (`scripts/check-pool-identity.py`).
+`--record` appends one JSON line per run to [results.jsonl](results.jsonl). Each
+line holds the commit, a dirty-tree flag and both contract binary SHA256s. Only
+clean-tree records count as evidence.
+
+## Targets
+
+| Target | What each case does | Oracle | Default budget |
+| --- | --- | --- | --- |
+| `order-parser` | Mutated/truncated shared wire vectors and zero buffers into the order-lock args parser | No panic; accepted parses stay within declared bounds | 1,000,000 |
+| `pool-wire` | Arbitrary bytes into every pool codec (args, state, action, script, both witness phases) | No panic | 1,000,000 |
+| `pool-model-diff` | Random pool walks (wide parameter/magnitude ranges, boundary specials, slippage-edge minima, corrupted-state probes) | Each vector matches the Rust arithmetic exactly; every accepted TS transition passes `validateTransition` | 200,000 vectors |
+| `pool-vm` | One long walk of real SDK-built, secp-signed transitions in CKB-VM, each spending the prior outputs | VM accepts within 6M cycles and 3,000 bytes; exact predecessor inputs; every 8th step a signed one-bit state mutation must be rejected | 100 steps |
+
+## Stopping criteria
+
+Each run ends at exactly one of:
+
+- `stop=budget`: the case budget completed. This is a pass.
+- `stop=time`: the per-run `--seconds` budget expired. This is a partial pass,
+  and `executed` records how far it got.
+- `stop=failure`: the first failing case. The runner stops all remaining seeds,
+  prints the panic/mismatch, and prints the command that reproduces it. The same
+  seed regenerates the same case stream. For the Rust targets `failed_case`
+  names the case index.
+
+With no `CAMPAIGN_*` variables, each harness keeps its original fixed CI seed and
+count. CI also runs a 20,000-vector `pool-model-diff` smoke and a six-step
+`pool-vm` walk.
+
+## What a pass does and does not show
+
+A pass shows no counterexample in the sampled space for these oracles at the
+recorded commit and binaries. It is not coverage-guided fuzzing, not a proof,
+and not independent review (R1). The `pool-vm` walk uses one public fixture
+owner and the default fee/backing profile. Multi-owner composition and resource
+extremes remain in the fixed resource tests. Live contention is out of scope
+(P6).
