@@ -1,0 +1,32 @@
+// Approved P6 testnet pool profile (docs/research/POOL_TESTNET_RUN.md). Shared by
+// the Node scripts and the generated playground bundle; no keys or RPC here.
+import {ccc} from '@ckb-ccc/core';
+
+export const GENESIS='0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606' as ccc.Hex;
+export const ENDPOINTS=['https://testnet.ckb.dev','https://testnet.ckbapp.dev'] as const;
+/** Mirrors scripts/check-pool-identity.py EXPECTED. */
+export const POOL_BINARY={codeHash:'0xc58432bfaf1cfaab12532bd4d9ce7e5a43196bd0c867a43b63f19096727a12ed' as ccc.Hex,sha256:'d3a6520f08859787e34b5497d0f0f4c893b81b96fe7aaa280e50584024f67829',bytes:42176};
+/** Always-fail lock used for immutable code cells, as in the order deployment. */
+export const IMMUTABLE_LOCK=ccc.Script.from({codeHash:`0x${'00'.repeat(32)}`,hashType:'data1',args:'0x'});
+export const XUDT={
+ codeHash:'0x50bd8d6680b8b9cf98b73f3c08faf8b2a21914311954118ad6609be6e78a1b95' as ccc.Hex,
+ dep:{outPoint:{txHash:'0xbf6fb538763efec2a70a6a3dcb7242787087e1030c4e7d86585bc63a9d337f5f' as ccc.Hex,index:0},depType:'code' as const},
+};
+const joyDep=(txHash:string,index:number,dataHash:string)=>({dep:{outPoint:{txHash:txHash as ccc.Hex,index},depType:'code' as const},dataHash:dataHash as ccc.Hex});
+/** Main-key JoyID profile; no CoTA type/proof source, so subkey sessions are refused. */
+export const JOYID_PROFILE={
+ codeHash:'0xd23761b364210735c19c60561d213fb3beae2fd6172743719eff6920e020baac' as ccc.Hex,hashType:'type' as const,
+ codeDeps:[
+  joyDep('0x4a596d31dc35e88fb1591debbf680b04a44b4a434e3a94453c21ea8950ffb4d9',0,'0xd2c0f2f621a337007e046f0ed65f8fe29112c32a00ea1e43c2f8059fd42ca6d7'),
+  joyDep('0x4a596d31dc35e88fb1591debbf680b04a44b4a434e3a94453c21ea8950ffb4d9',1,'0xb9a07a8f9b6c30e3a86351ad229882d79920d81b7f81967045445cbcf22ddbf2'),
+  joyDep('0xf2c9dbfe7438a8c622558da8fa912d36755271ea469d3a25cb8d3373d35c8638',1,'0xb511b5400d7adc48c027b513e22d6ebd058519b2f128c9562b1e6a7ba36dfe84'),
+  joyDep('0x95ecf9b41701b45d431657a67bbfa3f07ef7ceb53bf87097f3674e1a4a19ce62',1,'0xbe1a3fd8ce6b89f05c9016e2d507d34d424adc54733d3ccffba109b0db61d65b'),
+  joyDep('0x8b3255491f3c4dcc1cfca33d5c6bcaec5409efe4bbda243900f9580c47e0242e',1,'0xa638f65f650bdac13bf91134ed7eec8feded1dac5e6add9e26cf658b2a693066'),
+ ],
+};
+/** Approved economics. Token amounts use 8 decimals (base units below). */
+export const POOL_PARAMETERS={feeBps:30n,lockedShares:1000n,backing:{state:340_00000000n,ckb:80_00000000n,token:160_00000000n}};
+export const INITIAL_LIQUIDITY={x:1000_00000000n,y:4000_00000000n};
+export const MINT_AMOUNT=10_000_00000000n;
+export const FEE_RATE=1000n,MAX_FEE=10_000n,MAX_TRANSACTIONS=25;
+export const tokenScript=(issuerLockHash:ccc.Hex)=>ccc.Script.from({codeHash:XUDT.codeHash,hashType:'data1',args:issuerLockHash});
