@@ -1,6 +1,9 @@
 # ToastDEX / OpenSwap v0.1 external-review brief
 
 Status: **prepared for an independent reviewer; no external audit completed**.
+This brief covers the order lock. The pool validator and pool SDK have their own
+[pool brief](POOL_REVIEW_BRIEF.md). Both are frozen together as one
+[review package](REVIEW_PACKAGE.md).
 ToastDEX is the application brand. The deployed consensus binary remains the
 clean-room `openswap-lock` v0.1. No contract modification accompanies the UI work.
 

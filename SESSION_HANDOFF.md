@@ -4,6 +4,20 @@ Saved 2026-10-12 (Australia/Adelaide). Read this first when resuming.
 
 ## Current request and stopping point
 
+### T1 campaigns and R1 review package (2026-10-22)
+
+S1 committed as `e7dd66c`. T1 code is `30f1676`, and the provenance fix is
+`a82d72a`: the ledger itself had marked later runs dirty, and a trimmed git
+status corrupted a path. Recorded clean campaigns on `a82d72a` all passed:
+10M order-parser, 10M pool-wire, 1M differential vectors and 450 VM
+transitions (57 tampered rejections). See docs/campaigns.
+R1 adds `docs/POOL_REVIEW_BRIEF.md`, `docs/REVIEW_PACKAGE.md` and
+`scripts/prepare-review-package.sh`, and links them from the order brief and
+the draft inquiry. No reviewer was contacted. Nothing has been pushed since
+`5d08496`.
+Open: reviewer engagement (user decision); P6 approval (network, deployment,
+signer, fee budget); P7 after P6.
+
 ### S1 solver operator resolution (2026-10-22)
 
 P4 committed locally as `625e187` (not pushed). Uncommitted on top:

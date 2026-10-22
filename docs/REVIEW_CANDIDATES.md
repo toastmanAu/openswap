@@ -22,6 +22,9 @@ or upgrade key controlling existing orders.
 
 Please propose a source review of the immutable 28,592-byte Data1 lock plus
 critical TypeScript builder, asset-resolution, solver and wallet-signing paths.
+Optionally quote separately for the undeployed 42,176-byte pool validator, its
+`no_std` arithmetic crate and the pool SDK's JoyID signing and durable submission
+paths ([pool brief](POOL_REVIEW_BRIEF.md)).
 The [review brief](EXTERNAL_REVIEW.md), [evidence summary](RELEASE_VALIDATION.md)
 and [report template](REVIEW_REPORT_TEMPLATE.md) define the scope and expected
 findings. Please identify reviewers, exclusions, schedule, fixed or capped fee,

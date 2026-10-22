@@ -38,6 +38,18 @@ With no `CAMPAIGN_*` variables, each harness keeps its original fixed CI seed an
 count. CI also runs a 20,000-vector `pool-model-diff` smoke and a six-step
 `pool-vm` walk.
 
+## Recorded results (2026-10-22, commit `a82d72a`, clean tree)
+
+| Target | Seeds | Executed | Stops | Notes |
+| --- | --- | --- | --- | --- |
+| `order-parser` | 1–10 | 10,000,000 | 10 budget | 13 s total |
+| `pool-wire` | 1–10 | 10,000,000 | 10 budget | 178 s total |
+| `pool-model-diff` | 1–5 | 1,000,001 vectors | 5 budget | All match Rust. About 545k accepted transitions all pass `validateTransition`. Every rejection code was hit except `OVERFLOW`, which earlier range checks appear to make unreachable. |
+| `pool-vm` | 1–3 | 450 transitions | 3 budget | 107–119 of each operation type, no skips. 57/57 tampered states rejected. Peak 4.25M cycles, max 2,410 bytes. |
+
+Raw records are in [results.jsonl](results.jsonl). `pool-model-diff` can exceed its
+budget by one vector when a corrupted-state probe follows the last step.
+
 ## What a pass does and does not show
 
 A pass shows no counterexample in the sampled space for these oracles at the
