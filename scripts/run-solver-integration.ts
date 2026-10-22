@@ -4,6 +4,8 @@ import {readFile,writeFile} from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import {CKB,udt,assertNetwork,createOrder,cancelOrders,submit,parse,defaultResolver,orderKey,type Deployment} from '../sdk/src/index.js';
 import {ReferenceSolver} from '../solver/src/index.js';
+import {FileSubmissionJournal} from '../solver/src/journal.js';
+import {solverJournalConfig} from './solver-journal-config.js';
 const setupHash=process.argv[2];assert.match(setupHash??'',/^0x[0-9a-fA-F]{64}$/,'Supply SOLVER SETUP TX HASH');
 const execute=process.argv.includes('--execute');
 const deployment=JSON.parse(await readFile(new URL('../deployments/testnet.json',import.meta.url),'utf8')) as Deployment;
@@ -42,8 +44,17 @@ try{
   if(!journal.solverFill){
    const allowed=new Set([`${setupHash}:0`,`${reciprocal}:0`]);
    let submitted:ccc.Hex|undefined;
-   const solver=new ReferenceSolver(context,(event,details)=>{console.log(event,details);if(event==='settlement_submitted')submitted=(details as {txHash:ccc.Hex}).txHash;},{acceptOrder:o=>allowed.has(orderKey(o))});
-   await solver.tick(true);
+   // Durable pre-send record; an ambiguous send stays reserved across reruns.
+   // Resolve leftovers with `npm run solver-journal` while this is not running.
+   const {scope,directory}=await solverJournalConfig();
+   assert.equal(scope.genesisHash,deployment.genesisHash);assert.equal(scope.accountLockHash,ccc.Script.from(config.lock).hash());
+   const submissions=new FileSubmissionJournal(directory,scope);
+   try{
+    const pending=submissions.list();
+    if(pending.length)throw new Error(`Unresolved solver submissions ${pending.map(r=>r.hash).join(', ')}: inspect with \`npm run solver-journal -- status\`; if one is this fill, record it as solverFill`);
+    const solver=new ReferenceSolver(context,(event,details)=>{console.log(event,details);if(event==='settlement_submitted')submitted=(details as {txHash:ccc.Hex}).txHash;},{acceptOrder:o=>allowed.has(orderKey(o)),journal:submissions});
+    await solver.tick(true);
+   }finally{submissions.close();}
    if(!submitted)throw new Error('No bundle found yet; allow indexer to catch up, then rerun');
    journal.solverFill=submitted;await save();
   }

@@ -2,6 +2,7 @@
  * persisted transaction; no automatic retry, replacement or release. */
 import {ccc} from '@ckb-ccc/core';
 import type {ArchivableSubmissionJournal,SubmissionRecord} from '../../solver/src/journal.js';
+import {abandonConflictedSubmission,archiveCommittedSubmission} from '../../solver/src/resolution.js';
 import {PoolFundingReservations,type FundedPoolTransaction} from './funding.js';
 import type {PoolTransactionReview} from './review.js';
 import {pointKey,readBounded,withPoolDeadline,type PoolClient,type ReadOptions} from './pools.js';
@@ -19,7 +20,6 @@ export interface PoolResolutionClient extends PoolRecoveryClient {
 }
 export type PoolSubmissionOutcome=Readonly<{hash:ccc.Hex;outcome:'sent'}|{hash:ccc.Hex;outcome:'unknown';error:string}>;
 function requireRecovery(ok:unknown,message:string):asserts ok {if(!ok)throw new Error(`Pool recovery: ${message}`);}
-const IN_FLIGHT=new Set(['pending','proposed','sent']);
 
 export class PoolSubmissionRecovery {
  /** Input key -> release for reservations owned by persisted submissions. */
@@ -105,47 +105,20 @@ export class PoolSubmissionRecovery {
 
  /** Operator resolution: archive a submission committed at sufficient depth. */
  async archiveCommitted(client:PoolResolutionClient,hash:ccc.Hex,options:ReadOptions&{minConfirmations?:number}={}){
-  const {minConfirmations=24}=options;
-  requireRecovery(Number.isSafeInteger(minConfirmations)&&minConfirmations>=1&&minConfirmations<=10000,'invalid confirmation depth');
   requireRecovery(this.reconciled,'reconcile before resolving');
   return this.exclusive(options,client,async o=>{
-   const row=this.find(hash);
-   const observed=await readBounded(()=>client.getTransactionNoCache(hash),o);
-   requireRecovery(observed?.status==='committed'&&observed.blockNumber!==undefined,'transaction is not committed');
-   requireRecovery(!observed.transaction||observed.transaction.hash()===hash,'transaction response mismatch');
-   const tip=(await readBounded(()=>client.getTipHeader(),o)).number;
-   const confirmations=tip-ccc.numFrom(observed.blockNumber)+1n;
-   requireRecovery(confirmations>=BigInt(minConfirmations),`only ${confirmations} confirmations`);
-   if(row.status!=='committed')this.journal.put({...row,status:'committed'});
-   this.journal.archive(hash,'committed');this.releaseUnreferenced();
-   return Object.freeze({hash,resolution:'committed' as const,confirmations});
+   const {transaction:_,...result}=await archiveCommittedSubmission(this.journal,client,hash,options.minConfirmations,read=>readBounded(read,o));
+   this.releaseUnreferenced();return Object.freeze(result);
   });
  }
 
- /** Operator resolution: abandon a never-committed submission only after at
-  * least one of its inputs has been spent elsewhere, so it can no longer land
-  * unless that conflicting spend is itself reorganized away. All-live inputs are
-  * refused: the signed bytes remain valid and anyone may still broadcast them. */
+ /** Operator resolution: abandon a never-committed submission once one of its
+  * inputs is spent elsewhere. See `abandonConflictedSubmission` for reorg risk. */
  async abandonConflicted(client:PoolRecoveryClient,hash:ccc.Hex,options:ReadOptions&{acknowledgeReorgRisk?:boolean}={}){
-  requireRecovery(options.acknowledgeReorgRisk===true,'abandoning requires explicit reorg-risk acknowledgement');
   requireRecovery(this.reconciled,'reconcile before resolving');
   return this.exclusive(options,client,async o=>{
-   const row=this.find(hash),tx=ccc.Transaction.fromBytes(row.transaction);
-   const status=async()=>{
-    const observed=await readBounded(()=>client.getTransactionNoCache(hash),o);
-    requireRecovery(observed?.status!=='committed'&&!IN_FLIGHT.has(observed?.status??''),`transaction is ${observed?.status}`);
-   };
-   await status();let spent=0;
-   for(const input of tx.inputs){
-    const cell=await readBounded(()=>client.getCellLiveNoCache(input.previousOutput),o);
-    if(cell)requireRecovery(cell.outPoint.eq(input.previousOutput),'input response mismatch');else spent++;
-   }
-   requireRecovery(spent>0,'all inputs are live; the signed transaction can still commit');
-   // Re-check after the input reads: it must not have committed in between.
-   await status();
-   if(row.status!=='rejected'&&row.status!=='unknown')this.journal.put({...row,status:'unknown'});
-   this.journal.archive(hash,'abandoned');this.releaseUnreferenced();
-   return Object.freeze({hash,resolution:'abandoned' as const,spentInputs:spent,totalInputs:tx.inputs.length});
+   const {transaction:_,...result}=await abandonConflictedSubmission(this.journal,client,hash,options.acknowledgeReorgRisk===true,read=>readBounded(read,o));
+   this.releaseUnreferenced();return Object.freeze(result);
   });
  }
 }

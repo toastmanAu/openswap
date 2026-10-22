@@ -4,6 +4,22 @@ Saved 2026-10-12 (Australia/Adelaide). Read this first when resuming.
 
 ## Current request and stopping point
 
+### S1 solver operator resolution (2026-10-22)
+
+P4 committed locally as `625e187` (not pushed). Uncommitted on top:
+- `solver/src/resolution.ts` holds the shared archive/abandon checks;
+  `PoolSubmissionRecovery` now delegates to it.
+- `npm run solver-journal`: list/status/archive-committed/abandon-conflicted.
+  Read-only RPC with no signer; fails clearly when the solver holds the lock.
+- `scripts/run-solver-integration.ts` now passes a `.local` journal shared via
+  `scripts/solver-journal-config.ts`. It refuses to tick while unresolved rows
+  exist. Not executed: no live run is authorized.
+- Four new solver tests, including lost reply -> reserved -> operator abandon ->
+  restarted solver rebuilds. 80 SDK/solver, 61 pool SDK, 14 model tests pass.
+Remaining offline-able gates: T1 fuzz/endurance campaigns, R1 review package.
+P6 (controlled-network pool lifecycle) needs explicit user approval of network,
+deployment, signer and fee budget.
+
 ### P4 signing coverage (2026-10-22)
 
 P5 committed locally as `867f297` (not pushed). Uncommitted on top: four new

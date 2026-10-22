@@ -25,10 +25,36 @@ latest transaction was never sent. The directory must be private to the operator
 this is crash recovery, not protection against a hostile filesystem owner.
 
 `FileSubmissionJournal.archive(hash, resolution)` appends the record to fsynced
-`archive.jsonl` before removing it from the snapshot; the pool recovery layer uses
-it for explicit resolution. Still required for the solver: operator resolution
-wiring for rejected and permanently absent transactions, broader crash-boundary and live contention validation, and
-production invocation wiring. This conservative implementation does not release
-inputs or retry automatically. The SDK callback supplies
+`archive.jsonl` before removing it from the snapshot.
+
+## Operator resolution
+
+`src/resolution.ts` holds the read-only checks shared with pool recovery:
+`archiveCommittedSubmission` needs a committed status at the requested depth
+(default 24). `abandonConflictedSubmission` needs explicit reorg-risk
+acknowledgement, at least one input spent in committed state, and a status that
+is neither committed nor in flight before and after the input reads. A row whose
+inputs are all live is refused, because its signed bytes can still commit. Release
+it only by deliberately spending a conflicting input.
+
+Stop the solver first; the journal's single-writer lock enforces this. Then run:
+
+```
+npm run solver-journal -- list                      # offline
+npm run solver-journal -- status                    # node status, live inputs
+npm run solver-journal -- archive-committed <hash> [--min-confirmations=24]
+npm run solver-journal -- abandon-conflicted <hash> --acknowledge-reorg-risk
+```
+
+The CLI uses `CKB_RPC_URL` (default public testnet) for reads only. It has no
+signer and never sends. The default directory is
+`.local/solver-journal/<network>-<account-lock-hash prefix>`, also used by
+`scripts/run-solver-integration.ts`; `--journal-dir` overrides it. A restarted
+solver no longer reserves archived rows' orders.
+
+Still required: broader crash-boundary and live contention validation. Wiring a
+long-running production service is out of scope (only the integration runner
+exists). This conservative implementation does not release inputs or retry
+automatically. The SDK callback supplies
 the hash and exact signed bytes and awaits persistence; rejection prevents send.
 Runner wiring must use those bytes, not unsigned builder bytes.

@@ -32,7 +32,7 @@ The user selected **JoyID first** for pools. Follow the
 | P7 | Pool UI and routing | Not implemented; dependent on P6. Keep existing orders usable. |
 | C1 | Browser CI | Offline browser job added with pinned Playwright Chromium installation and managed local server. Shared RPC fixtures reject unhandled external requests; all eight local browser regressions pass. Hosted execution of uncommitted workflow remains unverified. |
 | C2 | Pool artifact CI | Implemented in workflow: pinned size/SHA256/Data1 verification, negative verifier tests and two-directory clean-build comparison for both contracts. Local execution passed with unchanged identities. Hosted run of these uncommitted changes remains unverified. |
-| S1 | Durable reference solver | Partial: journal required for execution, signed-byte pre-send persistence, scoped startup reload and conservative reorg/unknown reservations. File-backed restart/storage-failure tests pass. Operator resolution and production invocation wiring remain. See [solver status](../solver/README.md). |
+| S1 | Durable reference solver | Offline complete (2026-10-22). The journal is required for execution, with signed-byte pre-send persistence, scoped startup reload and conservative reorg/unknown reservations. Shared operator resolution (`archive-committed` by confirmation depth, acknowledged `abandon-conflicted`) is exposed via `npm run solver-journal`, a read-only RPC CLI with no signer. The testnet integration runner uses a private `.local` journal. Tests cover a restart after resolution re-enabling the orders. Live contention/crash validation needs P6-style approval. See [solver status](../solver/README.md). |
 | T1 | Fuzzing/endurance | Existing deterministic corpus/VM checks and 12 recorded live races are bounded. Add reproducible campaigns with explicit stopping criteria; live extension needs approval. |
 | D1 | Current documentation | This index and integration plan added; update component docs as code lands. Historical records are not overwritten to claim new evidence. |
 | R1 | Independent review | Outstanding for both orders and pools. Prepare frozen commit/artifact package; reviewer engagement, findings and acceptance need actual external evidence/user direction. |
@@ -44,7 +44,7 @@ production batching API or relay-policy proof; see the
 [resource report](research/POOL_RESOURCE_ENVELOPE.md).
 
 No OTX, gossip or Fiber implementation is required to close this milestone.
-Current offline integration check (2026-10-22, P5 at `867f297` plus P4 coverage):
-typecheck, 60 pool SDK, 76 SDK/solver and 14 model tests pass. Synthetic proof
+Current offline integration check (2026-10-22, P4 at `625e187` plus S1):
+typecheck, 61 pool SDK, 80 SDK/solver and 14 model tests pass. Synthetic proof
 fixtures do not prove JoyID authorization.
 Do not commit or push further changes without a separate request.
