@@ -4,6 +4,28 @@ Saved 2026-10-12 (Australia/Adelaide). Read this first when resuming.
 
 ## Current request and stopping point
 
+### P5 pool submission and resolution (2026-10-22)
+
+User authorized a local checkpoint commit and work on P5. Checkpoint `60e958b`
+(local, not pushed) holds all work through 2026-10-17. On top of it, uncommitted:
+
+- `PoolSubmissionRecovery.submit`: requires prior `reconcile`; checks review
+  integrity/expiry, non-zero wallet lock, hash identity with review and funding,
+  reservation ownership and freshness; persists exact signed bytes, synchronously
+  hands the reservation to recovery, sends once. Journal failure prevents send;
+  send failure returns `unknown` and keeps the row/inputs held. No retry.
+- Explicit resolution: `archiveCommitted` (default 24 confirmations) and
+  `abandonConflicted` (acknowledged reorg risk, at least one spent input, status
+  neither committed nor in flight before and after input reads). All-live rows are
+  refused. `FileSubmissionJournal.archive` appends to fsynced `archive.jsonl` first.
+- Shared `pool-sdk/test/funding-fixture.ts`; six new recovery tests with a real
+  file journal, mock chain and mock-signed create fixture, including restart.
+- Typecheck, 56 pool SDK, 76 SDK/solver, 14 model tests pass. No live operation.
+
+Next: P4 sign coverage (primary/lifecycle, cancellation/expiry during awaits,
+stale inputs), then S1 operator resolution wiring in the solver. P6 still needs
+explicit network/deployment/signer/budget approval.
+
 ### Durable runner / pool recovery continuation (2026-10-17)
 
 Runner execution now requires an explicit scoped journal; legacy integration

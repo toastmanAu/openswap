@@ -266,8 +266,28 @@ submission recovery remains required before exposing this as a complete flow.
 a scoped journal. Use a fresh shared reservation registry before new selections.
 It reserves recorded inputs before status reads and reports live-input counts.
 Missing status, outages, reorgs and rejection do not automatically release inputs
-or rebroadcast. Pool pre-send wiring and explicit operator resolution remain open.
-Use separate journal directories for solver and pool flows.
+or rebroadcast. Use separate journal directories for solver and pool flows.
+
+`submit(client, review, signed, funded)` requires a completed `reconcile` in the
+same process. It rechecks review integrity/expiry, signed wallet lock, hash identity
+with review and funding, reservation ownership and input freshness, then persists
+the exact signed bytes as `unknown`. Journal failure prevents send and leaves the
+funding reservation with the caller. After persistence the reservation moves to
+the recovery instance (the caller's `release()` becomes inert) and the transaction
+is sent once. Send errors/timeouts return `outcome: 'unknown'`; nothing retries.
+
+Terminal resolution is explicit and archives to fsynced `archive.jsonl` before
+removing the active row and releasing its inputs:
+
+- `archiveCommitted(client, hash, {minConfirmations=24})` needs an observed
+  committed status at that depth.
+- `abandonConflicted(client, hash, {acknowledgeReorgRisk: true})` needs a status
+  that is neither committed nor in flight before and after the input reads, plus
+  at least one input already spent elsewhere. If every input is live the signed
+  bytes can still commit, so it refuses; the operator must deliberately spend a
+  conflicting input. A reorg of that conflicting spend could still revive it.
+
+Evidence is offline: file journal, mock chain client and mock-signed fixture.
 
 The public entry point has an esbuild browser-target smoke test and initializes
 with browser primitives in an isolated JS realm, without Node globals or

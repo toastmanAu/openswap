@@ -1,5 +1,5 @@
 /** Node-only durable submission storage. No signer, RPC, retry or broadcast. */
-import {closeSync,fsyncSync,lstatSync,mkdirSync,openSync,readFileSync,renameSync,unlinkSync,writeFileSync} from 'node:fs';
+import {closeSync,fsyncSync,lstatSync,mkdirSync,openSync,readFileSync,renameSync,unlinkSync,writeFileSync,writeSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {ccc} from '@ckb-ccc/core';
 
@@ -12,6 +12,11 @@ export interface SubmissionJournal {
  getScope():JournalScope;
  list():SubmissionRecord[];
  put(value:SubmissionRecord):void;
+}
+export type SubmissionResolution='committed'|'abandoned';
+/** Explicit operator resolution only. Callers prove the resolution first. */
+export interface ArchivableSubmissionJournal extends SubmissionJournal {
+ archive(hash:ccc.Hex,resolution:SubmissionResolution):void;
 }
 const MAX_BYTES=8*1024*1024;
 function check(ok:unknown,message:string):asserts ok {if(!ok)throw new Error(`Solver journal: ${message}`);}
@@ -66,13 +71,30 @@ export class FileSubmissionJournal {
  put(value:SubmissionRecord):void {
   this.active();const next=record(value),prior=this.rows.find(row=>row.hash===next.hash);
   if(prior)check(prior.transaction===next.transaction&&prior.createdAt===next.createdAt&&JSON.stringify(prior.orders)===JSON.stringify(next.orders),'immutable submission changed');
-  const rows=[...this.rows.filter(row=>row.hash!==next.hash),next];check(rows.length<=1000,'journal full; explicit archival required');
+  this.write([...this.rows.filter(row=>row.hash!==next.hash),next]);
+ }
+ /** Append the resolved record to `archive.jsonl` (fsynced) before removing it
+  * from the active snapshot. A crash between both steps leaves it in both places;
+  * re-archiving is safe and the active row keeps its inputs reserved meanwhile. */
+ archive(hash:ccc.Hex,resolution:SubmissionResolution):void {
+  this.active();check(resolution==='committed'||resolution==='abandoned','invalid resolution');
+  const row=this.rows.find(row=>row.hash===hash);check(row,'unknown submission');
+  const line=JSON.stringify({version:1,scope:this.scope,resolution,archivedAt:Date.now(),record:row})+'\n';
+  let fd:number|undefined;
+  try{
+   fd=openSync(join(this.directory,'archive.jsonl'),'a',0o600);writeSync(fd,line);fsyncSync(fd);closeSync(fd);fd=undefined;
+   this.syncDirectory();
+  }catch(error){this.failed=true;if(fd!==undefined)closeSync(fd);throw error;}
+  this.write(this.rows.filter(other=>other.hash!==hash));
+ }
+ private syncDirectory(){const directoryFd=openSync(this.directory,'r');try{fsyncSync(directoryFd);}finally{closeSync(directoryFd);}}
+ private write(rows:SubmissionRecord[]){
+  check(rows.length<=1000,'journal full; explicit archival required');
   const data=JSON.stringify({version:1,scope:this.scope,records:rows});check(new TextEncoder().encode(data).length<=MAX_BYTES,'journal size limit');
   const temporary=join(this.directory,'submissions.next');let fd:number|undefined;
   try{
    fd=openSync(temporary,'wx',0o600);writeFileSync(fd,data);fsyncSync(fd);closeSync(fd);fd=undefined;
-   renameSync(temporary,this.path);
-   const directoryFd=openSync(this.directory,'r');try{fsyncSync(directoryFd);}finally{closeSync(directoryFd);}
+   renameSync(temporary,this.path);this.syncDirectory();
    this.rows=rows;
   }catch(error){this.failed=true;if(fd!==undefined)closeSync(fd);throw error;}
  }

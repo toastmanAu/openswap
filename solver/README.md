@@ -24,8 +24,10 @@ also requires deliberate inspection; a valid older snapshot does not prove the
 latest transaction was never sent. The directory must be private to the operator;
 this is crash recovery, not protection against a hostile filesystem owner.
 
-Still required: explicit operator resolution/archival for rejected and permanently
-absent transactions, broader crash-boundary and live contention validation, and
+`FileSubmissionJournal.archive(hash, resolution)` appends the record to fsynced
+`archive.jsonl` before removing it from the snapshot; the pool recovery layer uses
+it for explicit resolution. Still required for the solver: operator resolution
+wiring for rejected and permanently absent transactions, broader crash-boundary and live contention validation, and
 production invocation wiring. This conservative implementation does not release
 inputs or retry automatically. The SDK callback supplies
 the hash and exact signed bytes and awaits persistence; rejection prevents send.
