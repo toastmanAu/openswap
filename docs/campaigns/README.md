@@ -9,8 +9,9 @@ npm run campaign -- <target|all> [--seeds=A..B|--seed=N] [--cases=N] [--seconds=
 
 `make pool-build` must have produced the pinned pool binary (`scripts/check-pool-identity.py`).
 `--record` appends one JSON line per run to [results.jsonl](results.jsonl). Each
-line holds the commit, a dirty-tree flag and both contract binary SHA256s. Only
-clean-tree records count as evidence.
+line holds the commit and both contract binary SHA256s. It also holds a dirty flag
+listing any uncommitted non-documentation paths (`docs/` and root `*.md` cannot
+affect results). Only records with `dirty: false` count as evidence.
 
 ## Targets
 

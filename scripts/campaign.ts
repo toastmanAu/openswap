@@ -30,9 +30,13 @@ const record=rest.includes('--record');
 
 const git=(...args:string[])=>spawnSync('git',args,{cwd:root,encoding:'utf8'}).stdout.trim();
 const sha256=(path:string)=>existsSync(`${root}/${path}`)?createHash('sha256').update(readFileSync(`${root}/${path}`)).digest('hex'):null;
-const provenance={commit:git('rev-parse','HEAD'),dirty:git('status','--porcelain')!=='',
+// Documentation (including this ledger) cannot change results; any other
+// uncommitted path marks the record dirty and is listed.
+const status=spawnSync('git',['status','--porcelain=v1','-z','--untracked-files=all'],{cwd:root,encoding:'utf8'}).stdout;
+const dirtyPaths=status.split('\0').filter(Boolean).map(l=>l.slice(3)).filter(p=>!p.startsWith('docs/')&&!/^[^/]+\.md$/.test(p));
+const provenance={commit:git('rev-parse','HEAD'),dirty:dirtyPaths.length>0,dirtyPaths,
  binaries:{orderLock:sha256('target/riscv64imac-unknown-none-elf/release/openswap-lock'),pool:sha256('target/riscv64imac-unknown-none-elf/release/openswap-pool')}};
-if(provenance.dirty)console.error('Warning: uncommitted changes; recorded results will be marked dirty.');
+if(provenance.dirty)console.error(`Warning: uncommitted code changes (${dirtyPaths.join(', ')}); records will be marked dirty.`);
 
 let failed=false;
 for(const target of selected){
