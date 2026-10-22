@@ -4,6 +4,17 @@ Saved 2026-10-12 (Australia/Adelaide). Read this first when resuming.
 
 ## Current request and stopping point
 
+### P6 testnet pool lifecycle passed (2026-10-23)
+
+The pool code was deployed and the test token minted. All seven lifecycle steps
+were signed by the user's JoyID and verified on two endpoints. Evidence is in
+`deployments/pool-*.json` and `docs/research/POOL_TESTNET_RUN.md`. Fixes found
+live: the signing deadline is now 60 s, and `submit` maps any post-persistence
+failure to an `unknown` outcome. `deployments/pool-frontend.json` is generated.
+Next: P7 live acceptance (serve the frontend and use the Pools tab with JoyID on
+testnet). Open: reviewer engagement and the CoTA proof service (user decisions).
+Local commits not yet pushed.
+
 ### T1 campaigns and R1 review package (2026-10-22)
 
 S1 committed as `e7dd66c`. T1 code is `30f1676`, and the provenance fix is

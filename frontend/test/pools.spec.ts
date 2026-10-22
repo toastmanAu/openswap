@@ -106,6 +106,8 @@ async function reviewSwap(page:Page,amount='100'){
 const records=(page:Page)=>page.evaluate(()=>Object.keys(localStorage).filter(k=>k.startsWith('toastdex-pool-journal:')&&!k.endsWith(':archive')).flatMap(k=>JSON.parse(localStorage.getItem(k)!).records));
 
 test('pools tab reports no deployment when no manifest is served',async({page})=>{
+ // Explicit 404: dist may hold the real P6 manifest.
+ await page.route('**/pool-manifest.json',route=>route.fulfill({status:404,body:'not found'}));
  await openPools(page);
  await expect(page.locator('#pool-status')).toHaveText('Pools are not deployed on this network yet. No pool transactions can be prepared.');
  for(const id of ['#pool-swap','#pool-deposit','#pool-withdraw','#pool-create'])await expect(page.locator(id)).toBeHidden();

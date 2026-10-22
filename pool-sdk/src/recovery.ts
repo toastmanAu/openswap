@@ -78,7 +78,10 @@ export class PoolSubmissionRecovery {
   * the row stays `unknown` and reserved until explicitly resolved. */
  async submit(client:PoolSubmitClient,review:PoolTransactionReview,signed:ccc.Transaction,funded:FundedPoolTransaction,options:ReadOptions={}):Promise<PoolSubmissionOutcome>{
   requireRecovery(this.reconciled,'reconcile before submitting');
-  return this.exclusive(options,client,async o=>{
+  // Once the row is persisted, any failure (including the overall deadline or an
+  // abort firing mid-send) is an ambiguous outcome, never a plain error.
+  let persisted:ccc.Hex|undefined;
+  try{return await this.exclusive(options,client,async o=>{
    const tx=signed.clone(),hash=tx.hash();
    requireRecovery(review.summary.genesisHash===this.scope.genesisHash,'review network mismatch');
    requireRecovery(hash===review.summary.transactionHash&&hash===funded.built.transaction.hash(),'signed transaction differs from review/funding');
@@ -91,6 +94,7 @@ export class PoolSubmissionRecovery {
    const transaction=ccc.hexFrom(tx.toBytes());
    // Throws before send on any persistence failure; funding stays with the caller.
    this.journal.put({hash,transaction,orders:points.map(pointKey),status:'unknown',createdAt:Date.now()});
+   persisted=hash;
    // Synchronous handover: no await between releasing and re-claiming.
    funded.release();this.hold(this.find(hash));
    try{
@@ -100,7 +104,10 @@ export class PoolSubmissionRecovery {
    }catch(error){
     return Object.freeze({hash,outcome:'unknown' as const,error:error instanceof Error?error.message:String(error)});
    }
-  });
+  });}catch(error){
+   if(persisted===undefined)throw error;
+   return Object.freeze({hash:persisted,outcome:'unknown' as const,error:error instanceof Error?error.message:String(error)});
+  }
  }
 
  /** Operator resolution: archive a submission committed at sufficient depth. */

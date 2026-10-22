@@ -1,0 +1,143 @@
+{
+  "network": "testnet",
+  "verifiedEndpoints": [
+    "https://testnet.ckb.dev",
+    "https://testnet.ckbapp.dev"
+  ],
+  "steps": [
+    {
+      "step": "create",
+      "hash": "0xaeac32ba0dd6313099643fc17a5592a538431c28c6fd5eefe241daa226d0b364",
+      "action": "{\"kind\":\"create\",\"minShares\":\"197999999010\"}",
+      "fee": "2803",
+      "poolId": "0x48bde5ee099ec7afe35eeab11a78f1e04d68a6e49afbde93771768071b7120b2",
+      "next": {
+        "x": "100000000000",
+        "y": "400000000000",
+        "totalShares": "200000000000",
+        "lockedShares": "1000",
+        "feeBps": "30",
+        "backing": {
+          "state": "34000000000",
+          "ckb": "8000000000",
+          "token": "16000000000"
+        }
+      }
+    },
+    {
+      "step": "xToY",
+      "hash": "0xae090fb4e43d75b0bca4038022129ae435da17c8fe1fdc8db1d36e3cd04da264",
+      "action": "{\"kind\":\"swap\",\"direction\":\"xToY\",\"amountIn\":\"10000000000\",\"minOut\":\"35901791397\"}",
+      "fee": "2705",
+      "poolId": "0x48bde5ee099ec7afe35eeab11a78f1e04d68a6e49afbde93771768071b7120b2",
+      "next": {
+        "x": "110000000000",
+        "y": "363735564245",
+        "totalShares": "200000000000",
+        "lockedShares": "1000",
+        "feeBps": "30",
+        "backing": {
+          "state": "34000000000",
+          "ckb": "8000000000",
+          "token": "16000000000"
+        }
+      }
+    },
+    {
+      "step": "yToX",
+      "hash": "0x2b9bef358ccb04d613ff1ed47a4b6ac1492c43af0c4987eb6e493072d3e93db7",
+      "action": "{\"kind\":\"swap\",\"direction\":\"yToX\",\"amountIn\":\"40000000000\",\"minOut\":\"10760070682\"}",
+      "fee": "2868",
+      "poolId": "0x48bde5ee099ec7afe35eeab11a78f1e04d68a6e49afbde93771768071b7120b2",
+      "next": {
+        "x": "99131241735",
+        "y": "403735564245",
+        "totalShares": "200000000000",
+        "lockedShares": "1000",
+        "feeBps": "30",
+        "backing": {
+          "state": "34000000000",
+          "ckb": "8000000000",
+          "token": "16000000000"
+        }
+      }
+    },
+    {
+      "step": "deposit",
+      "hash": "0xcf4b01f6811d89b249a40a81ba47f3d357a7588764c82be97f59023c163695ce",
+      "action": "{\"kind\":\"deposit\",\"maxX\":\"20000000000\",\"maxY\":\"82269305367\",\"minShares\":\"39947043239\"}",
+      "fee": "2991",
+      "poolId": "0x48bde5ee099ec7afe35eeab11a78f1e04d68a6e49afbde93771768071b7120b2",
+      "next": {
+        "x": "119131241735",
+        "y": "485190322035",
+        "totalShares": "240350548727",
+        "lockedShares": "1000",
+        "feeBps": "30",
+        "backing": {
+          "state": "34000000000",
+          "ckb": "8000000000",
+          "token": "16000000000"
+        }
+      }
+    },
+    {
+      "step": "partialWithdraw",
+      "hash": "0x7c704c1466f147150c38f2f6ddc383d4e0a8d7dfe2a7203024ea7937204c5c62",
+      "action": "{\"kind\":\"withdraw\",\"shares\":\"120175273863\",\"minX\":\"58969964412\",\"minY\":\"240169208406\"}",
+      "fee": "3102",
+      "poolId": "0x48bde5ee099ec7afe35eeab11a78f1e04d68a6e49afbde93771768071b7120b2",
+      "next": {
+        "x": "59565621116",
+        "y": "242595162028",
+        "totalShares": "120175274864",
+        "lockedShares": "1000",
+        "feeBps": "30",
+        "backing": {
+          "state": "34000000000",
+          "ckb": "8000000000",
+          "token": "16000000000"
+        }
+      }
+    },
+    {
+      "step": "fullWithdraw",
+      "hash": "0x9fad38a1d146bc84aea1459caa522e09422aecd06407876cc844310e2543c45d",
+      "action": "{\"kind\":\"withdraw\",\"shares\":\"120175273864\",\"minX\":\"58969964413\",\"minY\":\"240169208408\"}",
+      "fee": "2884",
+      "poolId": "0x48bde5ee099ec7afe35eeab11a78f1e04d68a6e49afbde93771768071b7120b2",
+      "next": {
+        "x": "496",
+        "y": "2019",
+        "totalShares": "1000",
+        "lockedShares": "1000",
+        "feeBps": "30",
+        "backing": {
+          "state": "34000000000",
+          "ckb": "8000000000",
+          "token": "16000000000"
+        }
+      }
+    },
+    {
+      "step": "reenter",
+      "hash": "0xeaee1587508464ac4ae712db406ae6e39d640ac64787eb8debfa80e2ede840f7",
+      "action": "{\"kind\":\"deposit\",\"maxX\":\"10000000000\",\"maxY\":\"41112701613\",\"minShares\":\"19959677418\"}",
+      "fee": "2991",
+      "poolId": "0x48bde5ee099ec7afe35eeab11a78f1e04d68a6e49afbde93771768071b7120b2",
+      "next": {
+        "x": "10000000496",
+        "y": "40705647180",
+        "totalShares": "20161291322",
+        "lockedShares": "1000",
+        "feeBps": "30",
+        "backing": {
+          "state": "34000000000",
+          "ckb": "8000000000",
+          "token": "16000000000"
+        }
+      }
+    }
+  ],
+  "verifiedAt": "2026-10-22T14:18:14.681Z"
+}

@@ -107,6 +107,18 @@ test('submit refuses unsigned, mutated, unreserved, expired or stale transaction
  }finally{s.cleanup();}
 });
 
+test('a deadline firing mid-send is an unknown outcome, not a thrown error',async()=>{
+ const s=await setup();
+ try{
+  await s.recovery.reconcile(s.client);
+  s.chain.send=()=>new Promise(()=>{});// the node never answers
+  const outcome=await s.recovery.submit(s.client,s.review,s.signed,s.funded,{timeoutMs:50});
+  assert.equal(outcome.outcome,'unknown');assert.match((outcome as {error:string}).error,/deadline exceeded/);
+  assert.equal(outcome.hash,s.signed.hash());assert.equal(s.chain.sent.length,1);
+  assert.equal(s.journal.list()[0]!.status,'unknown');assert.ok(s.reserved());
+ }finally{s.cleanup();}
+});
+
 test('ambiguous send stays unknown and reserved across restart without retry',async()=>{
  const s=await setup();
  try{

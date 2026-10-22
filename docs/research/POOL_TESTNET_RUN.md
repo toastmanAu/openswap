@@ -49,5 +49,46 @@ immutable. The 580 tCKB pool backing can never be withdrawn.
    review, one-shot signing and durable pre-send persistence. Each step is
    verified independently.
 
-Results are recorded under `deployments/` and summarized here once they exist.
 Nothing here is mainnet or production approval.
+
+## Results (2026-10-22/23): P6 passed
+
+- **Deployment:** `0xfc8c182adf14387e29be1a4bdcba21d49f28a3c1d6ec37e14984969f31306f7d:0`,
+  signed by the user's JoyID. The code cell holds exactly the pinned binary on
+  the always-fail lock. Verified on both endpoints (`deployments/pool-testnet.json`).
+- **Mint:** `0x4adeb9603a8888982b3b67a670fca961f18ba63bb34714b65df8e726db0d8e2e`.
+  10,000 tokens to the JoyID, fee 604 shannons (`deployments/pool-mint-result.json`).
+- **Lifecycle:** pool `0x48bde5ee099ec7afe35eeab11a78f1e04d68a6e49afbde93771768071b7120b2`.
+  All seven steps were signed by the JoyID main key and verified with
+  `npm run pool:verify` on both endpoints (`deployments/pool-lifecycle-result.json`).
+  Each one spends the previous pool cells. Each next state equals the model
+  transition, each fee is under the cap, and every wallet output pays the
+  user's JoyID.
+
+| Step | Tx | Fee (shannons) | Reserves after (tCKB / tokens) | Total shares |
+| --- | --- | --- | --- | --- |
+| create | `0xaeac32ba…b364` | 2,803 | 1,000 / 4,000 | 200,000,000,000 |
+| xToY 100 tCKB | `0xae090fb4…d264` | 2,705 | 1,100 / 3,637.36 | unchanged |
+| yToX 400 tokens | `0x2b9bef35…3db7` | 2,868 | 991.31 / 4,037.36 | unchanged |
+| deposit 200 tCKB | `0xcf4b01f6…95ce` | 2,991 | 1,191.31 / 4,851.90 | 240,350,548,727 |
+| partial withdraw | `0x7c704c14…5c62` | 3,102 | 595.66 / 2,425.95 | 120,175,274,864 |
+| full withdraw | `0x9fad38a1…c45d` | 2,884 | 496 / 2,019 base units | 1,000 (locked only) |
+| re-enter 100 tCKB | `0xeaee1587…40f7` | 2,991 | 100.000005 / 407.06 | 20,161,291,322 |
+
+Nine transactions in total, all within the 25-transaction budget. The seven
+pool fees total 20,344 shannons. After the full withdrawal, only dust and the
+1,000 locked shares stay in the pool. Re-entry then works as designed.
+
+**Incidents, both with nothing sent:**
+1. The first lifecycle attempt aborted with "Pool operation deadline exceeded".
+   JoyID approval was inside the 15 s read deadline. Signing now uses the
+   maximum bounded 60 s deadline (`5875a39`, lifecycle and Pools tab).
+2. The same error recurred once at re-entry. The rerun resumed cleanly from
+   saved progress. Investigating it found an SDK bug. If the overall deadline
+   fired during the send itself, `submit` threw a plain error rather than the
+   ambiguous `unknown` outcome. That would have been misleading, although the
+   journaled row still blocked a re-sign. Fixed so that every failure after
+   persistence maps to `unknown`, with a regression test.
+
+The Pools tab manifest `deployments/pool-frontend.json` is generated from this
+evidence (`npm run pool:frontend-manifest`). P7 live acceptance is next.

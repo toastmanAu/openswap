@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "network": "testnet",
+  "deployment": {
+    "genesisHash": "0x10639e0895502b5688a6be8cf69460d76541bfa4821629d86d62ba0aae3f9606",
+    "codeHash": "0xc58432bfaf1cfaab12532bd4d9ce7e5a43196bd0c867a43b63f19096727a12ed",
+    "poolDep": {
+      "outPoint": {
+        "txHash": "0xfc8c182adf14387e29be1a4bdcba21d49f28a3c1d6ec37e14984969f31306f7d",
+        "index": "0"
+      },
+      "depType": "code"
+    },
+    "tokenDep": {
+      "outPoint": {
+        "txHash": "0xbf6fb538763efec2a70a6a3dcb7242787087e1030c4e7d86585bc63a9d337f5f",
+        "index": "0"
+      },
+      "depType": "code"
+    }
+  },
+  "pools": [
+    {
+      "label": "P6 test pool",
+      "poolId": "0x48bde5ee099ec7afe35eeab11a78f1e04d68a6e49afbde93771768071b7120b2"
+    }
+  ],
+  "joyid": {
+    "codeHash": "0xd23761b364210735c19c60561d213fb3beae2fd6172743719eff6920e020baac",
+    "hashType": "type",
+    "codeDeps": [
+      {
+        "dep": {
+          "outPoint": {
+            "txHash": "0x4a596d31dc35e88fb1591debbf680b04a44b4a434e3a94453c21ea8950ffb4d9",
+            "index": "0"
+          },
+          "depType": "code"
+        },
+        "dataHash": "0xd2c0f2f621a337007e046f0ed65f8fe29112c32a00ea1e43c2f8059fd42ca6d7"
+      },
+      {
+        "dep": {
+          "outPoint": {
+            "txHash": "0x4a596d31dc35e88fb1591debbf680b04a44b4a434e3a94453c21ea8950ffb4d9",
+            "index": "1"
+          },
+          "depType": "code"
+        },
+        "dataHash": "0xb9a07a8f9b6c30e3a86351ad229882d79920d81b7f81967045445cbcf22ddbf2"
+      },
+      {
+        "dep": {
+          "outPoint": {
+            "txHash": "0xf2c9dbfe7438a8c622558da8fa912d36755271ea469d3a25cb8d3373d35c8638",
+            "index": "1"
+          },
+          "depType": "code"
+        },
+        "dataHash": "0xb511b5400d7adc48c027b513e22d6ebd058519b2f128c9562b1e6a7ba36dfe84"
+      },
+      {
+        "dep": {
+          "outPoint": {
+            "txHash": "0x95ecf9b41701b45d431657a67bbfa3f07ef7ceb53bf87097f3674e1a4a19ce62",
+            "index": "1"
+          },
+          "depType": "code"
+        },
+        "dataHash": "0xbe1a3fd8ce6b89f05c9016e2d507d34d424adc54733d3ccffba109b0db61d65b"
+      },
+      {
+        "dep": {
+          "outPoint": {
+            "txHash": "0x8b3255491f3c4dcc1cfca33d5c6bcaec5409efe4bbda243900f9580c47e0242e",
+            "index": "1"
+          },
+          "depType": "code"
+        },
+        "dataHash": "0xa638f65f650bdac13bf91134ed7eec8feded1dac5e6add9e26cf658b2a693066"
+      }
+    ]
+  },
+  "policy": {
+    "feeRate": "1000",
+    "maxFee": "10000",
+    "slippageBps": 100,
+    "reviewTtlMs": 120000
+  }
+}

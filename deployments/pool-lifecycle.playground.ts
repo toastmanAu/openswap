@@ -1194,29 +1194,36 @@ var PoolSubmissionRecovery = class {
    * the row stays `unknown` and reserved until explicitly resolved. */
   async submit(client2, review, signed, funded, options = {}) {
     requireRecovery(this.reconciled, "reconcile before submitting");
-    return this.exclusive(options, client2, async (o) => {
-      const tx = signed.clone(), hash3 = tx.hash();
-      requireRecovery(review.summary.genesisHash === this.scope.genesisHash, "review network mismatch");
-      requireRecovery(hash3 === review.summary.transactionHash && hash3 === funded.built.transaction.hash(), "signed transaction differs from review/funding");
-      review.assertIntegrity(tx);
-      requireRecovery(ccc10.bytesFrom(ccc10.WitnessArgs.fromBytes(tx.witnesses[review.summary.walletWitnessIndex]).lock ?? "0x").some((b) => b !== 0), "transaction is not signed");
-      requireRecovery(!this.journal.list().some((row) => row.hash === hash3), "submission already recorded");
-      const points = tx.inputs.map((i) => i.previousOutput);
-      requireRecovery(points.every((p) => this.reservations.has(this.scope.genesisHash, p) && !this.held.has(pointKey(p))), "inputs are not reserved by this funding");
-      await review.assertFresh(client2, o, tx);
-      o.signal?.throwIfAborted();
-      const transaction = ccc10.hexFrom(tx.toBytes());
-      this.journal.put({ hash: hash3, transaction, orders: points.map(pointKey), status: "unknown", createdAt: Date.now() });
-      funded.release();
-      this.hold(this.find(hash3));
-      try {
-        const sent = await readBounded(() => client2.sendTransaction(ccc10.Transaction.fromBytes(transaction)), o);
-        requireRecovery(sent === hash3, "node returned a different transaction hash");
-        return Object.freeze({ hash: hash3, outcome: "sent" });
-      } catch (error) {
-        return Object.freeze({ hash: hash3, outcome: "unknown", error: error instanceof Error ? error.message : String(error) });
-      }
-    });
+    let persisted;
+    try {
+      return await this.exclusive(options, client2, async (o) => {
+        const tx = signed.clone(), hash3 = tx.hash();
+        requireRecovery(review.summary.genesisHash === this.scope.genesisHash, "review network mismatch");
+        requireRecovery(hash3 === review.summary.transactionHash && hash3 === funded.built.transaction.hash(), "signed transaction differs from review/funding");
+        review.assertIntegrity(tx);
+        requireRecovery(ccc10.bytesFrom(ccc10.WitnessArgs.fromBytes(tx.witnesses[review.summary.walletWitnessIndex]).lock ?? "0x").some((b) => b !== 0), "transaction is not signed");
+        requireRecovery(!this.journal.list().some((row) => row.hash === hash3), "submission already recorded");
+        const points = tx.inputs.map((i) => i.previousOutput);
+        requireRecovery(points.every((p) => this.reservations.has(this.scope.genesisHash, p) && !this.held.has(pointKey(p))), "inputs are not reserved by this funding");
+        await review.assertFresh(client2, o, tx);
+        o.signal?.throwIfAborted();
+        const transaction = ccc10.hexFrom(tx.toBytes());
+        this.journal.put({ hash: hash3, transaction, orders: points.map(pointKey), status: "unknown", createdAt: Date.now() });
+        persisted = hash3;
+        funded.release();
+        this.hold(this.find(hash3));
+        try {
+          const sent = await readBounded(() => client2.sendTransaction(ccc10.Transaction.fromBytes(transaction)), o);
+          requireRecovery(sent === hash3, "node returned a different transaction hash");
+          return Object.freeze({ hash: hash3, outcome: "sent" });
+        } catch (error) {
+          return Object.freeze({ hash: hash3, outcome: "unknown", error: error instanceof Error ? error.message : String(error) });
+        }
+      });
+    } catch (error) {
+      if (persisted === void 0) throw error;
+      return Object.freeze({ hash: persisted, outcome: "unknown", error: error instanceof Error ? error.message : String(error) });
+    }
   }
   /** Operator resolution: archive a submission committed at sufficient depth. */
   async archiveCommitted(client2, hash3, options = {}) {
