@@ -137,7 +137,7 @@ export function createPoolUi(env:PoolEnv){
    const review=reviewPoolTransaction(m.deployment,{...wallet,funding:funded.funding},recipients,intent,prepared,m.policy.reviewTtlMs);
    if(start!==generation||session!==s||env.signer()!==s.signer)throw new Error('Wallet or pool changed; prepare again');
    const bound=resolved.bindReview(review);
-   pending={generation:start,session:s,funded,review,sign:()=>bound.sign(),title};
+   pending={generation:start,session:s,funded,review,sign:()=>bound.sign({timeoutMs:60000}),title};
    showReview(pending,resolved.identity.keyType);
   }catch(error){funded.release();throw error;}
  }

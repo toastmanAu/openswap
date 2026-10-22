@@ -104,7 +104,8 @@ for(const [index,step] of STEPS.entries()){
   await render(prepared);
   const approve=(globalThis as {confirm?:(message:string)=>boolean}).confirm;
   if(!approve||!approve(`Sign P6 step ${index+1}/${STEPS.length} (${step})? Review the summary in the console first. Fee: ${review.summary.fee} shannons.`))fail(`step ${step} not approved; nothing signed`);
-  const signed=await resolved.bindReview(review).sign();
+  // Signing waits on a human in the JoyID popup: use the maximum bounded deadline.
+  const signed=await resolved.bindReview(review).sign({timeoutMs:60000});
   const outcome=await recovery.submit(chain,review,signed,funded);
   if(outcome.outcome!=='sent')fail(`send outcome unknown for ${outcome.hash} (${outcome.error}); do NOT retry, inspect status first`);
   console.log(`${step} TX HASH:`,outcome.hash);
