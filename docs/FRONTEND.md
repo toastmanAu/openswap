@@ -206,7 +206,11 @@ signer. No live pool deployment, wallet prompt or browser acceptance exists.**
 Live acceptance follows P6.
 
 The tab loads `pool-manifest.json` at runtime. `build.mjs` copies it from
-`deployments/pool-testnet.json` when that file exists. If no manifest is served,
+`deployments/pool-frontend.json` when that file exists. That file is generated
+by `npm run pool:frontend-manifest` from the recorded P6 deployment
+(`pool-testnet.json`, an evidence record with a different shape) and the verified
+lifecycle, which supplies the pool ID. The generator validates its output with
+this parser. If no manifest is served,
 or the node's genesis differs, the tab says pools are not deployed. A malformed
 manifest is an error, not a silent "not deployed". The strict schema is in
 `frontend/src/pools/manifest.ts` and is roughly:
@@ -248,9 +252,11 @@ with the solver journal's record validation. A write from another tab poisons
 the instance; reload and reconcile. Clearing site data loses it; the node remains
 the authority on what was sent.
 
-CCC 1.21 throws when the node returns null for an unknown transaction. The pool
-UI maps only that null-response TypeError to "absent" for recovery. Network
-failures still throw.
+Real CKB nodes answer an unknown transaction hash with `transaction: null` and
+status `unknown`, which CCC maps to "absent". This was checked on both testnet
+endpoints on 2026-10-22. An earlier shared test fixture returned a bare `null`,
+which real nodes do not send. The fixture now uses the real shape, and the UI
+needs no special handling. Network failures still throw.
 
 Tests: `frontend/test/pools.spec.ts`, 8 offline cases. They build a real SDK
 genesis, serve it from a mocked node, and sign with a fixed-placeholder mock JoyID

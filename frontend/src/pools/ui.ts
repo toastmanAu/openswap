@@ -16,22 +16,10 @@ const shares=(n:bigint)=>`${n} LP shares`;
 /** Minimum accepted output: the fresh quote reduced by the slippage bound, never below 1. */
 export const minimumOut=(quoted:bigint,slippageBps:number)=>{const n=quoted*BigInt(10000-slippageBps)/10000n;return n>0n?n:1n;};
 
-/** CCC 1.21 throws a TypeError when the node returns null for an unknown hash.
- * Map only that response to "absent"; network failures (fetch TypeErrors
- * included) still throw, so an outage never reads as an absent transaction. */
-export function nullSafeClient(client:ccc.Client):PoolSubmitClient&{getTipHeader():Promise<ccc.ClientBlockHeader>} {
- return {
-  getHeaderByNumberNoCache:(n:ccc.NumLike)=>client.getHeaderByNumberNoCache(n),
-  getCellLiveNoCache:(point:ccc.OutPointLike,withData?:boolean|null,includeTxPool?:boolean|null)=>client.getCellLiveNoCache(point,withData,includeTxPool),
-  findCellsPagedNoCache:(...args:Parameters<ccc.Client['findCellsPagedNoCache']>)=>client.findCellsPagedNoCache(...args),
-  sendTransaction:(tx:ccc.Transaction)=>client.sendTransaction(tx),
-  getTipHeader:()=>client.getTipHeader(),
-  getTransactionNoCache:async(hash:ccc.Hex)=>{
-   try{return await client.getTransactionNoCache(hash);}
-   catch(error){if(error instanceof TypeError&&/of 'object null'|of null/.test(error.message))return undefined;throw error;}
-  },
- } as unknown as PoolSubmitClient&{getTipHeader():Promise<ccc.ClientBlockHeader>};
-}
+/** The CCC client satisfies the narrow recovery interface. A real node answers an
+ * unknown hash with `transaction: null` / status `unknown`, which CCC maps to
+ * `undefined`; outages still throw and never read as an absent transaction. */
+const recoveryClient=(client:ccc.Client)=>client as unknown as PoolSubmitClient;
 
 interface Session {signer:ccc.Signer;epoch:number;client:ccc.Client;lock:ccc.Script;journal:BrowserSubmissionJournal;recovery:PoolSubmissionRecovery;reservations:PoolFundingReservations}
 interface Pending {generation:number;session:Session;funded:FundedPoolTransaction;review:PoolTransactionReview;sign:()=>Promise<ccc.Transaction>;title:string}
@@ -111,7 +99,7 @@ export function createPoolUi(env:PoolEnv){
   const journal=new BrowserSubmissionJournal(localStorage,scope),reservations=new PoolFundingReservations();
   const recovery=new PoolSubmissionRecovery(journal,reservations,scope);
   // Restores reservations for every recorded submission before any new funding.
-  await recovery.reconcile(nullSafeClient(client));
+  await recovery.reconcile(recoveryClient(client));
   if(env.signer()!==signer||env.epoch()!==epoch)throw new Error('Wallet changed; try again');
   session={signer,epoch,client,lock,journal,recovery,reservations};
   renderSubmissions();return session;
@@ -184,7 +172,7 @@ export function createPoolUi(env:PoolEnv){
   try{signed=await p.sign();}
   catch(error){if(pending===p){pending=undefined;p.funded.release();el<HTMLDialogElement>('pool-review').close();}setBusy(false);throw error;}
   try{
-   const outcome=await p.session.recovery.submit(nullSafeClient(p.session.client),p.review,signed,p.funded);
+   const outcome=await p.session.recovery.submit(recoveryClient(p.session.client),p.review,signed,p.funded);
    pending=undefined;el<HTMLDialogElement>('pool-review').close();
    text('pool-action-status',outcome.outcome==='sent'
     ?`Submitted ${outcome.hash}. It stays listed under pool submissions until confirmed and archived.`
@@ -222,7 +210,7 @@ export function createPoolUi(env:PoolEnv){
  el('pool-approve').onclick=()=>env.run(approve);
  el('pool-dismiss').onclick=()=>invalidate();
  el('pool-review').addEventListener('cancel',()=>invalidate());
- el('pool-recheck').onclick=()=>env.run(async()=>{const s=await ensureSession();await s.recovery.reconcile(nullSafeClient(s.client));renderSubmissions();});
+ el('pool-recheck').onclick=()=>env.run(async()=>{const s=await ensureSession();await s.recovery.reconcile(recoveryClient(s.client));renderSubmissions();});
 
  return {
   show:()=>env.run(async()=>{await refresh();if(env.signer())await ensureSession();}),

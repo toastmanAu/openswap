@@ -32,7 +32,8 @@
     "pool:deploy-prepare": "tsx scripts/pool-deploy.ts prepare",
     "pool:record": "tsx scripts/pool-deploy.ts record",
     "pool:lifecycle-build": "node scripts/build-pool-lifecycle.mjs",
-    "pool:verify": "tsx scripts/pool-verify.ts"
+    "pool:verify": "tsx scripts/pool-verify.ts",
+    "pool:frontend-manifest": "tsx scripts/pool-frontend-manifest.ts"
   },
   "dependencies": {
     "@ckb-ccc/shell": "1.3.12"
