@@ -33,9 +33,10 @@ if order['sha256']!=pinned['sha256'] or order['codeHash']!=pinned['codeHash']:
     sys.exit('Order lock rebuild does not match docs/binary-identity.json')
 pool=identity('target/riscv64imac-unknown-none-elf/release/openswap-pool')
 run=lambda *a:subprocess.run(a,capture_output=True,text=True,check=True).stdout.strip()
-def code_unchanged(since):
-    # Documentation cannot change results; any other path can.
-    return subprocess.run(['git','diff','--quiet',since,commit,'--','.',':(exclude)docs',':(exclude,glob)*.md']).returncode==0
+def code_changes(since):
+    # Documentation cannot change results; list every other path changed since
+    # the campaign commit so the reviewer can judge whether it matters.
+    return run('git','diff','--name-only',since,commit,'--','.',':(exclude)docs',':(exclude,glob)*.md').splitlines()
 campaigns={}
 ledger=Path('docs/campaigns/results.jsonl')
 for line in (ledger.read_text().splitlines() if ledger.exists() else []):
@@ -44,7 +45,7 @@ for line in (ledger.read_text().splitlines() if ledger.exists() else []):
     c=campaigns.setdefault(r['target'],{'runs':0,'seeds':[],'executed':0,'stops':{},'commits':{}})
     c['runs']+=1;c['seeds'].append(r['seed']);c['executed']+=r['executed']
     c['stops'][r['stop']]=c['stops'].get(r['stop'],0)+1
-    c['commits'].setdefault(r['commit'],{'codeUnchangedSinceCampaign':code_unchanged(r['commit'])})
+    c['commits'].setdefault(r['commit'],{'nonDocChangesSinceCampaign':code_changes(r['commit'])})
 manifest={'commit':commit,'archive':Path(archive).name,'archiveSha256':sha(archive),
  'createdAt':datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds'),
  'contracts':{'orderLock':order,'pool':pool},

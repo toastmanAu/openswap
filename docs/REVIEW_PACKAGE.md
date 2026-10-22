@@ -31,8 +31,8 @@ ignored `release/` directory:
   - both contract identities, rebuilt and checked against the pinned values;
   - toolchain versions (`rust-toolchain.toml`, rustc, cargo, node, npm) and the
     `Cargo.lock` / `package-lock.json` hashes;
-  - a summary of the clean campaign records, each with the commit it ran on, and
-    whether any non-documentation file changed between that commit and the
+  - a summary of the clean campaign records, each with the commit it ran on and
+    the list of non-documentation paths changed between that commit and the
     frozen one.
 
 Give the reviewer the commit, archive SHA256 and manifest. They should rebuild the
