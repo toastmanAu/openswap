@@ -7,6 +7,7 @@ import {explainError} from './errors.js';
 import {capacityReview} from './review.js';
 import {isOwnOrder,assertExternalFill} from './ownership.js';
 import {readActivity,mergeActivity,fetchActivity,accountKey,type Activity} from './activity.js';
+import {createPoolUi} from './pools/ui.js';
 const deployment=deploymentJson as swap.Deployment;
 const el=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id)! as T;
 const value=(id:string)=>(el<HTMLInputElement>(id)).value;
@@ -29,12 +30,13 @@ function clearActivity(){historyGeneration++;el('activity-list').replaceChildren
 function renderActivityRows(rows:Activity[]){const root=el('activity-list');root.replaceChildren();for(const row of rows){const item=document.createElement('div');item.className='activity-row';const title=document.createElement('p');title.textContent=`${row.status.toUpperCase()} · ${row.summary.split('\n')[0]}`;const link=document.createElement('a');link.href=`https://pudge.explorer.nervos.org/transaction/${row.hash}`;link.target='_blank';link.rel='noopener noreferrer';link.textContent=`${row.hash.slice(0,18)}…${row.hash.slice(-8)}`;item.append(title,link);if(row.block){const block=document.createElement('small');block.textContent=` · Block ${row.block}`;item.append(block);}root.append(item);}}
 async function refreshActivity(){const selected=signer,locks=[...walletLocks],id=++historyGeneration;if(!selected||!locks.length){clearActivity();return;}renderActivityRows(activity.filter(r=>r.account===accountKey(locks)&&r.network===deployment.genesisHash).slice(-20).reverse());text('activity-status','Loading recent activity…');try{const rows=await fetchActivity(selected.client,locks,deployment.genesisHash,activity);if(id!==historyGeneration||selected!==signer)return;renderActivityRows(rows);for(const row of rows)if(activity.some(a=>a.hash===row.hash&&a.account===row.account))saveActivity(row);text('activity-status',rows.length?'Recent wallet transactions. Unknown means the node has not confirmed the transaction; it does not prove failure.':'No recent transactions found.');}catch(error){console.warn('Activity refresh failed',error);if(id===historyGeneration)text('activity-status','Activity unavailable. Your transaction hashes remain saved; try Refresh activity.');}}
 el('refresh-activity').onclick=()=>run(refreshActivity);
+const poolUi=createPoolUi({client:()=>client,signer:()=>signer,epoch:()=>connectionEpoch,run});
 const assets=new Map<string,{label:string;asset:swap.AssetId}>([['ckb',{label:'CKB',asset:swap.CKB}]]);
 const connector=new WebComponentConnector();connector.client=client;connector.name='ToastDEX Testnet';
 connector.addEventListener('select-client',event=>{const selected=(event as SelectClientEvent).client;if(selected.addressPrefix!=='ckt'){report(new Error('Only testnet is supported'));return;}connector.client=selected;client=selected;});
 connector.addEventListener('connection',event=>{
  const connection=(event as ConnectorConnectionEvent).connectionOwner,epoch=++connectionEpoch;
- signer=connection?.value.signerInfo.signer;owner=undefined;walletLocks=[];clearActivity();text('connect',signer?'Loading account…':'Connect wallet');text('connected-account','');text('wallet-address',signer?'Loading account…':'Browse without connecting.');invalidate();renderBook();
+ signer=connection?.value.signerInfo.signer;owner=undefined;walletLocks=[];clearActivity();poolUi.reset();text('connect',signer?'Loading account…':'Connect wallet');text('connected-account','');text('wallet-address',signer?'Loading account…':'Browse without connecting.');invalidate();renderBook();
  const selected=signer;run(async()=>{if(!selected){text('wallet-address','Browse without connecting.');text('connect','Connect wallet');text('connected-account','');renderBook();return;}
  const [address,addresses]=await Promise.all([selected.getRecommendedAddressObj(),selected.getAddressObjs()]);if(signer!==selected||epoch!==connectionEpoch)return;walletLocks=addresses.map(a=>a.script);
  owner=address.script;text('wallet-address',address.toString());text('connected-account',`Account: ${address.toString()}`);text('connect','Switch wallet');renderBook();void refreshActivity();});
@@ -55,12 +57,12 @@ async function assertActiveAccount(expected:ccc.Signer,start:number){
 }
 window.addEventListener('focus',()=>{const current=signer,start=generation;if(current&&owner)run(()=>assertActiveAccount(current,start));});
 el('close-wallet').onclick=()=>el<HTMLDialogElement>('wallet-dialog').close();
-function invalidate(){generation++;review=undefined;el<HTMLDialogElement>('review').close();}
+function invalidate(){generation++;review=undefined;el<HTMLDialogElement>('review').close();poolUi.invalidate();}
 function selected(id:string){const result=assets.get(value(id));if(!result)throw new Error('Choose an asset');return result.asset;}
 function label(asset:swap.AssetId){return assets.get(swap.assetKey(asset))?.label??`${swap.assetKey(asset).slice(0,10)}…`;}
 function decimals(asset:swap.AssetId){return asset.kind==='ckb'?8:swap.tokensForNetwork('testnet').find(t=>t.typeHash===swap.assetKey(asset))?.decimals??0;}
 function amount(n:bigint,asset:swap.AssetId){return `${formatUnits(n,decimals(asset))} ${label(asset)}`;}
-function showView(view:string){if(view==='activity')void refreshActivity();for(const name of ['swap','orders','activity','settings'])el(`view-${name}`).hidden=name!==view;for(const b of document.querySelectorAll<HTMLButtonElement>('[data-view]'))b.setAttribute('aria-pressed',String(b.dataset.view===view));}
+function showView(view:string){if(view==='activity')void refreshActivity();if(view==='pools')poolUi.show();for(const name of ['swap','orders','pools','activity','settings'])el(`view-${name}`).hidden=name!==view;for(const b of document.querySelectorAll<HTMLButtonElement>('[data-view]'))b.setAttribute('aria-pressed',String(b.dataset.view===view));}
 for(const b of document.querySelectorAll<HTMLButtonElement>('[data-view]'))b.onclick=()=>showView(b.dataset.view!);
 el('reverse').onclick=()=>{const base=value('base');el<HTMLSelectElement>('base').value=value('quote');el<HTMLSelectElement>('quote').value=base;el<HTMLInputElement>('swap-output').value='';el<HTMLInputElement>('swap-budget').value='';invalidate();renderBook();};
 function swapAssets(){const base=selected('base'),quote=selected('quote');return value('swap-direction')==='buy'?{assetOut:base,assetIn:quote}:{assetOut:quote,assetIn:base};}
@@ -127,7 +129,7 @@ async function configure(rpc:string,indexer:string){
   nextRpc.value.findCellsPagedNoCache=(...args)=>nextIndexer.value.findCellsPagedNoCache(...args);
   nextRpc.value.findTransactionsPaged=nextIndexer.value.findTransactionsPaged.bind(nextIndexer.value);
  }catch(error){await nextRpc.dispose();await nextIndexer.dispose();throw error;}
- scanAbort?.abort();invalidate();connector.disconnect();signer=undefined;owner=undefined;walletLocks=[];text('connected-account','');orders=[];
+ scanAbort?.abort();invalidate();poolUi.reset();connector.disconnect();signer=undefined;owner=undefined;walletLocks=[];text('connected-account','');orders=[];
  const oldRpc=rpcOwner,oldIndexer=indexerOwner;rpcOwner=nextRpc;indexerOwner=nextIndexer;client=nextRpc.value;connector.client=client;
  await oldRpc.dispose();await oldIndexer.dispose();renderBook();text('status','Connected to CKB testnet.');
 }
