@@ -1,6 +1,6 @@
 import {ccc} from '@ckb-ccc/core';
 type Transport=Parameters<typeof ccc.ClientPublicTestnet.new>[0]['transport'];
-/** CLI transport: no writes, redirects, fallbacks or unbounded JSON bodies. */
+/** Browser/CLI transport: no writes, redirects, fallbacks or unbounded JSON bodies. */
 export function poolReadTransport(endpoint:string,options:{maxBytes?:number;timeoutMs?:number;signal?:AbortSignal}={}):Transport {
  const url=new URL(endpoint);
  if(!['http:','https:'].includes(url.protocol)||url.username||url.password)throw new Error('Explicit HTTP(S) RPC URL without credentials required');
@@ -18,7 +18,9 @@ export function poolReadTransport(endpoint:string,options:{maxBytes?:number;time
    if(length&&Number(length)>maxBytes)throw new Error('Pool RPC response exceeds byte limit');
    const reader=response.body.getReader(),chunks:Uint8Array[]=[];let size=0;
    while(true){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>maxBytes)throw new Error('Pool RPC response exceeds byte limit');chunks.push(value);}
-   const decoded=JSON.parse(Buffer.concat(chunks,size).toString('utf8'));
+   const bytes=new Uint8Array(size);let offset=0;
+   for(const chunk of chunks){bytes.set(chunk,offset);offset+=chunk.byteLength;}
+   const decoded=JSON.parse(new TextDecoder().decode(bytes));
    if(!decoded||typeof decoded!=='object'||Array.isArray(decoded)||decoded.jsonrpc!=='2.0'||decoded.id!==payload.id||('result' in decoded)===('error' in decoded))throw new Error('Malformed or mismatched JSON-RPC envelope');
    if('error' in decoded&&(!decoded.error||!Number.isInteger(decoded.error.code)||typeof decoded.error.message!=='string'))throw new Error('Malformed JSON-RPC error');
    return decoded;

@@ -5,8 +5,13 @@ build_root=$(mktemp -d)
 trap 'rm -rf "$build_root"' EXIT
 CARGO_TARGET_DIR="$build_root/first" ./scripts/build-reproducible.sh
 CARGO_TARGET_DIR="$build_root/second" ./scripts/build-reproducible.sh
+CARGO_TARGET_DIR="$build_root/first" bash scripts/build-pool.sh
+CARGO_TARGET_DIR="$build_root/second" bash scripts/build-pool.sh
 cmp "$build_root/first/riscv64imac-unknown-none-elf/release/openswap-lock" \
     "$build_root/second/riscv64imac-unknown-none-elf/release/openswap-lock"
 ./scripts/hash-contract.sh "$build_root/first/riscv64imac-unknown-none-elf/release/openswap-lock"
 python3 scripts/check-contract-identity.py "$build_root/first/riscv64imac-unknown-none-elf/release/openswap-lock"
-echo 'Two clean local target directories produced identical binaries.'
+cmp "$build_root/first/riscv64imac-unknown-none-elf/release/openswap-pool" \
+    "$build_root/second/riscv64imac-unknown-none-elf/release/openswap-pool"
+python3 scripts/check-pool-identity.py "$build_root/first/riscv64imac-unknown-none-elf/release/openswap-pool"
+echo 'Two clean local target directories produced identical pinned order and pool binaries.'

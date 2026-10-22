@@ -300,6 +300,71 @@ fn setup() -> SdkFixture {
 }
 
 #[test]
+fn sdk_joyid_layout_with_secp_authorization() {
+    // Proves the alternate SDK layout against the unchanged pool and real xUDT.
+    // The wallet lock remains real secp with public fixture keys: this is NOT
+    // a test of JoyID/WebAuthn authentication or a genuine CoTA subkey proof.
+    for subkey in [false, true] {
+        let mut fixture = setup();
+        fixture.request["walletWitness"] = if subkey {
+            json!({"kind":"joyid", "outputType":"0x123456"})
+        } else {
+            json!({"kind":"joyid"})
+        };
+        let (genesis, first) = build(&fixture.request);
+        assert_eq!(first, 0);
+        assert_eq!(genesis.inputs().len(), 1);
+        assert_eq!(genesis.witnesses().len(), 2);
+        let state = StateData::decode(&genesis.outputs_data().get(1).unwrap().raw_data()).unwrap();
+        assert_eq!((state.rx, state.ry), (2, 3));
+        let genesis = sign(&genesis, &fixture.creator, first);
+        fixture.context.verify_tx(&genesis, 6_000_000).unwrap();
+        let mut points = register(&mut fixture.context, &genesis);
+        let mut state_index = 1;
+        for action in ["xToY", "yToX", "deposit", "withdraw", "deposit"] {
+            let pool_range = state_index..state_index + 3;
+            let funding: Vec<_> = points
+                .iter()
+                .enumerate()
+                .filter(|(index, _)| !pool_range.contains(index))
+                .map(|(_, point)| point.clone())
+                .collect();
+            fixture.request["previous"] = json!(
+                points[pool_range.clone()]
+                    .iter()
+                    .map(|point| describe(&fixture.context, point))
+                    .collect::<Vec<_>>()
+            );
+            fixture.request["funding"] = json!(
+                funding
+                    .iter()
+                    .map(|point| describe(&fixture.context, point))
+                    .collect::<Vec<_>>()
+            );
+            fixture.request["action"] = json!(action);
+            let (tx, first) = build(&fixture.request);
+            assert_eq!(first, 3);
+            let expected: Vec<_> = points[pool_range].iter().chain(&funding).collect();
+            assert_eq!(tx.inputs().len(), expected.len());
+            for (input, point) in tx.inputs().into_iter().zip(expected) {
+                assert_eq!(input.previous_output(), *point);
+            }
+            let tx = sign(&tx, &fixture.creator, first);
+            fixture.context.verify_tx(&tx, 6_000_000).unwrap();
+            let state = StateData::decode(&tx.outputs_data().get(0).unwrap().raw_data()).unwrap();
+            if action == "withdraw" {
+                assert_eq!(state.shares, state.locked);
+            }
+            if action == "deposit" {
+                assert!(state.shares > state.locked);
+            }
+            points = register(&mut fixture.context, &tx);
+            state_index = 0;
+        }
+    }
+}
+
+#[test]
 fn sdk_distinct_owner_compositions() {
     let mut fixture = setup();
     composition::run(&mut fixture);

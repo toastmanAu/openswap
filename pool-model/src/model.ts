@@ -1,5 +1,13 @@
 /** Executable draft accounting model, not a transaction builder or consensus contract. */
-import {isDeepStrictEqual} from 'node:util';
+// The expected result contains only ordinary records and bigint leaves. Compare
+// that exact shape without importing Node runtime helpers into wallet bundles.
+function sameResult(expected:unknown,actual:unknown):boolean {
+ if(expected===null||typeof expected!=='object')return Object.is(expected,actual);
+ if(actual===null||typeof actual!=='object'||Object.getPrototypeOf(actual)!==Object.getPrototypeOf(expected))return false;
+ const keys=(value:object)=>Reflect.ownKeys(value).filter(key=>Object.prototype.propertyIsEnumerable.call(value,key));
+ const wanted=keys(expected),got=keys(actual);
+ return wanted.length===got.length&&wanted.every(key=>got.includes(key)&&sameResult((expected as Record<PropertyKey,unknown>)[key],(actual as Record<PropertyKey,unknown>)[key]));
+}
 export const U64_MAX=(1n<<64n)-1n;
 export const RESERVE_MAX=(1n<<112n)-1n;
 export const SHARE_MAX=(1n<<128n)-1n;
@@ -111,5 +119,5 @@ export function transition(s:PoolState,operation:Operation):Result {
 }
 /** Strict draft accounting relation; does not verify cell identity or wallet signatures. */
 export function validateTransition(before:PoolState,operation:Operation,claimed:Result):void {
- requireCondition(isDeepStrictEqual(transition(before,operation),claimed),'TRANSITION');
+ requireCondition(sameResult(transition(before,operation),claimed),'TRANSITION');
 }

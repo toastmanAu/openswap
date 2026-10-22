@@ -9,7 +9,7 @@ const dep=(s:ccc.Hex)=>({outPoint:ccc.OutPoint.fromBytes(s),depType:'code' as co
 const cell=(s:{point:ccc.Hex;output:ccc.Hex;data:ccc.Hex})=>ccc.Cell.from({outPoint:ccc.OutPoint.fromBytes(s.point),cellOutput:ccc.CellOutput.fromBytes(s.output),outputData:s.data});
 const deployment={genesisHash:`0x${'00'.repeat(32)}` as ccc.Hex,codeHash:input.codeHash,poolDep:dep(input.poolDep),tokenDep:dep(input.tokenDep)};
 const lock=ccc.Script.fromBytes(input.lock);
-const wallet={lock,change:lock,deps:input.lockDeps.map(dep),funding:input.funding.map(cell),feeRate:1000n,maxFee:10000n};
+const wallet={lock,change:lock,deps:input.lockDeps.map(dep),funding:input.funding.map(cell),feeRate:1000n,maxFee:10000n,witness:input.walletWitness};
 const recipients={ckb:lock,token:lock,lp:input.lpRecipient?ccc.Script.fromBytes(input.lpRecipient):lock};
 const pool=input.previous?parsePool(deployment,...(input.previous.map(cell) as [ccc.Cell,ccc.Cell,ccc.Cell])):undefined;
 const actions={xToY:{kind:'swap',direction:'xToY',amountIn:10000000000n,minOut:1n},yToX:{kind:'swap',direction:'yToX',amountIn:10000000000n,minOut:1n},deposit:{kind:'deposit',maxX:10000000000n,maxY:40000000000n,minShares:1n},withdraw:{kind:'withdraw',shares:pool?pool.accounting.totalShares-pool.accounting.lockedShares:1n,minX:1n,minY:1n}} satisfies Record<string,Operation>;

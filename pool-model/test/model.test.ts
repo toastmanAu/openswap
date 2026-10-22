@@ -1,8 +1,23 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import {isDeepStrictEqual} from 'node:util';
 import {createPool,swap,deposit,withdraw,transition,validateTransition,validateState,capacities,circulatingShares,sqrtFloor,ModelError,U64_MAX,U256_MAX,RESERVE_MAX,FEE_DENOMINATOR,type Parameters,type PoolState,type Operation,type Result} from '../src/model.js';
 const p:Parameters={feeBps:30n,lockedShares:1000n,backing:{state:20000000000n,ckb:10000000000n,token:20000000000n}};
 const initial=()=>createPool(p,1_000_000n,4_000_000n,1n).next;
+test('browser-safe result comparison preserves strict record-shape behavior',()=>{
+ const before=initial(),op:Operation={kind:'deposit',maxX:10000n,maxY:40000n,minShares:1n},expected=transition(before,op);
+ const variants:unknown[]=[structuredClone(expected),null,{},[],{...expected,extra:1},Object.assign(Object.create(null),expected)];
+ const symbol=structuredClone(expected);Object.assign(symbol,{[Symbol('extra')]:1});variants.push(symbol);
+ const hidden=structuredClone(expected);Object.defineProperty(hidden,'ignored',{value:1});variants.push(hidden);
+ const nested=structuredClone(expected);Object.setPrototypeOf(nested.next.backing,null);variants.push(nested);
+ const missing=structuredClone(expected);Reflect.deleteProperty(missing.flows,'unusedX');variants.push(missing);
+ const wrong=structuredClone(expected);Object.assign(wrong.next,{x:Number(wrong.next.x)});variants.push(wrong);
+ const cyclic=structuredClone(expected);Object.assign(cyclic.next,{backing:cyclic});variants.push(cyclic);
+ for(const candidate of variants){
+  if(isDeepStrictEqual(expected,candidate))validateTransition(before,op,candidate as Result);
+  else assert.throws(()=>validateTransition(before,op,candidate as Result),error('TRANSITION'));
+ }
+});
 function error(code:string){return (e:unknown)=>e instanceof ModelError&&e.code===code;}
 function conserved(before:PoolState,r:Result){
  assert.equal(r.next.x,before.x+r.flows.paidX-r.flows.receivedX);

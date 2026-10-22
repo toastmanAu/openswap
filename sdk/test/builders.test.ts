@@ -73,3 +73,17 @@ test('spent inputs never reach the broadcast boundary',async()=>{
  const f=setup();f.fund();const built=await sdk.createOrder(f.context,{offerAsset:sdk.CKB,askAsset:sdk.udt(b),lots:[{offerAmount:100n,askAmount:10n}]});f.cells.length=0;let broadcast=false;
  await assert.rejects(()=>sdk.submit(built,f.signer,{beforeBroadcast:()=>{broadcast=true;}}),/spent/);assert.equal(broadcast,false);assert.equal(f.signed(),false);
 });
+test('durable callback is awaited, receives exact bytes and failure prevents send',async()=>{
+ for(const fail of [false,true]){
+  const f=setup();f.fund();const built=await sdk.createOrder(f.context,{offerAsset:sdk.CKB,askAsset:sdk.udt(b),lots:[{offerAmount:100n,askAmount:10n}]});
+  let persisted=false,sends=0,bytes='';
+  f.client.sendTransaction=async input=>{sends++;assert.equal(persisted,true);const tx=ccc.Transaction.from(input);assert.equal(ccc.hexFrom(tx.toBytes()),bytes);return tx.hash();};
+  const work=sdk.submit(built,f.signer,{beforeBroadcast:async(hash,signedBytes)=>{
+   bytes=signedBytes;assert.equal(ccc.Transaction.fromBytes(bytes).hash(),hash);
+   await new Promise(resolve=>setImmediate(resolve));assert.equal(sends,0);
+   if(fail)throw new Error('Journal unavailable');persisted=true;
+  }});
+  if(fail){await assert.rejects(work,/Journal unavailable/);assert.equal(sends,0);}
+  else{await work;assert.equal(sends,1);}
+ }
+});

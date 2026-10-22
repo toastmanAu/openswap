@@ -6,31 +6,39 @@ import {encodeAction,encodeState,poolScript,Role,XUDT_CODE_HASH,type Action,type
 import {parsePool,validateCell,minimumCapacity,pointKey,sameCell,assertPoolNetwork,assertPoolDependencies,liveCell,type PoolDeployment,type PoolSnapshot,type PoolClient,type ReadOptions} from './pools.js';
 
 export interface Wallet {
- /** All funding inputs must use this one lock. Signature slot is exactly 65 bytes. */
+ /** All funding inputs must use this one lock. Default signing shape is 65-byte secp. */
  lock:ccc.ScriptLike;deps:ccc.CellDepLike[];funding:ccc.Cell[];
  change:ccc.ScriptLike;feeRate:bigint;maxFee:bigint;
+ /** Explicit JoyID layout. Resolve/pin any subkey proof and dependencies before building. */
+ witness?:{kind:'joyid';outputType?:ccc.Hex};
 }
 export interface Recipients {ckb:ccc.ScriptLike;token:ccc.ScriptLike;lp:ccc.ScriptLike}
 export interface CreateRequest {parameters:Parameters;x:bigint;y:bigint;minShares:bigint;tokenOwner:ccc.Hex}
 export interface BuiltPoolTransaction {
- transaction:ccc.Transaction;poolId:ccc.Hex;result:Result;fee:bigint;ckbReceiptTopUp:bigint;walletWitnessIndex:number;
+ transaction:ccc.Transaction;poolId:ccc.Hex;result:Result;fee:bigint;ckbReceiptTopUp:bigint;walletWitnessIndex:number;stateOutputIndex:number;
  /** Pins raw bytes/witnesses except the signature; optional input caches must match reviewed inputs. */
  assertIntegrity:(transaction?:ccc.Transaction)=>void;
  /** Recheck immediately before signing/submitting; liveness is never a reservation. */
  assertFresh:(client:PoolClient,options?:ReadOptions,candidate?:ccc.Transaction)=>Promise<void>;
 }
-function requireBuild(ok:unknown,message:string):asserts ok {if(!ok)throw new Error(`Pool build: ${message}`);}
+export class PoolBuildError extends Error {
+ constructor(readonly code:'INVALID'|'FUNDING'|'FEE',message:string){super(`Pool build: ${message}`);this.name='PoolBuildError';}
+}
+function requireBuild(ok:unknown,message:string,code:'INVALID'|'FUNDING'|'FEE'='INVALID'):asserts ok {if(!ok)throw new PoolBuildError(code,message);}
 const amount=(n:bigint)=>ccc.hexFrom(writeLE(n,16));
 const output=(lock:ccc.ScriptLike,type?:ccc.ScriptLike,data:ccc.Hex='0x',capacity?:bigint):ccc.CellAny=>ccc.CellAny.from({cellOutput:ccc.CellOutput.from({lock:ccc.Script.from(lock).clone(),type:type?ccc.Script.from(type).clone():undefined,capacity},data),outputData:data});
 
 export function buildCreate(deployment:PoolDeployment,wallet:Wallet,recipients:Recipients,request:CreateRequest):BuiltPoolTransaction {
  requireBuild(wallet.funding.length>0,'creation needs an explicit first funding input');
  const first=ccc.CellInput.from(wallet.funding[0]!);
- const id=ccc.hashCkb(ccc.bytesConcat(first.toBytes(),writeLE(0n,8)));
+ // JoyID's first wallet outputType may contain a subkey proof. Put the create
+ // action at witness/output index 1 instead, using the already-supported ABI.
+ const stateIndex=wallet.witness?.kind==='joyid'?1n:0n;
+ const id=ccc.hashCkb(ccc.bytesConcat(first.toBytes(),writeLE(stateIndex,8)));
  const result=createPool(request.parameters,request.x,request.y,request.minShares);
  const metadata:StateData={fee:request.parameters.feeBps,locked:request.parameters.lockedShares,shares:result.next.totalShares,
   backingState:request.parameters.backing.state,backingCkb:request.parameters.backing.ckb,backingToken:request.parameters.backing.token,
-  rx:1n,ry:2n,tokenCodeHash:XUDT_CODE_HASH,tokenOwner:request.tokenOwner};
+  rx:stateIndex+1n,ry:stateIndex+2n,tokenCodeHash:XUDT_CODE_HASH,tokenOwner:request.tokenOwner};
  return build(deployment,wallet,recipients,id,metadata,{kind:'create',minShares:request.minShares},result);
 }
 export function buildTransition(deployment:PoolDeployment,wallet:Wallet,recipients:Recipients,pool:PoolSnapshot,action:Operation):BuiltPoolTransaction {
@@ -40,6 +48,11 @@ export function buildTransition(deployment:PoolDeployment,wallet:Wallet,recipien
  return build(deployment,wallet,recipients,checked.poolId,{...checked.metadata,shares:result.next.totalShares,rx:1n,ry:2n},action,result,checked);
 }
 function build(deployment:PoolDeployment,wallet:Wallet,recipients:Recipients,id:ccc.Hex,metadata:StateData,action:Action,result:Result,previous?:PoolSnapshot):BuiltPoolTransaction {
+ requireBuild(wallet.witness===undefined||wallet.witness.kind==='joyid','unsupported wallet witness profile');
+ const joyid=wallet.witness?.kind==='joyid',signatureBytes=joyid?1000:65;
+ const stateOutputIndex=!previous&&joyid?1:0;
+ const proof=wallet.witness?.outputType;
+ requireBuild(proof===undefined||(typeof proof==='string'&&proof.length<=6002&&/^0x(?:[0-9a-fA-F]{2})*$/.test(proof)),'invalid or oversized wallet proof');
  requireBuild(wallet.funding.length>0&&wallet.funding.length<=(previous?253:256),'funding count outside bounds');
  requireBuild(typeof wallet.feeRate==='bigint'&&wallet.feeRate>0n&&typeof wallet.maxFee==='bigint'&&wallet.maxFee>0n,'positive fee rate and cap required');
  requireBuild(wallet.deps.length>0&&wallet.deps.length<=16,'explicit wallet dependencies required');
@@ -65,11 +78,11 @@ function build(deployment:PoolDeployment,wallet:Wallet,recipients:Recipients,id:
  }
  const {next,flows}=result;
  requireBuild(availableY<(1n<<128n)&&availableLp<(1n<<128n),'aggregate token/LP amount exceeds u128');
- requireBuild(availableY>=flows.paidY&&availableLp>=flows.burnedShares,'insufficient token/LP funding');
+ requireBuild(availableY>=flows.paidY&&availableLp>=flows.burnedShares,'insufficient token/LP funding','FUNDING');
  const cells=[output(roles[1]!,roles[0]!,encodeState(metadata),metadata.backingState),
   output(roles[2]!,undefined,'0x',metadata.backingCkb+next.x),output(roles[3]!,token,amount(next.y),metadata.backingToken)];
  // This validates genesis occupied backing and the selected immutable profile as well.
- const synthetic=cells.map((c,index)=>ccc.Cell.from({...c,outPoint:{txHash:id,index}}));
+ const synthetic=cells.map((c,index)=>ccc.Cell.from({...c,outPoint:{txHash:id,index:index+stateOutputIndex}}));
  parsePool(deployment,synthetic[0]!,synthetic[1]!,synthetic[2]!);
  let ckbReceiptTopUp=0n;
  if(flows.receivedX){const c=output(recipients.ckb);ckbReceiptTopUp=c.cellOutput.capacity>flows.receivedX?c.cellOutput.capacity-flows.receivedX:0n;c.cellOutput.capacity=flows.receivedX+ckbReceiptTopUp;cells.push(c);}
@@ -78,19 +91,25 @@ function build(deployment:PoolDeployment,wallet:Wallet,recipients:Recipients,id:
  if(availableY>flows.paidY)cells.push(output(change,token,amount(availableY-flows.paidY)));
  if(availableLp>flows.burnedShares)cells.push(output(change,roles[4]!,amount(availableLp-flows.burnedShares)));
  const changeCell=output(change);cells.push(changeCell);
+ // Genesis always mints LP. Move that wallet receipt before the three pool
+ // outputs; keep final plain change last for fee accounting. Legacy layout is unchanged.
+ if(stateOutputIndex===1)cells.unshift(cells.splice(3,1)[0]!);
  const remaining=inputs.reduce((n,c)=>n+c.cellOutput.capacity,0n)-cells.slice(0,-1).reduce((n,c)=>n+c.cellOutput.capacity,0n);
- requireBuild(remaining>=minimumCapacity(changeCell),'insufficient capacity for receipts and change');
+ requireBuild(remaining>=minimumCapacity(changeCell),'insufficient capacity for receipts and change','FUNDING');
  changeCell.cellOutput.capacity=remaining;
  const walletWitnessIndex=previous?3:0;
- const witnesses:ccc.Hex[]=inputs.map(()=> '0x');
- witnesses[0]=ccc.hexFrom(ccc.WitnessArgs.from(previous?{inputType:encodeAction(action)}:{outputType:encodeAction(action),lock:new Uint8Array(65)}).toBytes());
- if(previous)witnesses[walletWitnessIndex]=ccc.hexFrom(ccc.WitnessArgs.from({lock:new Uint8Array(65)}).toBytes());
+ const witnesses:ccc.Hex[]=Array.from({length:Math.max(inputs.length,stateOutputIndex+1)},()=> '0x');
+ const walletArgs=ccc.WitnessArgs.from({lock:new Uint8Array(signatureBytes),outputType:proof});
+ witnesses[walletWitnessIndex]=ccc.hexFrom(walletArgs.toBytes());
+ if(previous)witnesses[0]=ccc.hexFrom(ccc.WitnessArgs.from({inputType:encodeAction(action)}).toBytes());
+ else if(stateOutputIndex===0){walletArgs.outputType=encodeAction(action);witnesses[0]=ccc.hexFrom(walletArgs.toBytes());}
+ else witnesses[stateOutputIndex]=ccc.hexFrom(ccc.WitnessArgs.from({outputType:encodeAction(action)}).toBytes());
  const deps=[deployment.poolDep,deployment.tokenDep,...wallet.deps].map(d=>ccc.CellDep.from(d));
  const unique=deps.filter((d,i)=>deps.findIndex(other=>ccc.hexFrom(other.toBytes())===ccc.hexFrom(d.toBytes()))===i);
  const transaction=ccc.Transaction.from({inputs,outputs:cells.map(c=>c.cellOutput),outputsData:cells.map(c=>c.outputData),cellDeps:unique,witnesses});
  const fee=transaction.estimateFee(wallet.feeRate);
- requireBuild(fee<=wallet.maxFee,'fee exceeds explicit cap');
- requireBuild(remaining-fee>=minimumCapacity(changeCell),'change would be dust after fee');
+ requireBuild(fee<=wallet.maxFee,'fee exceeds explicit cap','FEE');
+ requireBuild(remaining-fee>=minimumCapacity(changeCell),'change would be dust after fee','FUNDING');
  transaction.outputs[transaction.outputs.length-1]!.capacity=remaining-fee;
  for(let i=0;i<transaction.outputs.length;i++)validateCell(ccc.CellAny.from({cellOutput:transaction.outputs[i]!,outputData:transaction.outputsData[i]!}));
  const rawHash=transaction.hash(),savedWitnesses=[...transaction.witnesses];
@@ -110,16 +129,18 @@ function build(deployment:PoolDeployment,wallet:Wallet,recipients:Recipients,id:
   for(let i=0;i<savedWitnesses.length;i++){
    requireBuild(Object.hasOwn(tx.witnesses,i),'missing witness slot');
    const w=tx.witnesses[i];
-   requireBuild(typeof w==='string'&&w.length===savedWitnesses[i]!.length&&/^0x(?:[0-9a-fA-F]{2})*$/.test(w),'invalid witness bytes');
+   requireBuild(typeof w==='string'&&w.length<=savedWitnesses[i]!.length&&/^0x(?:[0-9a-fA-F]{2})*$/.test(w),'invalid witness bytes');
    if(i!==walletWitnessIndex){requireBuild(w===savedWitnesses[i],'pool action or other witness changed');continue;}
    const args=ccc.WitnessArgs.fromBytes(w);
-   requireBuild(args.lock!==undefined&&ccc.bytesFrom(args.lock).length===65,'wallet signature must be 65 bytes');
-   args.lock=ccc.hexFrom(new Uint8Array(65));
+   requireBuild(ccc.hexFrom(args.toBytes())===w.toLowerCase(),'noncanonical wallet witness');
+   const length=args.lock===undefined?0:ccc.bytesFrom(args.lock).length;
+   requireBuild(joyid?length>=1&&length<=signatureBytes:length===65,joyid?'JoyID signature must be 1..1000 bytes':'wallet signature must be 65 bytes');
+   args.lock=ccc.hexFrom(new Uint8Array(signatureBytes));
    requireBuild(ccc.hexFrom(args.toBytes())===savedWitnesses[i],'wallet witness fields changed');
   }
  };
  const capturedDeployment={...deployment,poolDep:ccc.CellDep.from(deployment.poolDep).clone(),tokenDep:ccc.CellDep.from(deployment.tokenDep).clone()};
- return {transaction,poolId:id,result,fee,ckbReceiptTopUp,walletWitnessIndex,assertIntegrity,
+ return {transaction,poolId:id,result,fee,ckbReceiptTopUp,walletWitnessIndex,stateOutputIndex,assertIntegrity,
   assertFresh:async(client,options={},candidate=transaction)=>{
    assertIntegrity(candidate);await assertPoolNetwork(client,capturedDeployment,options);
    await assertPoolDependencies(client,capturedDeployment,options);

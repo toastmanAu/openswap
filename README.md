@@ -21,11 +21,25 @@ make hash                    # SHA256, CKB data hash, binary size
 ./scripts/check-reproducible.sh
 ```
 
+The reproducibility check builds both order and pool contracts in two temporary
+target directories, compares their bytes, and checks pinned identities. The pool
+identity gate (`python3 scripts/check-pool-identity.py`) is an artifact check,
+not a live deployment manifest or authorization.
+
+`npm run test:frontend` starts its own local server and runs eight isolated browser
+regressions with mocked RPC. Locally it uses `/usr/bin/google-chrome` (override with
+`CHROME_BIN`); CI installs the pinned Playwright Chromium. `TOASTDEX_BASE_URL` can
+select an already-running test server. These tests do not perform live acceptance.
+
 All OpenSwap tests explicitly use **Data1**. Runtime code reads the running
 Script into 4096 bytes, token amounts into 16 bytes, and probes empty data with
 one byte. It does not load arbitrary cell data into allocated vectors.
 
 ## Implementation status
+
+For current order-versus-pool readiness and remaining release gates, start with
+[the staged readiness matrix](docs/READINESS.md). Historical counts below describe
+the order product; newer pool work is tracked separately.
 
 Contract settlement and rescue are implemented. The suite includes isolated
 adversarial tests, real xUDT conservation, signed secp cancellation and real ACP
@@ -147,5 +161,8 @@ license and provenance in `tests/fixtures`.
 
 A separate [draft pool specification](docs/research/POOL_TRANSITIONS.md) and
 [integer accounting model](pool-model/README.md) explore permissionless CKB/xUDT
-pools alongside existing orders. Run `npm run test:pool-model` or
-`npm run demo:pool-model`. This is off-chain research, not deployed pool support.
+pools alongside existing orders. Arithmetic, an isolated on-chain validator,
+unsigned SDK and extensive VM tests are implemented; pools are not deployed or
+integrated into the app. JoyID-first wallet integration is the current milestone.
+See [the integration plan](docs/research/POOL_INTEGRATION_PLAN.md) and
+[resource measurements](docs/research/POOL_RESOURCE_ENVELOPE.md).

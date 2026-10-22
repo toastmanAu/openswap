@@ -1,8 +1,183 @@
 # ToastDEX — next-session handoff
 
-Saved 2026-10-09 (Australia/Adelaide). Read this first when resuming.
+Saved 2026-10-12 (Australia/Adelaide). Read this first when resuming.
 
 ## Current request and stopping point
+
+### Durable runner / pool recovery continuation (2026-10-17)
+
+Runner execution now requires an explicit scoped journal; legacy integration
+scripts without one fail closed. Startup reloads signed bytes before scan, checks
+account/network, excludes recorded funding inputs and speculative outputs, and
+persists at the pre-send boundary. Missing status no longer releases orders.
+Committed rows remain tracked for reorgs; rejected rows stay held pending deliberate
+operator reconciliation. File-backed restart/lost-reply and storage-failure tests
+pass with mock signing/send only.
+
+Added PoolSubmissionRecovery: bounded read-only status/live-input reconciliation
+with restored reservations and persisted observations. No automatic retry/release.
+Pool pre-send wiring and explicit terminal resolution/archival remain unfinished.
+Typecheck, 76 SDK/solver tests and 50 pool SDK tests passed; final reservation/reorg
+refinements passed 11 targeted tests. No live operations, keys, commits or pushes.
+Earlier runner-in-memory statements below are superseded by this section.
+
+### Latest continuation — mock-only approval granted (2026-10-13)
+
+The user explicitly approved implementing signing capability and persistence
+integration with mock-only tests. This resolves the earlier automatic-review
+approval question below. No live signing, key access or broadcast is authorized.
+
+- Existing SDK `submit` now awaits its pre-send callback and passes exact signed
+  bytes as a second argument. It clones the signer result to isolate wallet-owned
+  references. Callback rejection prevents send. Mock tests verify persistence
+  ordering and byte identity; all 74 SDK/solver tests pass.
+- Resolved JoyID wallets now expose `bindReview(review)`, returning the frozen
+  identity/disclosures and an explicit one-shot `sign()` operation. It verifies
+  account/genesis/dependencies/proof, freshness, expiry and captured session around
+  the signature request; only the reviewed lock field may change. Unsigned zero
+  placeholders are rejected. No broadcast method is added.
+- Mock signer tests cover successful subkey signing, refusal, raw/proof mutation,
+  unsigned results, session changes, timeout/late result and duplicate attempts.
+  Typecheck and all 49 pool SDK tests pass. No actual JoyID signer was invoked.
+- Next: extend sign tests to primary/all transitions, cancellation/expiry during
+  awaits and stale inputs; wire the durable solver store into startup/pre-send
+  recovery and implement safe pool submission/reconciliation. Storage-only tests
+  do not prove the runner restart gate. Overall readiness goal remains incomplete.
+
+All changes remain uncommitted. Earlier evidence/approval statements below are
+historical where superseded by this section.
+
+### Ordered readiness goal — JoyID first (2026-10-12)
+
+The user requested a gap analysis, then an active goal to close the identified
+gaps in order. They explicitly selected **JoyID first**, not secp-first. The goal
+remains active and incomplete; do not redefine completion as these initial tests.
+Baseline `5d08496` was pushed to origin/main on 2026-10-09. No further commit or
+push has been requested. Current edits are uncommitted.
+
+Start with [READINESS.md](docs/READINESS.md) and the
+[integration plan](docs/research/POOL_INTEGRATION_PLAN.md). They separate proposed
+offline parameters from live approval and track every supporting CI, solver,
+fuzz/endurance and independent-review gap. Stage order: profile/criteria,
+offline JoyID wallet integration, explicitly authorized controlled-network
+lifecycle, then pool UI/routing. No deployment, funded signing/broadcast, user-key
+access, paid review engagement, mainnet or publication without separate approval.
+
+Implemented this turn:
+
+- Inspected installed JoyID 1.2.3/core 1.21.0 preparation/signing source. It reserves
+  1,000 signature bytes and may put a subkey proof in wallet `outputType`.
+- Added explicit `wallet.witness: {kind:'joyid', outputType?: resolvedProof}` to
+  pool builders. Default secp layout/65-byte policy stays unchanged. JoyID permits
+  a bounded 1..1,000-byte lock replacement and at most 3,000 proof bytes; every
+  other witness field, action, raw field and optional input cache stays pinned.
+- JoyID genesis puts minted LP at output 0, state at 1, X/Y at 2/3, action at
+  witness 1 and wallet proof at witness 0. This avoids the subkey/create-action
+  collision without changing the contract or ABI. `built.stateOutputIndex` is
+  explicit; one-input genesis has two witnesses. Fees reserve the full placeholder.
+- Four new SDK tests exercise actual connector preparation using offline mock
+  connections/dependencies and a synthetic pre-resolved proof. These do NOT
+  authenticate a real JoyID credential/proof or exercise live popup signing.
+- New Rust `sdk_joyid_layout_with_secp_authorization` verifies two genesis layouts
+  and ten chained transitions with real xUDT/secp. Full withdrawal/re-entry passes.
+  This proves pool layout/accounting, NOT JoyID/WebAuthn authorization.
+- Typecheck, all 28 pool SDK tests, 70 existing SDK/solver tests, `make check`,
+  fixture hashes and both contract identities pass. Full 24-test VM run passed.
+  After final canonical wallet-witness round-trip enforcement was added, typecheck,
+  all 28 SDK tests and both JoyID-layout/legacy-resource VM tests passed again.
+
+Continuation evidence (2026-10-12, still uncommitted):
+
+- Added `joyid.ts`: bounded direct-code/CoTA dependency resolution, pinned content,
+  account/key/client/genesis/session-revision checks, cancellation and overall
+  deadlines. Actual installed connector preparation is checked before and after
+  freshness reads. Pre-resolving proof avoids its unbounded CoTA scan. The caller
+  must advance session revision on account/network/disconnect events.
+- Added `joyid-proof.ts`: explicit read-only proof HTTP adapter with no redirects,
+  16 KiB streamed response cap, exact RPC envelope and 1..3,000-byte proof checks.
+  This validates encoding, not cryptographic proof authenticity.
+- Added `funding.ts`: bounded exact-owner eligible-asset selection, deterministic
+  asset/capacity order, typed funding-only retries, fee-cap fail-closed behavior,
+  live checks and atomic process-local input reservations with cleanup. Reservations
+  are not durable and must remain held across ambiguous submission outcomes.
+- Current verification: typecheck, **42 pool SDK tests and 70 existing SDK/solver
+  tests pass**. Includes nine resolver/proof tests and five funding tests. No live
+  JoyID signing, deployment, broadcast or external proof service was used. Prior
+  VM evidence above is unchanged; the VM suite was not rerun for this increment.
+
+Further continuation: selector tests now consume exact predecessor outputs across
+creation, both swaps, deposit, full circulating withdrawal and re-entry. Concurrent
+selectors permit only one overlapping reservation; competing transitions with
+disjoint wallet funding still conflict on pool inputs, without leaking reservations.
+Typecheck and the full **45-test pool SDK suite pass**. This increment changes
+tests/docs only; the prior 70 order/solver and VM evidence remains historical.
+
+Further continuation: `pool-sdk/src/review.ts` now reconstructs the supported
+layout from explicit intent/policy and independent input snapshots, verifies exact
+unsigned prepared bytes and decodes the action. Frozen disclosures cover asset
+identity, recipients, token/LP output amounts, fees, occupied capacity, permanent
+backing and previous/next accounting. Independent transaction copies, signature-only
+integrity checks and expiry/freshness checks are exposed. This reuses the existing
+model/builder, not an independent validator or RPC trust proof. Two new regressions
+test mutation, forged builder summaries, expiry/cancellation/stale inputs; the
+selector lifecycle also exercises transition reviews. Typecheck, all **47 pool SDK
+tests and 70 existing SDK/solver tests pass**. No VM rerun was needed for this
+SDK-only increment; no live operation or commit occurred.
+
+Next: bind review to the resolved JoyID session and implement offline-tested
+signing orchestration and durable submission/recovery. The review module does not
+itself check JoyID identity or request a signature. Include expiry during awaits,
+late wallet results, refusal and account/network changes in orchestration tests.
+
+Approval boundary encountered in subsequent continuation: the automatic reviewer
+rejected adding a `signOnlyTransaction` wrapper because that introduces a real
+wallet-signing capability, despite the intended mock-only tests. Read-only checking
+confirmed the rejected patch did not land. Do not bypass this rejection. Ask the
+user to approve implementing the signing capability with mock-only execution;
+funded/live signing, user-key access and broadcasts remain separately prohibited.
+No new tests were run in that continuation and no signing method was invoked.
+Safe parallel preparation while signing approval is pending: removed the pool
+model's `node:util` runtime dependency using strict expected-record comparison.
+Parity tests cover extra/missing keys, symbols, prototypes, numeric types and
+cycles. Replaced read transport's Buffer concatenation with Uint8Array/TextDecoder.
+The public SDK now bundles for browsers and initializes/runs a mocked read without
+Buffer/process/require in a JS realm. This smoke runs in the existing pool SDK CI
+command; it is not actual browser UI or wallet acceptance. Typecheck, 14 model
+tests, 48 pool SDK tests and 70 existing SDK/solver tests pass. Signing remains
+unimplemented and approval remains unanswered; no wallet/key access occurred.
+Do not present this as completed wallet support.
+Further safe supporting work: added `scripts/check-pool-identity.py` with pinned
+42,176-byte/SHA256/Data1 expectations and `scripts/test-pool-identity.py` negative
+regressions (modified, truncated, empty, appended, missing binaries). Core CI calls
+both. `check-reproducible.sh` now builds both contracts in each of two disposable
+target directories, compares bytes and verifies both identities. Full local run
+passed; both contract hashes remain unchanged. Two verifier tests and shell syntax
+checks passed. Hosted execution is not claimed for uncommitted workflow changes.
+Signing approval is still unanswered; no signing implementation was retried.
+Browser CI continuation: added an isolated workflow job installing Chromium from
+the pinned Playwright package. The config now manages its own local server and
+uses bundled Chromium in CI (local CHROME_BIN remains supported). Shared test RPC
+fixtures supply headers/indexer/empty history; existing populated-book and activity
+routes override with fallback. Unhandled external requests fail and service workers
+are blocked. All eight browser regressions and typecheck passed locally. These are
+now explicitly offline regressions, not renewed live testnet acceptance. No real
+wallet signing occurred. Hosted CI still requires publication and a recorded run.
+Live dependencies/economic policy/fee-work budget are still unapproved. All later
+readiness gates remain open; earlier stopping points below are historical.
+
+Solver storage continuation: added Node-only `solver/src/journal.ts` (not exported
+through the browser-facing SDK). Atomic same-directory snapshot replacement with
+file/directory fsync, explicit network/account scope, canonical byte/hash/input-key
+validation, single-writer lock, independent reads and fail-closed write errors.
+No RPC or signing methods. `solver/README.md` records limits and operator recovery.
+Runner remains in-memory: next solver step is exact signed-byte pre-send persistence
+and startup/reservation/reorg reconciliation. The existing SDK pre-send hook only
+passes a hash; do not journal unsigned builder bytes as signed transactions.
+Signing-capability approval remains unanswered and its rejected patch was not retried.
+Storage validation: all 73 SDK/solver tests pass, including persisted byte/scope
+checks, competing writers, corruption/interrupted-write obstacles and abrupt child
+process exit with explicit test-only lock recovery. This proves the storage layer,
+not integrated solver restart or ambiguous-send recovery.
 
 ### Distinct-owner milestone commit (2026-10-09)
 

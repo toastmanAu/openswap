@@ -1,8 +1,10 @@
 # Draft pool SDK and unsigned CLI
 
 Isolated, Node-oriented prototype for the [pool validator](../contracts/openswap-pool/README.md).
-No deployment, signer, private-key loading, transaction submission, generic coin
-selection, frontend integration or mainnet defaults. Existing order SDK behavior
+No deployment, signer orchestration, private-key loading, transaction submission,
+generic coin selection, frontend integration or mainnet defaults. An explicit
+JoyID-compatible witness layout is implemented and tested with offline connector
+preparation; that is not live JoyID acceptance. Existing order SDK behavior
 and deployed order binary are unchanged. Not independently audited.
 
 ## Verify locally
@@ -32,7 +34,8 @@ Import from `pool-sdk/src/index.ts` using the repository's pinned CCC version.
 - `buildCreate` / `buildTransition`: synchronous, offline **unsigned** builders
   for creation, exact-input swaps in either direction, deposit and withdrawal.
 - `assertIntegrity`: pins raw fields and all witness positions except replacement
-  of the designated 65-byte wallet signature. Sparse/inherited slots, invalid
+  of the designated wallet lock field (65-byte secp by default; bounded JoyID
+  replacement with the explicit profile below). Sparse/inherited slots, invalid
   bytes, changed action fields and changed witness layouts reject. Optional CCC
   input caches are checked against isolated reviewed input snapshots: any supplied
   `cellOutput` or `outputData` must match exactly. Either cache may be absent
@@ -42,7 +45,7 @@ Import from `pool-sdk/src/index.ts` using the repository's pinned CCC version.
   before signing; freshness is not an atomic snapshot or an input reservation.
   Integrity is checked before and after RPC awaits. Pass a wallet-prepared copy
   as `assertFresh(client, options, candidate)` to check that exact transaction;
-  only its designated 65-byte signature may differ.
+  only its designated, profile-bounded wallet lock field may differ.
 
 Cached input metadata is advisory, not signed transaction data. Honest or absent
 caches are supported; false capacity, lock, type or data caches reject before
@@ -62,8 +65,39 @@ Every funding cell must belong to the one supplied wallet lock. Supported fundin
 is empty-data plain CKB, exact-profile xUDT, and that pool's LP token. No foreign
 types, mixed signing groups, duplicate inputs or xUDT issuer-mode funding.
 Builders use all supplied funding cells and return surplus assets to explicit
-change locks. They do not search wallets, merge other signing groups, or support
-JoyID/ACP/custom witness layouts. This is a 65-byte secp-compatible signing shape.
+change locks. They do not search wallets or merge signing groups. The default
+is the unchanged 65-byte secp-compatible signing shape; ACP and arbitrary custom
+witness layouts are not supported.
+
+### Explicit JoyID layout (offline integration in progress)
+
+Set `wallet.witness = {kind: 'joyid', outputType: resolvedSubkeyProof}`; omit
+`outputType` for a primary-key fixture. Resolve and validate all required wallet
+dependencies and any account-specific proof **before** building/reviewing. This
+low-level builder does not authenticate a caller-supplied proof or credential.
+The adapter that resolves proof/dependencies and binds the connected account is
+still pending; do not pass an arbitrary proof as if it were verified.
+
+The profile reserves 1,000 wallet lock bytes, matching installed CCC JoyID 1.2.3
+preparation. `assertIntegrity` permits a 1..1,000-byte replacement only in that
+lock field; all other fields remain pinned. It checks shape/integrity, not
+cryptographic signature validity (the same distinction applies to secp). Proof
+bytes are capped at 3,000; larger credentials fail closed rather than underprice
+the transaction. Actual shorter signatures retain the explicitly reviewed fee;
+there is no automatic signed-transaction repricing.
+
+JoyID genesis puts the minted LP receipt at output 0, state at 1, X/Y reserves
+at 2/3, and the create action in witness 1 `outputType`. Wallet witness 0 can
+therefore carry a subkey proof without colliding with the action. Pool ID includes
+state output index 1; `built.stateOutputIndex` reports the layout. One funding
+input needs two witnesses. Normal transitions retain state output 0 and first
+wallet input 3. The underlying contract/ABI is unchanged.
+
+Tests call the actual installed connector's `prepareTransaction` with mocked
+connections/dependency reads and a pre-supplied synthetic proof. Separate VM tests
+validate this layout with real secp/xUDT, including full withdrawal and re-entry.
+Neither proves JoyID/WebAuthn authentication, aggregator proof validity or live
+wallet compatibility. See the [integration checklist](../docs/research/POOL_INTEGRATION_PLAN.md).
 
 All CKB/Y/LP recipients, change lock, fee rate (shannons per 1,000 bytes), fee cap
 (shannons), and positive operation minima are explicit. Token/LP receipt cells
@@ -73,12 +107,13 @@ as `ckbReceiptTopUp`; it is not extra pool proceeds. A separate plain CKB change
 cell is mandatory. Insufficient storage, dust change or an excessive fee fails;
 no dust is silently absorbed as fees. Permanent Bs/Bx/By backing is preserved.
 
-Genesis uses first funding input + state output index 0 to derive pool ID. State,
+Default secp genesis uses first funding input + state output index 0 to derive pool ID. State,
 X and Y outputs are indexes 0, 1 and 2. Normal inputs start with those exact three
 pool cells, followed by wallet funding; the wallet witness index is therefore 3
-(0 for creation). The action is outputType at witness 0 for genesis, inputType
+(0 for creation). For this default layout the action is outputType at witness 0 for genesis, inputType
 at witness 0 otherwise. All input witness positions are present and dependencies
-are deduplicated. Fee estimation includes the full 65-byte signature placeholder.
+are deduplicated. Fee estimation includes the full 65-byte signature placeholder
+(1,000 bytes and any pinned proof for the explicit JoyID profile).
 
 ### Signature caveat
 
@@ -192,8 +227,52 @@ transaction's output OutPoints and uses real xUDT and public-fixture secp signin
 All four operation variants are required to appear. These tests run in the
 existing SDK and pool VM CI gates; they are not exhaustive fuzzing or a security
 audit. A coherent dishonest node can still fabricate its chain view, and a cell
-can be spent/reorged after the last read. No input reservation or live-network
-reorg safety guarantee is claimed.
+can be spent/reorged after the last read. No live-network reorg safety guarantee
+is claimed.
+
+### Offline JoyID resolution and funding
+
+`resolveJoyIdWallet` pins an explicit direct-code manifest and bounded CoTA state,
+resolves subkey proof before connector preparation, and checks account/key/client,
+genesis and caller-managed session revision. Increment that revision on every
+account/network/disconnect event, including switch-back. `joyIdProofSource` uses
+an explicit HTTP endpoint, a 16 KiB response cap and cancellation/deadlines.
+Proof syntax checks and mock preparation are not cryptographic authentication.
+
+`fundPoolTransaction` accepts create/transition intent and requires a shared
+`PoolFundingReservations` instance. Defaults bound discovery to 1,000 candidates,
+20 pages of 50, with protocol input limits. It selects exact assets then largest
+eligible capacity, checks live snapshots and retries only typed funding shortages;
+fee/policy/malformed errors stop selection. Reservations include pool inputs and
+are process-local, not durable. Release when abandoning an unsigned review or
+after definitive reconciliation, never merely after a lost submission reply.
+`reviewPoolTransaction` reconstructs the supported transaction from explicit
+intent, wallet policy and independently captured input cells, then requires exact
+unsigned prepared bytes. Do not source these inputs from untrusted candidate
+caches. It decodes the action and freezes identity, recipients, output amounts,
+storage, before/after accounting, fee and minima disclosures. Copies cannot mutate
+the review. Expiry is bounded to five minutes; integrity/freshness methods enforce
+expiry before and after asynchronous checks. This reuses the accounting/builders,
+not an independent consensus implementation, and cannot authenticate RPC data.
+Use `resolved.bindReview(review)` to attach captured JoyID identity and obtain a
+one-shot `sign()` method. Display both identity and review summary and invoke sign
+only after explicit user approval. The method checks session, dependencies and
+input freshness around signing and rejects expired reviews, mutations and unsigned
+placeholders. Cancellation discards late results; it cannot close a wallet popup.
+Mock-only signing evidence is not proof of real JoyID authorization. Durable
+submission recovery remains required before exposing this as a complete flow.
+
+`PoolSubmissionRecovery` performs bounded read-only startup reconciliation against
+a scoped journal. Use a fresh shared reservation registry before new selections.
+It reserves recorded inputs before status reads and reports live-input counts.
+Missing status, outages, reorgs and rejection do not automatically release inputs
+or rebroadcast. Pool pre-send wiring and explicit operator resolution remain open.
+Use separate journal directories for solver and pool flows.
+
+The public entry point has an esbuild browser-target smoke test and initializes
+with browser primitives in an isolated JS realm, without Node globals or
+polyfills. Its read transport uses Uint8Array/TextDecoder. This regression runs
+with `npm run test:pool-sdk`; it does not replace actual browser/wallet acceptance.
 
 The [resource report](../docs/research/POOL_RESOURCE_ENVELOPE.md) adds four
 fee/reserve/share regimes with full withdrawal/re-entry (56 more steps; 88 total)

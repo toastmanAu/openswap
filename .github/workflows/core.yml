@@ -1,6 +1,19 @@
 name: Contract core
 on: [push, pull_request]
 jobs:
+  browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Offline order browser regressions (no wallet credentials)
+        run: npm run test:frontend
   pool-arithmetic:
     runs-on: ubuntu-24.04
     steps:
@@ -38,6 +51,10 @@ jobs:
           cargo test --locked -p openswap-pool-tests -- --nocapture
       - name: Match immutable testnet binary
         run: python3 scripts/check-contract-identity.py
+      - name: Match pinned pool artifact (not deployment approval)
+        run: |
+          python3 scripts/check-pool-identity.py
+          python3 scripts/test-pool-identity.py
       - name: Rebuild in independent target directories
         run: ./scripts/check-reproducible.sh
   sdk:

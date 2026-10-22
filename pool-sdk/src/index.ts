@@ -2,3 +2,8 @@ export * from './codec.js';
 export * from './pools.js';
 export * from './builders.js';
 export * from './transport.js';
+export * from './joyid.js';
+export * from './joyid-proof.js';
+export * from './funding.js';
+export * from './review.js';
+export * from './recovery.js';

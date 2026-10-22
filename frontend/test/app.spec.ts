@@ -1,5 +1,5 @@
-import {test,expect} from '@playwright/test';
-test('live testnet page scans and opens the CCC wallet selector',async({page})=>{
+import {test,expect} from './fixtures.js';
+test('offline testnet page scans and opens the CCC wallet selector',async({page})=>{
  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
  await page.goto('/');await expect(page.locator('.brand img')).toBeVisible();expect(await page.locator('.brand img').evaluate((img:HTMLImageElement)=>img.complete&&img.naturalWidth>0)).toBe(true);await expect(page.getByRole('heading',{name:'Swap',exact:true})).toBeVisible();
  await expect(page.locator('#scan-status')).toContainText('supported live orders',{timeout:40000});

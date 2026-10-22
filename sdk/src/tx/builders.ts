@@ -136,7 +136,7 @@ export async function cancelOrders(context: BuildContext, points: ccc.OutPointLi
   }, cells.length);
 }
 /** Sign only after rechecking the raw layout, network and every input's liveness. */
-export async function submit(built: BuiltTransaction, signer: ccc.Signer, options: { beforeBroadcast?: (hash: ccc.Hex) => void } = {}): Promise<ccc.Hex> {
+export async function submit(built: BuiltTransaction, signer: ccc.Signer, options: { beforeBroadcast?: (hash: ccc.Hex, signedBytes: ccc.Hex) => unknown } = {}): Promise<ccc.Hex> {
   await assertNetwork(signer.client, built.deployment);
   built.assertLayout();
   for (const input of built.tx.inputs) {
@@ -147,9 +147,12 @@ export async function submit(built: BuiltTransaction, signer: ccc.Signer, option
   }
   const prepared = await signer.prepareTransaction(built.tx.clone()); built.assertLayout(prepared);
   const rawHash = prepared.hash();
-  const signed = await signer.signOnlyTransaction(prepared);
+  const signed = (await signer.signOnlyTransaction(prepared)).clone();
   built.assertLayout(signed);
   if (signed.hash() !== rawHash) throw new Error('Wallet modified transaction contents');
-  options.beforeBroadcast?.(signed.hash());
+  // Await persistence of exact immutable bytes before any send. Clone above
+  // prevents wallet-retained references from changing the journaled transaction.
+  await options.beforeBroadcast?.(signed.hash(),ccc.hexFrom(signed.toBytes()));
+  built.assertLayout(signed);
   return signer.client.sendTransaction(signed);
 }

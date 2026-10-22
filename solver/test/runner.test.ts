@@ -1,8 +1,19 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ccc } from '@ckb-ccc/core';
-import { ReferenceSolver } from '../src/runner.js';
-import { setup, a, b } from '../../sdk/test/fixture.js';
+import { ReferenceSolver as BaseSolver } from '../src/runner.js';
+import { setup, a, b, owner } from '../../sdk/test/fixture.js';
+import type {SubmissionRecord} from '../src/journal.js';
+import {FileSubmissionJournal} from '../src/journal.js';
+import {mkdtempSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+class ReferenceSolver extends BaseSolver {
+ constructor(context:ConstructorParameters<typeof BaseSolver>[0],emit:ConstructorParameters<typeof BaseSolver>[1]=()=>{},options:ConstructorParameters<typeof BaseSolver>[2]={}){
+  const rows=new Map<ccc.Hex,SubmissionRecord>();
+  super(context,emit,{journal:{getScope:()=>({genesisHash:context.deployment.genesisHash,accountLockHash:owner.hash()}),list:()=>structuredClone([...rows.values()]),put:row=>{rows.set(row.hash,structuredClone(row));}},...options});
+ }
+}
 import { udt } from '../../sdk/src/index.js';
 function market() {
   const f=setup(); f.fund();
@@ -11,21 +22,43 @@ function market() {
   f.client.findCells=async function* () {yield left; yield right;};
   return f;
 }
+test('file-backed runner restores lost-reply reservations and tracks reorg without another send',async()=>{
+ const f=market(),dir=mkdtempSync(join(tmpdir(),'solver-runner-'));
+ const scope={genesisHash:f.context.deployment.genesisHash,accountLockHash:owner.hash()};
+ let journal=new FileSubmissionJournal(dir,scope),sends=0;
+ try{
+  f.client.sendTransaction=async input=>{sends++;assert.equal(journal.list()[0]!.transaction,ccc.hexFrom(ccc.Transaction.from(input).toBytes()));throw new Error('reply lost');};
+  await assert.rejects(new BaseSolver(f.context,undefined,{journal}).tick(true),/reply lost/);
+  journal.close();journal=new FileSubmissionJournal(dir,scope);
+  const restarted=new BaseSolver(f.context,undefined,{journal});
+  for(const status of [undefined,'pending','committed',undefined,'rejected']){
+   f.client.getTransactionNoCache=async()=>status?{status} as ccc.ClientTransactionResponse:undefined;
+   assert.equal(await restarted.tick(true),undefined);assert.equal(sends,1);
+  }
+  assert.equal(journal.list()[0]!.status,'rejected');
+ }finally{journal.close();rmSync(dir,{recursive:true,force:true});}
+});
+test('missing journal and persistence failure prevent solver send',async()=>{
+ const f=market();let sends=0;f.client.sendTransaction=async()=>{sends++;throw new Error('unexpected send');};
+ await assert.rejects(new BaseSolver(f.context).tick(true),/requires.*journal/);assert.equal(f.signed(),false);
+ const journal={getScope:()=>({genesisHash:f.context.deployment.genesisHash,accountLockHash:owner.hash()}),list:()=>[],put:()=>{throw new Error('disk full');}};
+ await assert.rejects(new BaseSolver(f.context,undefined,{journal}).tick(true),/disk full/);assert.equal(sends,0);
+});
 test('dry-run scans and builds without signing or broadcasting',async()=>{
   const f=market(); let sent=0;
   f.client.sendTransaction=async()=>{sent++;throw new Error('Unexpected broadcast');};
   assert(await new ReferenceSolver(f.context).tick());
   assert.equal(f.signed(),false); assert.equal(sent,0);
 });
-test('pending settlements reserve orders; rejection releases them for retry',async()=>{
+test('pending and rejected settlements remain reserved until deliberate reconciliation',async()=>{
   const f=market(); let sent=0; let rejected=false; const events:string[]=[];
   f.client.sendTransaction=async tx=>{sent++;return ccc.Transaction.from(tx).hash();};
   f.client.getTransactionNoCache=async()=>({status:rejected?'rejected':'pending'}) as ccc.ClientTransactionResponse;
   const solver=new ReferenceSolver(f.context,event=>events.push(event));
   assert(await solver.tick(true)); assert.equal(sent,1);
   assert.equal(await solver.tick(true),undefined); assert.equal(sent,1);
-  rejected=true; assert(await solver.tick(true)); assert.equal(sent,2);
-  assert(events.includes('settlement_conflict'));
+  rejected=true; assert.equal(await solver.tick(true),undefined); assert.equal(sent,1);
+  assert(events.includes('settlement_rejected'));
 });
 test('competing solvers race; only one broadcast wins and the loser can rescan',async()=>{
   const f=market(); let arrivals=0,accepted=false;
@@ -56,14 +89,14 @@ test('explicit order filter prevents selecting outside the requested scope',asyn
  const solver=new ReferenceSolver(f.context,event=>events.push(event),{acceptOrder:()=>false});
  assert.equal(await solver.tick(true),undefined);assert.equal(f.signed(),false);assert(!events.includes('candidate_bundle'));
 });
-test('an unknown node status releases reservations despite cached sent status',async()=>{
+test('an unknown node status retains reservations and ignores cached sent status',async()=>{
  const f=market();const events:string[]=[];let cachedReads=0;
  f.client.sendTransaction=async tx=>ccc.Transaction.from(tx).hash();
  f.client.getTransactionNoCache=async()=>undefined;
  f.client.getTransaction=async()=>{cachedReads++;return {status:'sent'} as ccc.ClientTransactionResponse;};
  const solver=new ReferenceSolver(f.context,event=>events.push(event));
- assert(await solver.tick(true));assert(await solver.tick());
- assert.equal(cachedReads,0);assert(events.includes('settlement_conflict'));
+ assert(await solver.tick(true));assert.equal(await solver.tick(),undefined);
+ assert.equal(cachedReads,0);assert(events.includes('settlement_unknown'));
 });
 
 test('accepted broadcast with a lost reply stays reserved through status outages',async()=>{

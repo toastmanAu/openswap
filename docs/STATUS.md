@@ -1,5 +1,15 @@
 # Implementation status
 
+## Current readiness (2026-10-12)
+
+Use [READINESS.md](READINESS.md) for the current staged checklist. Orders have
+recorded testnet app/wallet acceptance; pools have an implemented validator and
+unsigned SDK but no approved deployment or live wallet integration. Pool baseline
+`5d08496` includes 23 VM tests, 24 SDK tests, 88 chained transitions and 77
+authorization-negative cases. The user selected JoyID-first integration; see
+[the plan](research/POOL_INTEGRATION_PLAN.md). Sections below retain historical
+milestone evidence/counts and are not claims that newer pool work is absent.
+
 ## Isolated pool arithmetic and wire draft (2026-09-23)
 
 - Draft [pool wire format](research/POOL_WIRE_FORMAT.md): bounded state/args/action

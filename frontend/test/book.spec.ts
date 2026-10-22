@@ -1,4 +1,5 @@
-import {test,expect,type Page} from '@playwright/test';
+import type {Page} from '@playwright/test';
+import {test,expect} from './fixtures.js';
 import {ccc} from '@ckb-ccc/core';
 import {readFileSync} from 'node:fs';
 import {CKB,udt,estimateCapacity,writeLE,type Deployment} from '../../sdk/src/index.js';
@@ -10,7 +11,7 @@ async function fixtures(){const owned=ccc.ClientPublicTestnet.open({urls:['https
  const cells=Array.from({length:120},(_,i)=>{const cell=estimateCapacity(deployment,{ownerLock:owner,nonce:writeLE(BigInt(i+1),16),askAsset:udt(token),askAmount:BigInt(i+1)},CKB,10n).cell;return{out_point:{tx_hash:ccc.hexFrom(writeLE(BigInt(i+1),32)),index:'0x0'},output:{capacity:ccc.numToHex(cell.cellOutput.capacity),lock:script(cell.cellOutput.lock)},output_data:cell.outputData};});
  return[{...cells[0]!,out_point:{tx_hash:'0x'+'ff'.repeat(32),index:'0x0'},output:{...cells[0]!.output,lock:{...cells[0]!.output.lock,args:'0x'}}},...cells];
 }finally{await owned.dispose();}}
-async function mockBook(page:Page){const cells=await fixtures();await page.route('https://testnet.ckb.dev/**',async route=>{const body=route.request().postDataJSON();if(body?.method!=='get_cells')return route.continue();const start=body.params[3]?Number(BigInt(body.params[3])):0;const count=Number(BigInt(body.params[2]));await route.fulfill({json:{jsonrpc:'2.0',id:body.id,result:{objects:cells.slice(start,start+count),last_cursor:ccc.numToHex(start+count)}}});});}
+async function mockBook(page:Page){const cells=await fixtures();await page.route('https://testnet.ckb.dev/**',async route=>{const body=route.request().postDataJSON();if(body?.method!=='get_cells')return route.fallback();const start=body.params[3]?Number(BigInt(body.params[3])):0;const count=Number(BigInt(body.params[2]));await route.fulfill({json:{jsonrpc:'2.0',id:body.id,result:{objects:cells.slice(start,start+count),last_cursor:ccc.numToHex(start+count)}}});});}
 test('populated book sorts exact prices, skips malformed cells and pages lots',async({page})=>{
  await mockBook(page);await page.goto('/');await expect(page.locator('#scan-status')).toContainText('120 supported live orders · 1 malformed',{timeout:35000});
  await page.getByRole('button',{name:'Orders',exact:true}).click();await page.getByText('Full orderbook',{exact:true}).click();await expect(page.locator('#book tbody tr')).toHaveCount(50);await expect(page.locator('#book tbody tr').first()).toContainText('1/10');

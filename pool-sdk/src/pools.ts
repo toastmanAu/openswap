@@ -68,6 +68,19 @@ export async function readBounded<T>(read:()=>Promise<T>,options:ReadOptions={})
 export async function assertPoolNetwork(client:PoolClient,deployment:PoolDeployment,options:ReadOptions={}):Promise<void> {
  if((await readBounded(()=>client.getHeaderByNumberNoCache(0),options))?.hash!==deployment.genesisHash)throw new PoolReadError('NETWORK','Pool deployment/genesis mismatch');
 }
+/** Overall deadline for a bounded sequence of reads, not just each RPC await.
+ * Injected callbacks must honor the signal to cancel their underlying work. */
+export async function withPoolDeadline<T>(options:ReadOptions,work:(options:ReadOptions)=>Promise<T>):Promise<T> {
+ const timeoutMs=options.timeoutMs??15000;
+ if(!Number.isSafeInteger(timeoutMs)||timeoutMs<1||timeoutMs>60000)throw new Error('Invalid pool operation deadline');
+ options.signal?.throwIfAborted();
+ const controller=new AbortController(),abort=()=>controller.abort(options.signal?.reason);
+ options.signal?.addEventListener('abort',abort,{once:true});
+ const timer=setTimeout(()=>controller.abort(new Error('Pool operation deadline exceeded')),timeoutMs);
+ const bounded={signal:controller.signal,timeoutMs};
+ try{return await readBounded(()=>work(bounded),bounded);}
+ finally{clearTimeout(timer);options.signal?.removeEventListener('abort',abort);controller.abort();}
+}
 /** The prototype requires direct Data1 code deps, never caller-labelled dep groups. */
 export async function assertPoolDependencies(client:PoolClient,deployment:PoolDeployment,options:ReadOptions={}):Promise<void> {
  for(const [dependency,hash] of [[deployment.poolDep,deployment.codeHash],[deployment.tokenDep,XUDT_CODE_HASH]] as const){
