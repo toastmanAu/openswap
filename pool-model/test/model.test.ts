@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {isDeepStrictEqual} from 'node:util';
-import {createPool,swap,deposit,withdraw,transition,validateTransition,validateState,capacities,circulatingShares,sqrtFloor,ModelError,U64_MAX,U256_MAX,RESERVE_MAX,FEE_DENOMINATOR,type Parameters,type PoolState,type Operation,type Result} from '../src/model.js';
+import {createPool,swapExactOut,swap,deposit,withdraw,transition,validateTransition,validateState,capacities,circulatingShares,sqrtFloor,ModelError,U64_MAX,U256_MAX,RESERVE_MAX,FEE_DENOMINATOR,type Parameters,type PoolState,type Operation,type Result} from '../src/model.js';
 const p:Parameters={feeBps:30n,lockedShares:1000n,backing:{state:20000000000n,ckb:10000000000n,token:20000000000n}};
 const initial=()=>createPool(p,1_000_000n,4_000_000n,1n).next;
 test('browser-safe result comparison preserves strict record-shape behavior',()=>{
@@ -26,6 +26,22 @@ function conserved(before:PoolState,r:Result){
  assert.deepEqual(r.next.backing,before.backing);assert.equal(r.next.lockedShares,before.lockedShares);assert.equal(r.next.feeBps,before.feeBps);
  validateState(r.next);
 }
+test('exact-output swap uses the minimal input that still delivers the target',()=>{
+ let seed=0x9e3779b97f4a7c15n;const next=(m:bigint)=>{seed^=seed<<13n;seed&=(1n<<64n)-1n;seed^=seed>>7n;seed^=seed<<17n;seed&=(1n<<64n)-1n;return seed%m;};
+ for(let i=0;i<2000;i++){
+  const s=createPool({...p,feeBps:next(500n)},1000n+next(10n**15n),1000n+next(10n**15n),1n).next;
+  for(const direction of ['xToY','yToX'] as const){
+   const output=direction==='xToY'?s.y:s.x,target=1n+next(output-1n);
+   let r:Result;try{r=swapExactOut(s,direction,target);}catch(e){assert.ok(e instanceof ModelError&&['RANGE','OVERFLOW'].includes(e.code));continue;}
+   const paid=direction==='xToY'?r.flows.paidX:r.flows.paidY,got=direction==='xToY'?r.flows.receivedY:r.flows.receivedX;
+   assert.ok(got>=target);conserved(s,r);
+   // One unit less input must fall short of the target.
+   if(paid>1n)assert.throws(()=>swap(s,direction,paid-1n,target),error('SLIPPAGE'));
+  }
+ }
+ const s=initial();
+ assert.throws(()=>swapExactOut(s,'xToY',s.y),error('RANGE'));assert.throws(()=>swapExactOut(s,'xToY',0n),error('RANGE'));
+});
 test('genesis has explicit virtual locked shares and excludes storage from reserves',()=>{
  const r=createPool(p,1_000_000n,4_000_000n,1_999_000n);
  assert.equal(r.next.totalShares,2_000_000n);assert.equal(r.flows.mintedShares,1_999_000n);

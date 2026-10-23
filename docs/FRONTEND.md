@@ -263,6 +263,34 @@ Rules:
   and its reservations are released. Abandoning a never-committed row is still an
   explicit operator step, not a UI action.
 
+### Order/pool routing (best single venue)
+
+When the pool manifest loads, each listed pool whose token metadata matches the
+live token is registered before the order scan:
+- the token joins the Swap tab's asset list, with its symbol and decimals;
+- the order SDK accepts it through `PinnedXudtResolver`, which uses the pinned
+  Data1 xUDT code hash and the manifest's token dependency. The order lock
+  compares assets by type hash only, so the token can be ordered and filled
+  like any supported UDT.
+
+For a Swap-tab request (exact amount out, optional maximum payment), the tab
+quotes two venues:
+- the order book (whole lots, as before);
+- every listed pool for that CKB/token pair. `swapExactOut` gives the minimal
+  input that still delivers at least the amount requested.
+
+Both quotes are shown. The lower input wins. A tie goes to the larger output,
+then to orders. A pool quote is ineligible when it exceeds the maximum payment
+or the connected wallet is not JoyID.
+
+On Review, orders and pools are reloaded and the venue is chosen again. A pool
+route goes through the normal pool review with `minOut` set to the requested
+amount, so the receipt can only meet or exceed the request. Order routes are
+unchanged.
+
+A single trade is never split across orders and a pool. Splitting would need a
+combined builder and review, and is a separate, untracked design.
+
 `frontend/src/pools/journal.ts` is a localStorage-backed `ArchivableSubmissionJournal`
 with the solver journal's record validation. A write from another tab poisons
 the instance; reload and reconcile. Clearing site data loses it; the node remains

@@ -91,6 +91,17 @@ export function swap(s:PoolState,direction:'xToY'|'yToX',amountIn:bigint,minOut:
   flows:flows(forward?{paidX:amountIn,receivedY:amountOut}:{paidY:amountIn,receivedX:amountOut}),
  };
 }
+/** Minimal-input swap delivering at least `amountOut` (exact-output quoting for
+ * routing). Since floor(n/d)>=T iff n>=T*d, out>=T iff a*(D-f)*(O-T)>=T*I*D, so
+ * a=ceil(T*I*D/((D-f)*(O-T))) is exact; the result is the ordinary forward swap
+ * with minOut=amountOut, so every validator bound still applies. */
+export function swapExactOut(s:PoolState,direction:'xToY'|'yToX',amountOut:bigint):Result {
+ validateState(s);requireCondition(direction==='xToY'||direction==='yToX','OPERATION');
+ const forward=direction==='xToY',input=forward?s.x:s.y,output=forward?s.y:s.x;
+ integer(amountOut,1n,forward?RESERVE_MAX:maxCkbReserve(s));requireCondition(amountOut<output,'RANGE');
+ const amountIn=ceilDiv(mul(mul(amountOut,input),FEE_DENOMINATOR),mul(FEE_DENOMINATOR-s.feeBps,output-amountOut));
+ return swap(s,direction,amountIn,amountOut);
+}
 export function deposit(s:PoolState,maxX:bigint,maxY:bigint,minShares:bigint):Result {
  validateState(s);integer(maxX,1n,maxCkbReserve(s));integer(maxY,1n,RESERVE_MAX);integer(minShares,1n,SHARE_MAX);
  const byX=mul(maxX,s.totalShares)/s.x,byY=mul(maxY,s.totalShares)/s.y;

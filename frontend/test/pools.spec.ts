@@ -262,6 +262,29 @@ test('remove liquidity shows the LP position, fills a share of it and estimates 
  expect(mock.sent).toEqual([]);
 });
 
+test('the Swap tab compares venues and routes to the pool through the pool review',async({page})=>{
+ const mock=await mockPools(page);
+ await page.goto('/');await expect(page.locator('#scan-status')).toContainText('supported live orders',{timeout:35000});
+ // The pool token joins the Swap tab with its manifest symbol and decimals.
+ await expect(page.locator(`#base option[value="${token.hash()}"]`)).toHaveText('TEST');
+ await page.locator('#quote').selectOption('ckb');await page.locator('#base').selectOption(token.hash());
+ await page.locator('#swap-output').fill('10');
+ const status=page.locator('#quote-status');
+ await expect(status).toContainText(/Best route: pool\. Receive 10(\.\d+)? TEST for [\d.]+ CKB/);
+ await expect(status).toContainText('Order book: no whole-lot route for this amount');
+ await expect(page.locator('#pay-estimate')).not.toHaveText('—');
+ // A budget below the pool's input makes it ineligible, with the reason shown.
+ await page.locator('summary',{hasText:'Swap options'}).click();await page.locator('#swap-budget').fill('0.001');await expect(status).toContainText('(over your maximum payment)');
+ await page.locator('#swap-budget').fill('');
+ await connect(page);await page.locator('#swap-output').fill('10');
+ await page.getByRole('button',{name:'Review swap'}).click();
+ await expect(page.locator('#pool-review')).toBeVisible({timeout:30000});
+ for(const line of ['Routed swap via pool','You receive (exact): 0 CKB · 10.','Minimum accepted: 10 TEST'])await expect(page.locator('#pool-review-text')).toContainText(line);
+ expect(mock.sent).toEqual([]);
+ await page.getByRole('button',{name:'Approve and sign'}).click();
+ await expect(page.locator('#pool-review')).toBeHidden();expect(mock.sent).toHaveLength(1);
+});
+
 test('a malformed manifest is an error, not a silent "not deployed"',async({page})=>{
  await page.route('**/pool-manifest.json',route=>route.fulfill({json:{version:1,network:'testnet',extra:true}}));
  await openPools(page);

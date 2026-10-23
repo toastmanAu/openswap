@@ -1,13 +1,15 @@
 import {ccc} from '@ckb-ccc/core';
 import {scanPools,resolveJoyIdWallet,joyIdProofSource,fundPoolTransaction,reviewPoolTransaction,PoolFundingReservations,PoolSubmissionRecovery,
  type PoolSnapshot,type PoolIntent,type PoolJoyIdSigner,type FundedPoolTransaction,type PoolTransactionReview,type PoolSubmitClient} from '../../../pool-sdk/src/index.js';
-import {transition,type Operation} from '../../../pool-model/src/model.js';
+import {transition,swapExactOut,type Operation} from '../../../pool-model/src/model.js';
 import {loadPoolManifest,type PoolManifest,type PoolTokenDisplay} from './manifest.js';
 import {BrowserSubmissionJournal} from './journal.js';
 import {parseUnits,formatUnits} from '../amounts.js';
 import {explainError} from '../errors.js';
 import {parseAmount} from '../../../sdk/src/codec.js';
 
+export interface PoolMarket {poolId:ccc.Hex;token:ccc.Script;symbol:string;decimals:number}
+export interface PoolRoute {poolId:ccc.Hex;direction:'xToY'|'yToX';amountIn:bigint;amountOut:bigint;checkedAt:number}
 export interface PoolEnv {client():ccc.Client;signer():ccc.Signer|undefined;epoch():number;run(fn:()=>Promise<void>):void}
 const el=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id)! as T;
 const text=(id:string,message:string)=>{el(id).textContent=message;};
@@ -174,14 +176,23 @@ export function createPoolUi(env:PoolEnv){
  }
  async function currentPool(poolId:string){await refresh();const pool=snapshots.find(p=>p.poolId===poolId);if(!pool)throw new Error('Pool is no longer live; refresh and choose again');return pool;}
 
- async function ensureSession():Promise<Session> {
+ /** Single-flight per connection: concurrent callers (tab open, connect, review)
+  * share one session instead of racing to replace each other's. */
+ let opening:{key:unknown[];promise:Promise<Session>}|undefined;
+ function ensureSession():Promise<Session> {
   const signer=env.signer(),epoch=env.epoch(),client=env.client();
-  if(!signer)throw new Error('Connect a wallet first');
-  if(!manifest)throw new Error('Pools are not deployed on this network yet');
-  if(session&&session.signer===signer&&session.epoch===epoch&&session.client===client)return session;
+  if(!signer)return Promise.reject(new Error('Connect a wallet first'));
+  if(!manifest)return Promise.reject(new Error('Pools are not deployed on this network yet'));
+  if(session&&session.signer===signer&&session.epoch===epoch&&session.client===client)return Promise.resolve(session);
+  const key=[signer,epoch,client];
+  if(opening&&opening.key.every((v,i)=>v===key[i]))return opening.promise;
+  const promise=openSession(signer,epoch,client).finally(()=>{if(opening?.promise===promise)opening=undefined;});
+  opening={key,promise};return promise;
+ }
+ async function openSession(signer:ccc.Signer,epoch:number,client:ccc.Client):Promise<Session> {
   const lock=(await signer.getRecommendedAddressObj()).script;
   if(env.signer()!==signer||env.epoch()!==epoch)throw new Error('Wallet changed; try again');
-  const scope={genesisHash:manifest.deployment.genesisHash,accountLockHash:lock.hash()};
+  const scope={genesisHash:manifest!.deployment.genesisHash,accountLockHash:lock.hash()};
   const journal=new BrowserSubmissionJournal(localStorage,scope),reservations=new PoolFundingReservations();
   const recovery=new PoolSubmissionRecovery(journal,reservations,scope);
   // Restores reservations for every recorded submission before any new funding.
@@ -350,8 +361,36 @@ export function createPoolUi(env:PoolEnv){
  el('pool-review').addEventListener('cancel',()=>invalidate());
  el('pool-recheck').onclick=()=>act('Rechecking submissions…',async()=>{const s=await ensureSession();await recheck(s);scheduleRecheck();text('pool-action-status','');});
 
+ /** Live pools whose token display metadata matched the live token (checked in refresh). */
+ function markets():PoolMarket[]{
+  return snapshots.flatMap(pool=>{const t=manifest?.pools.find(p=>p.poolId===pool.poolId)?.token;
+   return t?[{poolId:pool.poolId,token:pool.token.clone(),symbol:t.symbol,decimals:t.decimals}]:[];});
+ }
+ /** Cheapest listed pool delivering at least `amountOut`, from the last loaded state. */
+ function routeQuote(tokenHash:ccc.Hex,payCkb:boolean,amountOut:bigint):PoolRoute|undefined {
+  let best:PoolRoute|undefined;
+  for(const market of markets()){
+   if(market.token.hash()!==tokenHash)continue;
+   const pool=snapshots.find(p=>p.poolId===market.poolId)!,direction=payCkb?'xToY' as const:'yToX' as const;
+   let r;try{r=swapExactOut(pool.accounting,direction,amountOut);}catch{continue;}
+   const route={poolId:pool.poolId,direction,amountIn:payCkb?r.flows.paidX:r.flows.paidY,amountOut:payCkb?r.flows.receivedY:r.flows.receivedX,checkedAt};
+   if(!best||route.amountIn<best.amountIn)best=route;
+  }
+  return best;
+ }
+ /** Prepares the routed swap from live state through the normal pool review:
+  * exact output (minOut = requested), input bounded by the caller's maximum. */
+ function prepareRouted(route:Pick<PoolRoute,'poolId'|'direction'>,amountOut:bigint,maxAmountIn:bigint){
+  return prepare('Routed swap via pool',async pool=>{
+   const r=swapExactOut(pool!.accounting,route.direction,amountOut),amountIn=route.direction==='xToY'?r.flows.paidX:r.flows.paidY;
+   if(amountIn>maxAmountIn)throw new Error('The pool now needs more than your maximum payment; quote again');
+   return {kind:'transition',pool:pool!,action:{kind:'swap',direction:route.direction,amountIn,minOut:amountOut}};
+  },route.poolId);
+ }
+
  return {
   show:()=>env.run(async()=>{await refresh();if(env.signer())await ensureSession();}),
+  load:refresh,markets,routeQuote,prepareRouted,tokenDep:()=>manifest?.deployment.tokenDep,
   invalidate,reset,
  };
 }

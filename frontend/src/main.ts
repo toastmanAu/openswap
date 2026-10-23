@@ -7,7 +7,8 @@ import {explainError} from './errors.js';
 import {capacityReview} from './review.js';
 import {isOwnOrder,assertExternalFill} from './ownership.js';
 import {readActivity,mergeActivity,fetchActivity,accountKey,type Activity} from './activity.js';
-import {createPoolUi} from './pools/ui.js';
+import {createPoolUi,type PoolRoute} from './pools/ui.js';
+import {XUDT_CODE_HASH} from '../../pool-sdk/src/codec.js';
 const deployment=deploymentJson as swap.Deployment;
 const el=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id)! as T;
 const value=(id:string)=>(el<HTMLInputElement>(id)).value;
@@ -30,6 +31,11 @@ function clearActivity(){historyGeneration++;el('activity-list').replaceChildren
 function renderActivityRows(rows:Activity[]){const root=el('activity-list');root.replaceChildren();for(const row of rows){const item=document.createElement('div');item.className='activity-row';const title=document.createElement('p');title.textContent=`${row.status.toUpperCase()} · ${row.summary.split('\n')[0]}`;const link=document.createElement('a');link.href=`https://pudge.explorer.nervos.org/transaction/${row.hash}`;link.target='_blank';link.rel='noopener noreferrer';link.textContent=`${row.hash.slice(0,18)}…${row.hash.slice(-8)}`;item.append(title,link);if(row.block){const block=document.createElement('small');block.textContent=` · Block ${row.block}`;item.append(block);}root.append(item);}}
 async function refreshActivity(){const selected=signer,locks=[...walletLocks],id=++historyGeneration;if(!selected||!locks.length){clearActivity();return;}renderActivityRows(activity.filter(r=>r.account===accountKey(locks)&&r.network===deployment.genesisHash).slice(-20).reverse());text('activity-status','Loading recent activity…');try{const rows=await fetchActivity(selected.client,locks,deployment.genesisHash,activity);if(id!==historyGeneration||selected!==signer)return;renderActivityRows(rows);for(const row of rows)if(activity.some(a=>a.hash===row.hash&&a.account===row.account))saveActivity(row);text('activity-status',rows.length?'Recent wallet transactions. Unknown means the node has not confirmed the transaction; it does not prove failure.':'No recent transactions found.');}catch(error){console.warn('Activity refresh failed',error);if(id===historyGeneration)text('activity-status','Activity unavailable. Your transaction hashes remain saved; try Refresh activity.');}}
 el('refresh-activity').onclick=()=>run(refreshActivity);
+/** Catalog profiles plus the pool token's pinned Data1 xUDT profile once the
+ * approved pool manifest is loaded, so the same token trades in both venues. */
+let poolTokenDep:ccc.CellDepLike|undefined;
+const tokenDecimals=new Map<string,number>();
+function assetResolver(c:ccc.Client):swap.AssetResolver{const base=new swap.CatalogAssetResolver(c);return poolTokenDep?new swap.PinnedXudtResolver(base,XUDT_CODE_HASH,poolTokenDep):base;}
 const poolUi=createPoolUi({client:()=>client,signer:()=>signer,epoch:()=>connectionEpoch,run});
 const assets=new Map<string,{label:string;asset:swap.AssetId}>([['ckb',{label:'CKB',asset:swap.CKB}]]);
 const connector=new WebComponentConnector();connector.client=client;connector.name='ToastDEX Testnet';
@@ -60,18 +66,48 @@ el('close-wallet').onclick=()=>el<HTMLDialogElement>('wallet-dialog').close();
 function invalidate(){generation++;review=undefined;el<HTMLDialogElement>('review').close();poolUi.invalidate();}
 function selected(id:string){const result=assets.get(value(id));if(!result)throw new Error('Choose an asset');return result.asset;}
 function label(asset:swap.AssetId){return assets.get(swap.assetKey(asset))?.label??`${swap.assetKey(asset).slice(0,10)}…`;}
-function decimals(asset:swap.AssetId){return asset.kind==='ckb'?8:swap.tokensForNetwork('testnet').find(t=>t.typeHash===swap.assetKey(asset))?.decimals??0;}
+function decimals(asset:swap.AssetId){return asset.kind==='ckb'?8:tokenDecimals.get(swap.assetKey(asset))??swap.tokensForNetwork('testnet').find(t=>t.typeHash===swap.assetKey(asset))?.decimals??0;}
 function amount(n:bigint,asset:swap.AssetId){return `${formatUnits(n,decimals(asset))} ${label(asset)}`;}
 function showView(view:string){if(view==='activity')void refreshActivity();if(view==='pools')poolUi.show();for(const name of ['swap','orders','pools','activity','settings'])el(`view-${name}`).hidden=name!==view;for(const b of document.querySelectorAll<HTMLButtonElement>('[data-view]'))b.setAttribute('aria-pressed',String(b.dataset.view===view));}
 for(const b of document.querySelectorAll<HTMLButtonElement>('[data-view]'))b.onclick=()=>showView(b.dataset.view!);
 el('reverse').onclick=()=>{const base=value('base');el<HTMLSelectElement>('base').value=value('quote');el<HTMLSelectElement>('quote').value=base;el<HTMLInputElement>('swap-output').value='';el<HTMLInputElement>('swap-budget').value='';invalidate();renderBook();};
 function swapAssets(){const base=selected('base'),quote=selected('quote');return value('swap-direction')==='buy'?{assetOut:base,assetIn:quote}:{assetOut:quote,assetIn:base};}
 function localQuote(){if(!scanFresh)throw new Error('Refresh live orders before requesting a quote.');const {assetIn,assetOut}=swapAssets();return swap.quoteSwap(orders.filter(o=>!isOwnOrder(o,walletLocks)),{assetIn,assetOut,amountOut:parseUnits(value('swap-output'),decimals(assetOut)),maxAmountIn:value('swap-budget').trim()?parseUnits(value('swap-budget'),decimals(assetIn)):swap.U128_MAX,tipBlock:0n,genesisHash:deployment.genesisHash});}
+type Route={venue:'orders';quote:swap.SwapQuote}|{venue:'pool';route:PoolRoute};
+/** Best single venue for the request: the order book (whole lots) or a listed pool
+ * (exact output). Lowest input wins; ties go to the larger output, then orders.
+ * The pool needs a JoyID wallet, so another connected wallet makes it ineligible. */
+function bestRoute(){
+ const {assetIn,assetOut}=swapAssets(),amountOut=parseUnits(value('swap-output'),decimals(assetOut));
+ const budget=value('swap-budget').trim()?parseUnits(value('swap-budget'),decimals(assetIn)):swap.U128_MAX;
+ let orderRoute:Route|undefined,poolRoute:Route|undefined,orderNote:string,poolNote:string|undefined;
+ try{orderRoute={venue:'orders',quote:localQuote()};orderNote=`Order book: ${amount(orderRoute.quote.amountOut,assetOut)} for ${amount(orderRoute.quote.amountIn,assetIn)} (${orderRoute.quote.selectedOrders.length} whole lot${orderRoute.quote.selectedOrders.length===1?'':'s'})`;}
+ catch(error){orderNote=`Order book: ${String(error).includes('No whole-lot')?'no whole-lot route for this amount':error instanceof Error?error.message:String(error)}`;}
+ const token=assetIn.kind==='ckb'?assetOut:assetOut.kind==='ckb'?assetIn:undefined;
+ if(token?.kind==='udt'){
+  const route=poolUi.routeQuote(token.scriptHash,assetIn.kind==='ckb',amountOut);
+  if(route){
+   poolNote=`Pool: ${amount(route.amountOut,assetOut)} for ${amount(route.amountIn,assetIn)}`;
+   if(route.amountIn>budget)poolNote+=' (over your maximum payment)';
+   else if(signer&&signer.signType!==ccc.SignerSignType.JoyId)poolNote+=' (needs a JoyID wallet)';
+   else poolRoute={venue:'pool',route};
+  }
+ }
+ const cost=(r:Route)=>r.venue==='orders'?{input:r.quote.amountIn,output:r.quote.amountOut}:{input:r.route.amountIn,output:r.route.amountOut};
+ let best=orderRoute;
+ if(poolRoute&&(!best||cost(poolRoute).input<cost(best).input||(cost(poolRoute).input===cost(best).input&&cost(poolRoute).output>cost(best).output)))best=poolRoute;
+ return {best,assetIn,assetOut,notes:[orderNote,...(poolNote?[poolNote]:[])]};
+}
 function updateQuote(){
  text('pay-estimate','—');
  if(!value('swap-output').trim()){text('quote-status','Enter the amount you want to receive, or choose an available swap below.');return;}
- try{const q=localQuote();text('pay-estimate',formatUnits(q.amountIn,decimals(q.assetIn)));text('quote-status',`Receive ${amount(q.amountOut,q.assetOut)} for ${amount(q.amountIn,q.assetIn)} · ${q.selectedOrders.length} whole lot${q.selectedOrders.length===1?'':'s'}${q.overfill?` · includes ${amount(q.overfill,q.assetOut)} extra`:''}. Price ≈ ${unitPrice(q.amountIn,q.amountOut,decimals(q.assetIn),decimals(q.assetOut))} ${label(q.assetIn)} per ${label(q.assetOut)}. Fees and storage are additional.`);}
- catch(error){text('quote-status',String(error).includes('No whole-lot')?'No available swap for this amount and direction. Try a listed swap below, reverse the tokens, or place an order.':error instanceof Error?error.message:String(error));}
+ try{
+  const {best,assetIn,assetOut,notes}=bestRoute();
+  if(!best){text('quote-status',`No available swap for this amount and direction. ${notes.join(' · ')}. Try a listed swap below, reverse the tokens, or place an order.`);return;}
+  const input=best.venue==='orders'?best.quote.amountIn:best.route.amountIn,output=best.venue==='orders'?best.quote.amountOut:best.route.amountOut;
+  text('pay-estimate',formatUnits(input,decimals(assetIn)));
+  text('quote-status',`Best route: ${best.venue==='pool'?'pool':'order book'}. Receive ${amount(output,assetOut)} for ${amount(input,assetIn)}. Price ≈ ${unitPrice(input,output,decimals(assetIn),decimals(assetOut))} ${label(assetIn)} per ${label(assetOut)}. Compared: ${notes.join(' · ')}. Fees and storage are additional.`);
+ }catch(error){text('quote-status',error instanceof Error?error.message:String(error));}
 }
 for(const id of ['swap-output','swap-budget','swap-direction','offer','ask','lots','direction'])el(id).oninput=()=>{invalidate();updateQuote();updateOrderPreview();};
 function updateOrderPreview(){
@@ -90,7 +126,7 @@ async function tokenBalance(wallet:ccc.Signer,asset:swap.AssetId){
  for await(const cell of wallet.findCells({script:asset.script,scriptLenRange:[asset.script.occupiedSize,asset.script.occupiedSize+1],outputDataLenRange:[16,17]},true)){
   if(++count>10000)throw new Error('Wallet balance scan limit reached');
   const key=`${cell.outPoint.txHash}:${cell.outPoint.index}`;if(seen.has(key))continue;seen.add(key);
-  if(cell.cellOutput.type?.eq(asset.script)&&await new swap.CatalogAssetResolver(wallet.client).supports(asset.script,cell.outputData))total+=swap.parseAmount(cell.outputData);
+  if(cell.cellOutput.type?.eq(asset.script)&&await assetResolver(wallet.client).supports(asset.script,cell.outputData))total+=swap.parseAmount(cell.outputData);
  }return total;
 }
 async function checkFunding(wallet:ccc.Signer,asset:swap.AssetId,required:bigint){
@@ -114,7 +150,7 @@ function renderCatalog(){
  text('catalog-note',`${tokens.length} tokens · snapshot ${swap.CATALOG_DATE}. ${network==='mainnet'?'Mainnet preview: trading requires a mainnet OpenSwap deployment.':'Select a token to use it as the quote asset.'}`);
  const root=el('catalog-results');root.replaceChildren();
  for(const token of tokens){const row=document.createElement('div');row.className='catalog-row';const description=document.createElement('span');description.textContent=`${token.symbol} · ${token.name} · ${token.kind} · ${token.decimals} decimals${token.rank?` · #${token.rank}, ${token.holders} holders`:''}${token.source==='utxoswap'?' · UTXOSwap':''}`;row.append(description);
- const action=button(network==='mainnet'?'Mainnet only':token.profile==='resolver-required'?'Adapter required':'Use token',async()=>{if(network!=='testnet')throw new Error('Mainnet trading is not deployed');const script=ccc.Script.from(token.script);const resolved=await new swap.CatalogAssetResolver(client).identify(script);if(!resolved.supported)throw new Error(resolved.reason);invalidate();addAsset(token.symbol,script);el<HTMLSelectElement>('quote').value=token.typeHash;renderBook();});action.disabled=network!=='testnet'||token.profile==='resolver-required';row.append(action);root.append(row);}
+ const action=button(network==='mainnet'?'Mainnet only':token.profile==='resolver-required'?'Adapter required':'Use token',async()=>{if(network!=='testnet')throw new Error('Mainnet trading is not deployed');const script=ccc.Script.from(token.script);const resolved=await assetResolver(client).identify(script);if(!resolved.supported)throw new Error(resolved.reason);invalidate();addAsset(token.symbol,script);el<HTMLSelectElement>('quote').value=token.typeHash;renderBook();});action.disabled=network!=='testnet'||token.profile==='resolver-required';row.append(action);root.append(row);}
  if(!tokens.length)root.textContent='No matching tokens.';
 }
 el('catalog-network').onchange=renderCatalog;el('catalog-search').oninput=renderCatalog;
@@ -134,10 +170,10 @@ async function configure(rpc:string,indexer:string){
  await oldRpc.dispose();await oldIndexer.dispose();renderBook();text('status','Connected to CKB testnet.');
 }
 el('endpoints').onsubmit=e=>{e.preventDefault();if(busy)return;run(async()=>{await configure(value('rpc'),value('indexer'));await scan();});};
-el('add-token').onsubmit=e=>{e.preventDefault();run(async()=>{const script=ccc.Script.from(JSON.parse(value('token-script')));const result=await new swap.CatalogAssetResolver(client).identify(script);if(!result.supported)throw new Error(result.reason??'This token needs an AssetResolver');addAsset(value('token-label'),script);saveAssets();});};
+el('add-token').onsubmit=e=>{e.preventDefault();run(async()=>{const script=ccc.Script.from(JSON.parse(value('token-script')));const result=await assetResolver(client).identify(script);if(!result.supported)throw new Error(result.reason??'This token needs an AssetResolver');addAsset(value('token-label'),script);saveAssets();});};
 for(const id of ['base','quote'])el(id).onchange=()=>{invalidate();renderBook();};
 async function scan(){scanFresh=false;scanAbort?.abort();const abort=new AbortController();scanAbort=abort;const current=client;const found:swap.OpenSwapOrder[]=[];let malformed=0;text('scan-status','Scanning live cells…');
- try{for await(const order of swap.scan(current,deployment,new swap.CatalogAssetResolver(current),{maxCells:10000,signal:abort.signal,onMalformed:()=>malformed++}))found.push(order);
+ try{for await(const order of swap.scan(current,deployment,assetResolver(current),{maxCells:10000,signal:abort.signal,onMalformed:()=>malformed++}))found.push(order);
  if(abort.signal.aborted||client!==current)throw new Error('Order scan replaced; refresh and try again');scanFresh=true;lastScan=Date.now();orders=found;for(const o of found)for(const a of [o.offerAsset,o.askAsset])if(a.kind==='udt'&&!assets.has(swap.assetKey(a)))addAsset(`Token ${a.scriptHash.slice(0,8)}…`,a.script);text('scan-status',`${found.length} supported live orders · ${malformed} malformed cells skipped · scan cap 10,000 cells`);renderBook();}catch(error){if(!abort.signal.aborted){text('scan-status','Scan failed. Previously loaded orders may be stale.');throw error;}throw error;}
 }
 el('refresh').onclick=()=>run(async()=>{await scan();await refreshActivity();});
@@ -162,7 +198,7 @@ function renderBook(){
  }
 
 }
-function context():swap.BuildContext{if(!signer)throw new Error('Connect a wallet first');if(busy)throw new Error('Wait for the current transaction');if(!owner)throw new Error('Wait for the connected account to load');return{signer,deployment,resolver:new swap.CatalogAssetResolver(client)};}
+function context():swap.BuildContext{if(!signer)throw new Error('Connect a wallet first');if(busy)throw new Error('Wait for the current transaction');if(!owner)throw new Error('Wait for the connected account to load');return{signer,deployment,resolver:assetResolver(client)};}
 
 el('create').onsubmit=e=>{e.preventDefault();run(async()=>{
  const ctx=context(),start=generation;await assertActiveAccount(ctx.signer,start);const base=selected('base'),quote=selected('quote');const offer=value('direction')==='sell'?base:quote,ask=value('direction')==='sell'?quote:base;
@@ -177,7 +213,15 @@ el('swap').onsubmit=e=>{e.preventDefault();run(async()=>{
  const ctx=context(),start=generation;await assertActiveAccount(ctx.signer,start);const base=selected('base'),quote=selected('quote');
  const assetOut=value('swap-direction')==='buy'?base:quote,assetIn=value('swap-direction')==='buy'?quote:base;
  const requested=parseUnits(value('swap-output'),decimals(assetOut)),budget=value('swap-budget').trim()?parseUnits(value('swap-budget'),decimals(assetIn)):swap.U128_MAX;await scan();
+ await poolUi.load().catch(()=>{});
  if(start!==generation)throw new Error('Wallet or market changed; quote again');
+ // Re-select the venue from fresh orders and pool state; the pool path has its own review.
+ const {best}=bestRoute();
+ if(best?.venue==='pool'){
+  text('quote-status','Best route: pool. Preparing the pool review…');
+  try{await poolUi.prepareRouted(best.route,requested,budget);}catch(error){text('quote-status',explainError(error));throw error;}
+  text('quote-status','Best route: pool. Check the pool review before approving.');return;
+ }
  const tip=await client.getTipHeader();
  const routed=swap.quoteSwap(orders.filter(o=>!isOwnOrder(o,walletLocks)),{assetIn,assetOut,amountOut:requested,maxAmountIn:budget,tipBlock:tip.number,genesisHash:deployment.genesisHash});
  await assertExternalFill(ctx.signer,routed.selectedOrders);
@@ -196,5 +240,12 @@ run(async()=>{
  try{for(const item of JSON.parse(localStorage.getItem('openswap-assets')??'[]'))addAsset(String(item.label),ccc.Script.from(item.script));}catch{report(new Error('Stored token list was invalid; add the tokens again.'));}
  const testOwner=await ccc.Address.fromString('ckt1qrfrwcdnvssswdwpn3s9v8fp87emat306ctjwsm3nmlkjg8qyza2cqgqq9qha8uqganyw9aavyyqeltvrlg59lp4svl02uvq',client);
  const testToken=await ccc.Script.fromKnownScript(client,ccc.KnownScript.XUdt,testOwner.script.hash());addAsset('Test xUDT',testToken);
- for(const token of swap.tokensForNetwork('testnet'))if(token.profile!=='resolver-required')addAsset(token.symbol,ccc.Script.from(token.script));renderCatalog();refreshAssets();if(value('quote')==='ckb')el<HTMLSelectElement>('quote').value=testToken.hash();await configure(value('rpc'),value('indexer'));await scan();
+ for(const token of swap.tokensForNetwork('testnet'))if(token.profile!=='resolver-required')addAsset(token.symbol,ccc.Script.from(token.script));renderCatalog();refreshAssets();if(value('quote')==='ckb')el<HTMLSelectElement>('quote').value=testToken.hash();await configure(value('rpc'),value('indexer'));
+ // Pool tokens join the asset list (and the resolver) before the order scan, so
+ // orders in a pool's token are recognised and both venues can be compared.
+ await poolUi.load().then(registerPoolMarkets,report);await scan();
 });
+function registerPoolMarkets(){
+ poolTokenDep=poolUi.tokenDep();
+ for(const market of poolUi.markets()){tokenDecimals.set(market.token.hash(),market.decimals);if(!assets.has(market.token.hash()))addAsset(market.symbol,market.token);}
+}
