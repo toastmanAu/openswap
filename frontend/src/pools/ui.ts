@@ -8,7 +8,7 @@ import {parseUnits,formatUnits} from '../amounts.js';
 import {explainError} from '../errors.js';
 import {parseAmount} from '../../../sdk/src/codec.js';
 
-export interface PoolMarket {poolId:ccc.Hex;token:ccc.Script;symbol:string;decimals:number}
+export interface PoolMarket {poolId:ccc.Hex;token:ccc.Script;symbol:string;decimals:number;x:bigint;y:bigint}
 export interface PoolRoute {poolId:ccc.Hex;direction:'xToY'|'yToX';amountIn:bigint;amountOut:bigint;checkedAt:number}
 export interface PoolEnv {client():ccc.Client;signer():ccc.Signer|undefined;epoch():number;run(fn:()=>Promise<void>):void}
 const el=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id)! as T;
@@ -364,7 +364,7 @@ export function createPoolUi(env:PoolEnv){
  /** Live pools whose token display metadata matched the live token (checked in refresh). */
  function markets():PoolMarket[]{
   return snapshots.flatMap(pool=>{const t=manifest?.pools.find(p=>p.poolId===pool.poolId)?.token;
-   return t?[{poolId:pool.poolId,token:pool.token.clone(),symbol:t.symbol,decimals:t.decimals}]:[];});
+   return t?[{poolId:pool.poolId,token:pool.token.clone(),symbol:t.symbol,decimals:t.decimals,x:pool.accounting.x,y:pool.accounting.y}]:[];});
  }
  /** Cheapest listed pool delivering at least `amountOut`, from the last loaded state. */
  function routeQuote(tokenHash:ccc.Hex,payCkb:boolean,amountOut:bigint):PoolRoute|undefined {

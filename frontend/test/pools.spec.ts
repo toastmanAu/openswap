@@ -267,7 +267,11 @@ test('the Swap tab compares venues and routes to the pool through the pool revie
  await page.goto('/');await expect(page.locator('#scan-status')).toContainText('supported live orders',{timeout:35000});
  // The pool token joins the Swap tab with its manifest symbol and decimals.
  await expect(page.locator(`#base option[value="${token.hash()}"]`)).toHaveText('TEST');
- await page.locator('#quote').selectOption('ckb');await page.locator('#base').selectOption(token.hash());
+ // The pool is listed beside order lots and sets the form's pair.
+ await expect(page.locator('#available-orders')).toContainText('Pool: CKB ⇄ TEST · 1 TEST ≈ 0.25 CKB');
+ await expect(page.locator('#available-note')).toContainText('1 pool (any amount, price moves with size)');
+ await page.getByRole('button',{name:'Trade this pair'}).click();
+ await expect(page.locator('#quote')).toHaveValue('ckb');await expect(page.locator('#base')).toHaveValue(token.hash());
  await page.locator('#swap-output').fill('10');
  const status=page.locator('#quote-status');
  await expect(status).toContainText(/Best route: pool\. Receive 10(\.\d+)? TEST for [\d.]+ CKB/);

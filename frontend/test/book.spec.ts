@@ -49,5 +49,5 @@ test('switching wallets clears owned orders and self-fills are excluded',async({
  const taker='ckt1qzda0cr08m85hc8jlnfp3zer7xulejywt49kt2rr0vthywaa50xwsqgp9mnd6kevd2wgrenv6c09zk7qe9g2vjsyhqsv2';
  await page.evaluate(address=>(globalThis as any).OpenSwapBrowserTest.installAddress(address),taker);
  await expect(page.locator('#connected-account')).toContainText(taker);await expect(page.locator('#my-orders')).toHaveText('No live orders for this wallet.');
- await page.getByRole('button',{name:'Swap',exact:true}).click();await page.locator('#base').selectOption('ckb');await expect(page.locator('#quote-status')).toContainText('Receive 0.0000001 CKB');await expect(page.locator('#available-orders').getByRole('button',{name:'Review swap'})).toHaveCount(30);
+ await page.getByRole('button',{name:'Swap',exact:true}).click();await page.locator('#base').selectOption('ckb');await expect(page.locator('#quote-status')).toContainText('Receive 0.0000001 CKB');await expect(page.locator('#available-orders').getByRole('button',{name:'Fill this lot'})).toHaveCount(30);
 });
