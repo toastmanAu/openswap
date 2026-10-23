@@ -22,7 +22,12 @@
   "pools": [
     {
       "label": "P6 test pool",
-      "poolId": "0x48bde5ee099ec7afe35eeab11a78f1e04d68a6e49afbde93771768071b7120b2"
+      "poolId": "0x48bde5ee099ec7afe35eeab11a78f1e04d68a6e49afbde93771768071b7120b2",
+      "token": {
+        "symbol": "TEST",
+        "decimals": 8,
+        "typeHash": "0x983d7de2fa8b3b430c50e19230eb786765568dc0f30e84db9ca8614080e739c1"
+      }
     }
   ],
   "joyid": {

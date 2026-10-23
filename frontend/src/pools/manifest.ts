@@ -7,12 +7,15 @@ import type {Parameters} from '../../../pool-model/src/model.js';
  * pool deployment for this build; nothing here is a network default. */
 export interface PoolManifest {
  network:'testnet';deployment:PoolDeployment;
- /** Known pool IDs only. Current state is discovered live by ID, never pinned. */
- pools:{label:string;poolId:ccc.Hex}[];
+ /** Known pool IDs only. Current state is discovered live by ID, never pinned.
+  * Optional token display metadata is bound to the token's type hash; without it
+  * amounts show as raw base units. */
+ pools:{label:string;poolId:ccc.Hex;token?:PoolTokenDisplay}[];
  joyid:JoyIdWalletProfile&{proofEndpoint?:string};
  policy:{feeRate:bigint;maxFee:bigint;slippageBps:number;reviewTtlMs:number};
  create?:{parameters:Parameters;tokenOwner:ccc.Hex};
 }
+export interface PoolTokenDisplay {symbol:string;decimals:number;typeHash:ccc.Hex}
 function check(ok:unknown,message:string):asserts ok {if(!ok)throw new Error(`Pool manifest: ${message}`);}
 const isHash=(v:unknown):v is ccc.Hex=>typeof v==='string'&&/^0x[0-9a-f]{64}$/.test(v);
 const exact=(v:unknown,keys:string[])=>!!v&&typeof v==='object'&&!Array.isArray(v)&&Object.keys(v).sort().join(',')===[...keys].sort().join(',');
@@ -31,7 +34,15 @@ export function parsePoolManifest(raw:unknown):PoolManifest {
  check(exact(m.deployment,['genesisHash','codeHash','poolDep','tokenDep'])&&isHash(m.deployment.genesisHash)&&isHash(m.deployment.codeHash),'invalid deployment');
  const deployment:PoolDeployment={genesisHash:m.deployment.genesisHash,codeHash:m.deployment.codeHash,poolDep:dep(m.deployment.poolDep),tokenDep:dep(m.deployment.tokenDep)};
  check(Array.isArray(m.pools)&&m.pools.length<=32,'pools must be a list of at most 32');
- const pools=m.pools.map((p:unknown)=>{check(exact(p,['label','poolId'])&&typeof (p as any).label==='string'&&(p as any).label.length>=1&&(p as any).label.length<=40&&isHash((p as any).poolId),'invalid pool entry');return {label:(p as any).label as string,poolId:(p as any).poolId as ccc.Hex};});
+ const pools=m.pools.map((p:unknown)=>{
+  check((exact(p,['label','poolId'])||exact(p,['label','poolId','token']))&&typeof (p as any).label==='string'&&(p as any).label.length>=1&&(p as any).label.length<=40&&isHash((p as any).poolId),'invalid pool entry');
+  const t=(p as any).token;let token:PoolTokenDisplay|undefined;
+  if(t!==undefined){
+   check(exact(t,['symbol','decimals','typeHash'])&&typeof t.symbol==='string'&&/^[A-Za-z0-9]{1,12}$/.test(t.symbol)&&Number.isSafeInteger(t.decimals)&&t.decimals>=0&&t.decimals<=18&&isHash(t.typeHash),'invalid token display metadata');
+   token={symbol:t.symbol,decimals:t.decimals,typeHash:t.typeHash};
+  }
+  return {label:(p as any).label as string,poolId:(p as any).poolId as ccc.Hex,...(token?{token}:{})};
+ });
  check(new Set(pools.map((p:{poolId:string})=>p.poolId)).size===pools.length,'duplicate pool ID');
  const j=m.joyid;
  check(exact(j,['codeHash','hashType','codeDeps'])||exact(j,['codeHash','hashType','codeDeps','cotaType'])||exact(j,['codeHash','hashType','codeDeps','cotaType','proofEndpoint']),'invalid JoyID profile');

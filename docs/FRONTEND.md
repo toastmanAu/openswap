@@ -220,15 +220,24 @@ manifest is an error, not a silent "not deployed". The strict schema is in
  "deployment":{"genesisHash":"0x…","codeHash":"0x…",
   "poolDep":{"outPoint":{"txHash":"0x…","index":"0"},"depType":"code"},
   "tokenDep":{"outPoint":{"txHash":"0x…","index":"0"},"depType":"code"}},
- "pools":[{"label":"CKB / TOKEN","poolId":"0x…"}],
+ "pools":[{"label":"CKB / TOKEN","poolId":"0x…",
+  "token":{"symbol":"TEST","decimals":8,"typeHash":"0x…"}}],
  "joyid":{"codeHash":"0x…","hashType":"type","codeDeps":[{"dep":{…},"dataHash":"0x…"}],
   "cotaType":{…},"proofEndpoint":"https://…"},
  "policy":{"feeRate":"1000","maxFee":"10000","slippageBps":50,"reviewTtlMs":60000},
  "create":{"parameters":{"feeBps":"30","lockedShares":"1000","backing":{"state":"…","ckb":"…","token":"…"}},"tokenOwner":"0x…"}}
 ```
 
-`cotaType`, `proofEndpoint` (needed for JoyID subkey sessions) and `create` are
-optional. Pools are listed by ID; their current state is always discovered live.
+`cotaType`, `proofEndpoint` (needed for JoyID subkey sessions), `create` and a
+pool's `token` are optional. Pools are listed by ID; their current state is always
+discovered live.
+
+`token` is display metadata only. It applies only when `typeHash` is the type
+hash of the live pool's token. On a mismatch the tab refuses to show the pool,
+so wrong decimals can never misstate amounts by orders of magnitude. With
+`token`, amounts are shown and entered in whole tokens (for example `1.5 TEST`).
+Without it they are exact raw base units ("token units"). Creation still takes
+raw token units.
 
 Every pool transaction follows the SDK path:
 1. Reload the pool live and requote. Minimum output is the fresh quote reduced by

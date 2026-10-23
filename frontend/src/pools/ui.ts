@@ -2,7 +2,7 @@ import {ccc} from '@ckb-ccc/core';
 import {scanPools,resolveJoyIdWallet,joyIdProofSource,fundPoolTransaction,reviewPoolTransaction,PoolFundingReservations,PoolSubmissionRecovery,
  type PoolSnapshot,type PoolIntent,type PoolJoyIdSigner,type FundedPoolTransaction,type PoolTransactionReview,type PoolSubmitClient} from '../../../pool-sdk/src/index.js';
 import {transition,type Operation} from '../../../pool-model/src/model.js';
-import {loadPoolManifest,type PoolManifest} from './manifest.js';
+import {loadPoolManifest,type PoolManifest,type PoolTokenDisplay} from './manifest.js';
 import {BrowserSubmissionJournal} from './journal.js';
 import {parseUnits,formatUnits} from '../amounts.js';
 
@@ -11,7 +11,10 @@ const el=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById
 const text=(id:string,message:string)=>{el(id).textContent=message;};
 const value=(id:string)=>el<HTMLInputElement>(id).value;
 const ckb=(n:bigint)=>`${formatUnits(n,8)} CKB`;
-const units=(n:bigint)=>`${n} token units`;
+type TokenDisplay=Pick<PoolTokenDisplay,'symbol'|'decimals'>;
+/** Fallback when the manifest gives no metadata: exact raw base units. */
+const RAW:TokenDisplay={symbol:'token units',decimals:0};
+const tokenAmount=(n:bigint,t:TokenDisplay)=>`${formatUnits(n,t.decimals)} ${t.symbol}`;
 const shares=(n:bigint)=>`${n} LP shares`;
 /** Minimum accepted output: the fresh quote reduced by the slippage bound, never below 1. */
 export const minimumOut=(quoted:bigint,slippageBps:number)=>{const n=quoted*BigInt(10000-slippageBps)/10000n;return n>0n?n:1n;};
@@ -22,7 +25,7 @@ export const minimumOut=(quoted:bigint,slippageBps:number)=>{const n=quoted*BigI
 const recoveryClient=(client:ccc.Client)=>client as unknown as PoolSubmitClient;
 
 interface Session {signer:ccc.Signer;epoch:number;client:ccc.Client;lock:ccc.Script;journal:BrowserSubmissionJournal;recovery:PoolSubmissionRecovery;reservations:PoolFundingReservations}
-interface Pending {generation:number;session:Session;funded:FundedPoolTransaction;review:PoolTransactionReview;sign:()=>Promise<ccc.Transaction>;title:string}
+interface Pending {generation:number;session:Session;funded:FundedPoolTransaction;review:PoolTransactionReview;sign:()=>Promise<ccc.Transaction>;title:string;token:TokenDisplay}
 
 export function createPoolUi(env:PoolEnv){
  let manifest:PoolManifest|undefined,loaded=false,snapshots:PoolSnapshot[]=[],checkedAt=0;
@@ -42,6 +45,14 @@ export function createPoolUi(env:PoolEnv){
   const pool=snapshots.find(p=>p.poolId===value('pool-select'));
   if(!pool)throw new Error('Choose a pool after it has loaded');return pool;
  }
+ /** Display metadata applies only if its type hash is the live pool's token (checked in refresh). */
+ const tokenOf=(pool?:PoolSnapshot):TokenDisplay=>(pool&&manifest?.pools.find(p=>p.poolId===pool.poolId)?.token)||RAW;
+ function labelToken(t:TokenDisplay){
+  const name=t===RAW?'token units':t.symbol;
+  el('pool-swap-direction').querySelector('option[value="yToX"]')!.textContent=`Pay ${name}, receive CKB`;
+  text('pool-deposit-token-label',`Maximum ${name}`);
+  el<HTMLInputElement>('pool-deposit-token').inputMode=t.decimals?'decimal':'numeric';
+ }
  function render(){
   const list=el<HTMLSelectElement>('pool-select'),previous=list.value;list.replaceChildren();
   for(const pool of snapshots){const option=document.createElement('option');option.value=pool.poolId;option.textContent=manifest?.pools.find(p=>p.poolId===pool.poolId)?.label??pool.poolId.slice(0,12);list.append(option);}
@@ -49,15 +60,15 @@ export function createPoolUi(env:PoolEnv){
   const ready=!!manifest&&snapshots.length>0;
   for(const id of ['pool-swap','pool-deposit','pool-withdraw'])el(id).hidden=!ready;
   el('pool-create').hidden=!manifest?.create;
-  if(!ready){text('pool-info','');return;}
-  const pool=selected(),a=pool.accounting;
+  if(!ready){text('pool-info','');labelToken(RAW);return;}
+  const pool=selected(),a=pool.accounting,t=tokenOf(pool);labelToken(t);
   text('pool-info',[
    `Pool ${pool.poolId}`,
-   `Reserves: ${ckb(a.x)} · ${units(a.y)}`,
+   `Reserves: ${ckb(a.x)} · ${tokenAmount(a.y,t)}`,
    `Swap fee: ${Number(a.feeBps)/100}%`,
    `LP supply: ${a.totalShares} (includes ${a.lockedShares} virtual locked shares that nobody can redeem)`,
    `Permanent backing (never withdrawable): state ${ckb(a.backing.state)} · CKB reserve ${ckb(a.backing.ckb)} · token reserve ${ckb(a.backing.token)}`,
-   `Token: xUDT owner ${pool.token.args}`,
+   `Token: ${t===RAW?'':`${t.symbol} (${t.decimals} decimals) · `}xUDT ${pool.token.hash()} · owner ${pool.token.args}`,
    `State cell: ${pool.stateCell.outPoint.txHash}:${pool.stateCell.outPoint.index} · checked ${new Date(checkedAt).toLocaleTimeString()}`,
   ].join('\n'));
   quote();
@@ -65,12 +76,12 @@ export function createPoolUi(env:PoolEnv){
  function quote(){
   if(!snapshots.length||!manifest){text('pool-quote','');return;}
   try{
-   const pool=selected(),direction=value('pool-swap-direction') as 'xToY'|'yToX';
-   const amountIn=direction==='xToY'?parseUnits(value('pool-swap-amount'),8):parseUnits(value('pool-swap-amount'),0);
+   const pool=selected(),t=tokenOf(pool),direction=value('pool-swap-direction') as 'xToY'|'yToX';
+   const amountIn=parseUnits(value('pool-swap-amount'),direction==='xToY'?8:t.decimals);
    const flows=transition(pool.accounting,{kind:'swap',direction,amountIn,minOut:1n}).flows;
    const out=direction==='xToY'?flows.receivedY:flows.receivedX;
    const min=minimumOut(out,manifest.policy.slippageBps);
-   text('pool-quote',`Expected: ${direction==='xToY'?units(out):ckb(out)} · minimum accepted ${direction==='xToY'?units(min):ckb(min)} (${manifest.policy.slippageBps/100}% bound). Quoted from the state checked at ${new Date(checkedAt).toLocaleTimeString()}; it is requoted from live state at review.`);
+   text('pool-quote',`Expected: ${direction==='xToY'?tokenAmount(out,t):ckb(out)} · minimum accepted ${direction==='xToY'?tokenAmount(min,t):ckb(min)} (${manifest.policy.slippageBps/100}% bound). Quoted from the state checked at ${new Date(checkedAt).toLocaleTimeString()}; it is requoted from live state at review.`);
   }catch(error){text('pool-quote',value('pool-swap-amount').trim()?(error instanceof Error?error.message:String(error)):'Enter an amount to pay.');}
  }
 
@@ -83,6 +94,13 @@ export function createPoolUi(env:PoolEnv){
   const known=new Set(manifest.pools.map(p=>p.poolId)),found:PoolSnapshot[]=[];let skipped=0;
   for await(const pool of scanPools(client,manifest.deployment,{maxCandidates:1000,onMalformed:()=>skipped++}))if(known.has(pool.poolId))found.push(pool);
   if(client!==env.client())throw new Error('Connection changed while loading pools; refresh again');
+  for(const pool of found){
+   const token=manifest.pools.find(p=>p.poolId===pool.poolId)?.token;
+   if(token&&pool.token.hash()!==token.typeHash){
+    const message=`Pool manifest token metadata does not match the live token of ${pool.poolId}; amounts cannot be shown safely`;
+    snapshots=[];render();text('pool-status',message);throw new Error(message);
+   }
+  }
   snapshots=found;checkedAt=Date.now();render();
   text('pool-status',`${found.length} of ${manifest.pools.length} listed pools live${skipped?` · ${skipped} malformed candidates skipped`:''}.`);
  }
@@ -137,12 +155,12 @@ export function createPoolUi(env:PoolEnv){
    const review=reviewPoolTransaction(m.deployment,{...wallet,funding:funded.funding},recipients,intent,prepared,m.policy.reviewTtlMs);
    if(start!==generation||session!==s||env.signer()!==s.signer)throw new Error('Wallet or pool changed; prepare again');
    const bound=resolved.bindReview(review);
-   pending={generation:start,session:s,funded,review,sign:()=>bound.sign({timeoutMs:60000}),title};
+   pending={generation:start,session:s,funded,review,sign:()=>bound.sign({timeoutMs:60000}),title,token:tokenOf(pool)};
    showReview(pending,resolved.identity.keyType);
   }catch(error){funded.release();throw error;}
  }
  function showReview(p:Pending,keyType:string){
-  const r=p.review.summary,f=r.flows,a=r.action,address=ccc.Address.fromScript(p.session.lock,p.session.client).toString();
+  const r=p.review.summary,f=r.flows,a=r.action,units=(n:bigint)=>tokenAmount(n,p.token),address=ccc.Address.fromScript(p.session.lock,p.session.client).toString();
   const minimum=a.kind==='swap'?`Minimum accepted: ${a.direction==='xToY'?units(a.minOut):ckb(a.minOut)}`:a.kind==='deposit'?`Minimum LP shares: ${a.minShares}`:a.kind==='withdraw'?`Minimum received: ${ckb(a.minX)} · ${units(a.minY)}`:`Minimum LP shares: ${a.minShares}`;
   const outputs=r.outputs.filter(o=>!o.pool).map(o=>`  #${o.index} ${o.asset==='ckb'?'CKB':o.asset==='token'?units(o.amount!):shares(o.amount!)} · capacity ${ckb(o.capacity)} (storage ${ckb(o.occupiedCapacity)})`);
   text('pool-review-text',[
@@ -187,13 +205,13 @@ export function createPoolUi(env:PoolEnv){
  el('pool-select').onchange=()=>{invalidate();render();};
  for(const id of ['pool-swap-direction','pool-swap-amount'])el(id).oninput=()=>{invalidate();quote();};
  el('pool-swap').onsubmit=e=>{e.preventDefault();env.run(()=>prepare('Pool swap',async pool=>{
-  const direction=value('pool-swap-direction') as 'xToY'|'yToX',amountIn=direction==='xToY'?parseUnits(value('pool-swap-amount'),8):parseUnits(value('pool-swap-amount'),0);
+  const direction=value('pool-swap-direction') as 'xToY'|'yToX',amountIn=parseUnits(value('pool-swap-amount'),direction==='xToY'?8:tokenOf(pool).decimals);
   const flows=transition(pool!.accounting,{kind:'swap',direction,amountIn,minOut:1n}).flows;
   const action:Operation={kind:'swap',direction,amountIn,minOut:minimumOut(direction==='xToY'?flows.receivedY:flows.receivedX,manifest!.policy.slippageBps)};
   return {kind:'transition',pool:pool!,action};
  },selected().poolId));};
  el('pool-deposit').onsubmit=e=>{e.preventDefault();env.run(()=>prepare('Add liquidity',async pool=>{
-  const maxX=parseUnits(value('pool-deposit-ckb'),8),maxY=parseUnits(value('pool-deposit-token'),0);
+  const maxX=parseUnits(value('pool-deposit-ckb'),8),maxY=parseUnits(value('pool-deposit-token'),tokenOf(pool).decimals);
   const minted=transition(pool!.accounting,{kind:'deposit',maxX,maxY,minShares:1n}).flows.mintedShares;
   return {kind:'transition',pool:pool!,action:{kind:'deposit',maxX,maxY,minShares:minimumOut(minted,manifest!.policy.slippageBps)}};
  },selected().poolId));};

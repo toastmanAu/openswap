@@ -19,7 +19,8 @@ const otherJoyLock=ccc.Script.from({codeHash:codeType.hash(),hashType:'type',arg
 const creator=ccc.Script.from({codeHash:hash(8),hashType:'type',args:'0x0002'});
 const token=ccc.Script.from({codeHash:XUDT_CODE_HASH,hashType:'data1',args:hash(7)});
 
-function chain(){
+type TokenMeta='match'|'mismatch'|'none';
+function chain(tokenMeta:TokenMeta='match'){
  const cell=(point:{txHash:ccc.Hex;index:bigint},lock:ccc.Script,capacity:bigint,data:ccc.Hex='0x',type?:ccc.Script)=>ccc.Cell.from({outPoint:point,cellOutput:{capacity,lock,type},outputData:data});
  const request={parameters:{feeBps:30n,lockedShares:1000n,backing:{state:34_000_000_000n,ckb:8_000_000_000n,token:16_000_000_000n}},x:10n**12n,y:4n*10n**12n,minShares:1n,tokenOwner:hash(7)};
  const creatorFunding=[cell({txHash:hash(20),index:0n},creator,20_000_000_000n,ccc.hexFrom(writeLE(request.y,16)),token),cell({txHash:hash(21),index:0n},creator,2n*10n**12n)];
@@ -34,7 +35,7 @@ function chain(){
  ];
  const manifest={version:1,network:'testnet',
   deployment:{genesisHash,codeHash:deployment.codeHash,poolDep:{outPoint:{txHash:hash(3),index:'0'},depType:'code'},tokenDep:{outPoint:{txHash:hash(4),index:'0'},depType:'code'}},
-  pools:[{label:'CKB / TEST',poolId:built.poolId}],
+  pools:[{label:'CKB / TEST',poolId:built.poolId,...(tokenMeta==='none'?{}:{token:{symbol:'TEST',decimals:8,typeHash:tokenMeta==='match'?token.hash():hash(13)}})}],
   joyid:{codeHash:joyLock.codeHash,hashType:'type',codeDeps:[{dep:{outPoint:{txHash:hash(9),index:'0'},depType:'code'},dataHash:ccc.hashCkb('0xabcd')}]},
   policy:{feeRate:'1000',maxFee:'10000',slippageBps:50,reviewTtlMs:60000}};
  // Committed parent transactions, which CCC reads to price inputs before sending.
@@ -60,8 +61,8 @@ function matches(c:ccc.Cell,search:any){
  return true;
 }
 interface Mock {sent:string[];journalAtSend:string[];send:'ok'|'abort'}
-async function mockPools(page:Page,options:{manifest?:boolean}={}):Promise<Mock>{
- const {cells,manifest,parents}=chain(),live=new Map(cells.map(c=>[`${c.outPoint.txHash}:${c.outPoint.index}`,c]));
+async function mockPools(page:Page,options:{manifest?:boolean;token?:TokenMeta}={}):Promise<Mock>{
+ const {cells,manifest,parents}=chain(options.token),live=new Map(cells.map(c=>[`${c.outPoint.txHash}:${c.outPoint.index}`,c]));
  const mock:Mock={sent:[],journalAtSend:[],send:'ok'},pool=new Map<string,unknown>();
  if(options.manifest!==false)await page.route('**/pool-manifest.json',route=>route.fulfill({json:manifest}));
  await page.route('https://testnet.ckb.dev/**',async route=>{
@@ -117,14 +118,14 @@ test('pool view, swap review gating and a single durable send',async({page})=>{
  const mock=await mockPools(page);await openPools(page);
  await expect(page.locator('#pool-status')).toHaveText('1 of 1 listed pools live.');
  const info=page.locator('#pool-info');
- await expect(info).toContainText('Reserves: 10000 CKB · 4000000000000 token units');
+ await expect(info).toContainText('Reserves: 10000 CKB · 40000 TEST');await expect(info).toContainText('TEST (8 decimals)');
  await expect(info).toContainText('Swap fee: 0.3%');await expect(info).toContainText('1000 virtual locked shares');
  await expect(info).toContainText('Permanent backing (never withdrawable): state 340 CKB · CKB reserve 80 CKB · token reserve 160 CKB');
  await page.locator('#pool-swap-amount').fill('100');await page.getByRole('button',{name:'Review pool swap'}).click();
  await expect(page.locator('#status')).toHaveText('Connect a wallet first');
  await connect(page);await reviewSwap(page);
  const review=page.locator('#pool-review-text');
- for(const line of ['Pool swap','JoyID main_key','Network: CKB TESTNET','You pay: 100 CKB · 0 token units','You receive (exact):','Minimum accepted:','Network fee:','Permanent backing (never withdrawable): 580 CKB','Review expires:'])await expect(review).toContainText(line);
+ for(const line of ['Pool swap','JoyID main_key','Network: CKB TESTNET','You pay: 100 CKB · 0 TEST','You receive (exact):','Minimum accepted:','Network fee:','Permanent backing (never withdrawable): 580 CKB','Review expires:'])await expect(review).toContainText(line);
  // Approval gating: nothing is signed or sent before the explicit approval.
  expect(await page.evaluate(()=>(globalThis as any).poolSignCalls)).toBe(0);expect(mock.sent).toEqual([]);
  await page.getByRole('button',{name:'Approve and sign'}).click();
@@ -178,14 +179,35 @@ test('an ambiguous send stays unknown, is never retried and survives a reload',a
 test('liquidity screens review deposits with an LP minimum and refuse withdrawals without LP shares',async({page})=>{
  const mock=await mockPools(page);await openPools(page);await expect(page.locator('#pool-status')).toContainText('listed pools live');
  await connect(page);
- await page.locator('#pool-deposit-ckb').fill('100');await page.locator('#pool-deposit-token').fill('400000000000');
+ await page.locator('#pool-deposit-ckb').fill('100');await expect(page.locator('#pool-deposit-token-label')).toHaveText('Maximum TEST');await page.locator('#pool-deposit-token').fill('4000');
  await page.getByRole('button',{name:'Review deposit'}).click();await expect(page.locator('#pool-review')).toBeVisible({timeout:20000});
  const review=page.locator('#pool-review-text');
- for(const line of ['Add liquidity','Minimum LP shares:','You receive (exact): 0 CKB · 0 token units ·','LP shares'])await expect(review).toContainText(line);
+ for(const line of ['Add liquidity','Minimum LP shares:','You receive (exact): 0 CKB · 0 TEST ·','LP shares'])await expect(review).toContainText(line);
  await page.getByRole('button',{name:'Back'}).click();await expect(page.locator('#pool-review')).toBeHidden();
  await page.locator('#pool-withdraw-shares').fill('10');await page.getByRole('button',{name:'Review withdrawal'}).click();
  await expect(page.locator('#status')).toContainText('not enough lp');
  expect(mock.sent).toEqual([]);
+});
+
+test('token amounts use decimals only when the metadata matches the live token',async({page})=>{
+ await mockPools(page,{token:'none'});await openPools(page);await expect(page.locator('#pool-status')).toContainText('listed pools live');
+ await expect(page.locator('#pool-info')).toContainText('Reserves: 10000 CKB · 4000000000000 token units');
+ await page.locator('#pool-swap-direction').selectOption('yToX');await expect(page.locator('#pool-swap-direction option:checked')).toHaveText('Pay token units, receive CKB');
+ await page.locator('#pool-swap-amount').fill('1.5');await expect(page.locator('#pool-quote')).toContainText('at most 0 decimal places');
+});
+
+test('token metadata bound to another type hash refuses to show the pool',async({page})=>{
+ await mockPools(page,{token:'mismatch'});await openPools(page);
+ await expect(page.locator('#pool-status')).toContainText('token metadata does not match the live token');
+ for(const id of ['#pool-swap','#pool-deposit','#pool-withdraw'])await expect(page.locator(id)).toBeHidden();
+});
+
+test('decimal token input is quoted and reviewed in whole tokens',async({page})=>{
+ await mockPools(page);await openPools(page);await expect(page.locator('#pool-status')).toContainText('listed pools live');
+ await page.locator('#pool-swap-direction').selectOption('yToX');await expect(page.locator('#pool-swap-direction option:checked')).toHaveText('Pay TEST, receive CKB');
+ await page.locator('#pool-swap-amount').fill('1.5');await expect(page.locator('#pool-quote')).toContainText(/Expected: [\d.]+ CKB/);
+ await page.locator('#pool-swap-direction').selectOption('xToY');await page.locator('#pool-swap-amount').fill('10');
+ await expect(page.locator('#pool-quote')).toContainText(/Expected: [\d.]+ TEST · minimum accepted [\d.]+ TEST/);
 });
 
 test('a malformed manifest is an error, not a silent "not deployed"',async({page})=>{
