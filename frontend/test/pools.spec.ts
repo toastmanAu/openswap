@@ -139,6 +139,18 @@ test('pool view, swap review gating and a single durable send',async({page})=>{
  await page.screenshot({path:'frontend/test-results/pool-submitted.png',fullPage:true});
 });
 
+test('a repeated review click while preparing starts nothing new and reserves nothing twice',async({page})=>{
+ const mock=await mockPools(page);await openPools(page);await expect(page.locator('#pool-status')).toContainText('listed pools live');
+ await connect(page);
+ await page.locator('#pool-swap-amount').fill('100');
+ await page.locator('#pool-swap-amount').press('Enter');await page.locator('#pool-swap-amount').press('Enter');
+ await expect(page.locator('#pool-review')).toBeVisible({timeout:20000});
+ await expect(page.locator('#pool-action-status')).toHaveText('Review ready. Check every line before approving.');
+ await expect(page.locator('#status')).not.toContainText('reserved');await expect(page.locator('#status')).not.toContainText('changed');
+ await expect(page.locator('#pool-approve')).toBeEnabled();
+ expect(mock.sent).toEqual([]);
+});
+
 test('wallet refusal sends nothing, journals nothing and releases the funding',async({page})=>{
  const mock=await mockPools(page);await openPools(page);await expect(page.locator('#pool-status')).toContainText('listed pools live');
  await connect(page);await page.evaluate(()=>{(globalThis as any).poolSignMode='refuse';});

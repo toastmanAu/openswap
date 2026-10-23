@@ -149,8 +149,14 @@ export function createPoolUi(env:PoolEnv){
   for(const row of rows){const item=document.createElement('p');item.className='activity-row';item.textContent=`${row.status.toUpperCase()} · ${row.hash}`;root.append(item);}
  }
 
+ /** Single-flight: a second preparation must never start (and cancel the first)
+  * while the first still holds its funding reservation. */
  async function prepare(title:string,build:(pool?:PoolSnapshot)=>Promise<PoolIntent>,poolId?:string){
   if(busy)throw new Error('Wait for the current pool transaction');
+  setBusy(true);
+  try{await prepareReview(title,build,poolId);}finally{setBusy(false);}
+ }
+ async function prepareReview(title:string,build:(pool?:PoolSnapshot)=>Promise<PoolIntent>,poolId?:string){
   invalidate();const start=generation,s=await ensureSession(),m=manifest!;
   const pool=poolId?await currentPool(poolId):undefined;
   if(pool){
@@ -174,7 +180,8 @@ export function createPoolUi(env:PoolEnv){
   try{
    const prepared=await resolved.prepare(funded.built);
    const review=reviewPoolTransaction(m.deployment,{...wallet,funding:funded.funding},recipients,intent,prepared,m.policy.reviewTtlMs);
-   if(start!==generation||session!==s||env.signer()!==s.signer)throw new Error('Wallet or pool changed; prepare again');
+   if(start!==generation)throw new Error('The form, pool selection or connection changed while the review was being prepared. Nothing was signed; prepare again.');
+   if(session!==s||env.signer()!==s.signer)throw new Error('The wallet connection changed while the review was being prepared. Nothing was signed; prepare again.');
    const bound=resolved.bindReview(review);
    pending={generation:start,session:s,funded,review,sign:()=>bound.sign({timeoutMs:60000}),title,token:tokenOf(pool)};
    showReview(pending,resolved.identity.keyType);
@@ -226,24 +233,24 @@ export function createPoolUi(env:PoolEnv){
  el('pool-refresh').onclick=()=>act('Refreshing pools…',async()=>{invalidate();await refresh();text('pool-action-status','');});
  el('pool-select').onchange=()=>{invalidate();render();};
  for(const id of ['pool-swap-direction','pool-swap-amount'])el(id).oninput=()=>{invalidate();quote();};
- el('pool-swap').onsubmit=e=>{e.preventDefault();act('Checking the live pool…',()=>prepare('Pool swap',async pool=>{
+ el('pool-swap').onsubmit=e=>{e.preventDefault();if(busy)return;act('Checking the live pool…',()=>prepare('Pool swap',async pool=>{
   const direction=value('pool-swap-direction') as 'xToY'|'yToX',amountIn=parseUnits(value('pool-swap-amount'),direction==='xToY'?8:tokenOf(pool).decimals);
   const flows=transition(pool!.accounting,{kind:'swap',direction,amountIn,minOut:1n}).flows;
   const action:Operation={kind:'swap',direction,amountIn,minOut:minimumOut(direction==='xToY'?flows.receivedY:flows.receivedX,manifest!.policy.slippageBps)};
   return {kind:'transition',pool:pool!,action};
  },selected().poolId));};
- el('pool-deposit').onsubmit=e=>{e.preventDefault();act('Checking the live pool…',()=>prepare('Add liquidity',async pool=>{
+ el('pool-deposit').onsubmit=e=>{e.preventDefault();if(busy)return;act('Checking the live pool…',()=>prepare('Add liquidity',async pool=>{
   const maxX=parseUnits(value('pool-deposit-ckb'),8),maxY=parseUnits(value('pool-deposit-token'),tokenOf(pool).decimals);
   const minted=transition(pool!.accounting,{kind:'deposit',maxX,maxY,minShares:1n}).flows.mintedShares;
   return {kind:'transition',pool:pool!,action:{kind:'deposit',maxX,maxY,minShares:minimumOut(minted,manifest!.policy.slippageBps)}};
  },selected().poolId));};
- el('pool-withdraw').onsubmit=e=>{e.preventDefault();act('Checking the live pool…',()=>prepare('Remove liquidity',async pool=>{
+ el('pool-withdraw').onsubmit=e=>{e.preventDefault();if(busy)return;act('Checking the live pool…',()=>prepare('Remove liquidity',async pool=>{
   const burned=parseUnits(value('pool-withdraw-shares'),0);
   const flows=transition(pool!.accounting,{kind:'withdraw',shares:burned,minX:1n,minY:1n}).flows;
   const s=manifest!.policy.slippageBps;
   return {kind:'transition',pool:pool!,action:{kind:'withdraw',shares:burned,minX:minimumOut(flows.receivedX,s),minY:minimumOut(flows.receivedY,s)}};
  },selected().poolId));};
- el('pool-create').onsubmit=e=>{e.preventDefault();act('Checking the network…',()=>prepare('Create pool',async()=>{
+ el('pool-create').onsubmit=e=>{e.preventDefault();if(busy)return;act('Checking the network…',()=>prepare('Create pool',async()=>{
   const c=manifest?.create;if(!c)throw new Error('Pool creation is not enabled for this deployment');
   return {kind:'create',request:{parameters:c.parameters,tokenOwner:c.tokenOwner,x:parseUnits(value('pool-create-ckb'),8),y:parseUnits(value('pool-create-token'),0),minShares:1n}};
  }));};
