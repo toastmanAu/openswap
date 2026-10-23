@@ -52,6 +52,24 @@ See [wallet evidence](../deployments/public-wallet-verification.json). Browser
 tests alone do not establish passkey signing; follow the repeatable recipe in
 [the frontend guide](FRONTEND.md) after wallet integration changes.
 
+## 2026-10-24 deployment: pools and routing
+
+Source commit `b327f03`, deployment `https://9a6189e2.toastdex.pages.dev`. It adds
+the Pools tab and Swap-tab routing, and serves `pool-manifest.json`. Both origins
+serve files byte-identical to the reproducible release.
+
+- **Browser tests:** all 22 pass on toastdex.pages.dev. The network guard now
+  allows the origin named by `TOASTDEX_BASE_URL`; before this, every live run
+  was blocked.
+- **toastdex.org fails the guard.** Cloudflare Web Analytics on that zone
+  injects `static.cloudflareinsights.com/beacon.min.js` into HTML served to
+  browsers. That is third-party script on a page that drives wallet signing, so
+  the guard rejects it. To pass, turn off Web Analytics automatic injection for
+  toastdex.org in the Cloudflare dashboard (zone setting, not in this repo), then
+  rerun the tests against toastdex.org.
+- **JoyID signing on the deployed origin** has not been re-run since the
+  2026-09-18 acceptance.
+
 Rollback: select the previous successful deployment in Pages. Published contract
 code and outstanding order cells remain unchanged by frontend rollbacks.
 

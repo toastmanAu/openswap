@@ -5,11 +5,12 @@ const zero=`0x${'00'.repeat(32)}`;
 const header={hash:deployment.genesisHash,compact_target:'0x0',dao:zero,epoch:'0x10000000000',extra_hash:zero,nonce:'0x0',number:'0x0',parent_hash:zero,proposals_hash:zero,timestamp:'0x0',transactions_root:zero,version:'0x0'};
 /** Test-local RPC only. Unexpected network traffic fails instead of contacting
  * public services. Per-test routes can override this using route.fallback(). */
-export const test=base.extend({page:async({page},use)=>{
- const unexpected:string[]=[];
+export const test=base.extend({page:async({page,baseURL},use)=>{
+ const unexpected:string[]=[],app=baseURL?new URL(baseURL).origin:undefined;
  await page.route('**/*',async route=>{
   const request=route.request(),url=new URL(request.url());
-  if(url.hostname==='127.0.0.1'||url.hostname==='localhost')return route.continue();
+  // The app under test: the local server, or a deployment named by TOASTDEX_BASE_URL.
+  if(url.hostname==='127.0.0.1'||url.hostname==='localhost'||url.origin===app)return route.continue();
   if(url.hostname==='testnet.ckb.dev'&&request.method()==='POST'){
    const body=request.postDataJSON();let result:unknown;
    switch(body.method){
