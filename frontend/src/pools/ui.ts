@@ -6,6 +6,7 @@ import {loadPoolManifest,type PoolManifest,type PoolTokenDisplay} from './manife
 import {BrowserSubmissionJournal} from './journal.js';
 import {parseUnits,formatUnits} from '../amounts.js';
 import {explainError} from '../errors.js';
+import {parseAmount} from '../../../sdk/src/codec.js';
 
 export interface PoolEnv {client():ccc.Client;signer():ccc.Signer|undefined;epoch():number;run(fn:()=>Promise<void>):void}
 const el=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id)! as T;
@@ -36,6 +37,8 @@ export function createPoolUi(env:PoolEnv){
  let session:Session|undefined,pending:Pending|undefined,generation=0,busy=false;
  /** Latest observed label per journaled hash; hashes whose send succeeded here. */
  const labels=new Map<string,string>(),sentHere=new Set<string>();
+ /** The connected account's LP shares per pool ID, read from live LP cells. */
+ const lpBalances=new Map<string,bigint>();let lpGeneration=0;
  let resolving:Promise<void>|undefined,recheckTimer:ReturnType<typeof setTimeout>|undefined;
 
  function setBusy(next:boolean){busy=next;for(const b of document.querySelectorAll<HTMLButtonElement>('#view-pools button,#pool-approve,#pool-dismiss'))b.disabled=next;}
@@ -46,7 +49,7 @@ export function createPoolUi(env:PoolEnv){
   const dialog=el<HTMLDialogElement>('pool-review');if(dialog.open)dialog.close();
   text('pool-review-text','');
  }
- function reset(){invalidate();stopRecheck();labels.clear();session=undefined;el('pool-submissions').replaceChildren();text('pool-submissions-status','Connect a wallet to see pool submissions from this browser.');}
+ function reset(){invalidate();stopRecheck();labels.clear();lpBalances.clear();lpGeneration++;session=undefined;el('pool-submissions').replaceChildren();text('pool-submissions-status','Connect a wallet to see pool submissions from this browser.');}
 
  function selected():PoolSnapshot {
   const pool=snapshots.find(p=>p.poolId===value('pool-select'));
@@ -68,7 +71,7 @@ export function createPoolUi(env:PoolEnv){
   for(const id of ['pool-swap','pool-deposit','pool-withdraw'])el(id).hidden=!ready;
   el('pool-create').hidden=!manifest?.create;
   if(!ready){text('pool-info','');labelToken(RAW);return;}
-  const pool=selected(),a=pool.accounting,t=tokenOf(pool);labelToken(t);
+  const pool=selected(),a=pool.accounting,t=tokenOf(pool);labelToken(t);renderLp();
   text('pool-info',[
    `Pool ${pool.poolId}`,
    `Reserves: ${ckb(a.x)} · ${tokenAmount(a.y,t)}`,
@@ -79,6 +82,44 @@ export function createPoolUi(env:PoolEnv){
    `State cell: ${pool.stateCell.outPoint.txHash}:${pool.stateCell.outPoint.index} · checked ${new Date(checkedAt).toLocaleTimeString()}`,
   ].join('\n'));
   quote();
+ }
+ /** Sums this account's live LP cells for the selected pool. Display only: funding
+  * re-reads and validates every input at review. */
+ async function loadLp(){
+  const s=session,start=++lpGeneration;
+  if(!s||!snapshots.length){renderLp();return;}
+  const pool=selected();let total=0n,count=0;
+  for await(const cell of s.client.findCells({script:s.lock,scriptType:'lock',scriptSearchMode:'exact',filter:{script:pool.lp},withData:true},'asc',50)){
+   if(!cell.cellOutput.type?.eq(pool.lp))continue;
+   total+=parseAmount(cell.outputData);if(++count>=200)break;
+  }
+  if(start!==lpGeneration||session!==s)return;
+  lpBalances.set(pool.poolId,total);renderLp();
+ }
+ function renderLp(){
+  if(!snapshots.length)return;
+  const pool=selected(),balance=lpBalances.get(pool.poolId),t=tokenOf(pool);
+  if(!session)text('pool-lp-balance',env.signer()?'Refresh to load your LP shares.':'Connect a wallet to see your LP shares.');
+  else if(balance===undefined)text('pool-lp-balance','Loading your LP shares…');
+  else if(balance===0n)text('pool-lp-balance','You have no LP shares in this pool.');
+  else{
+   const f=transition(pool.accounting,{kind:'withdraw',shares:balance,minX:1n,minY:1n}).flows;
+   text('pool-lp-balance',`Your LP shares: ${balance} (worth about ${ckb(f.receivedX)} · ${tokenAmount(f.receivedY,t)} at the current pool state)`);
+  }
+  for(const b of document.querySelectorAll<HTMLButtonElement>('[data-share-pct]'))b.disabled=busy||!balance;
+  withdrawQuote();
+ }
+ function withdrawQuote(){
+  if(!snapshots.length||!manifest){text('pool-withdraw-quote','');return;}
+  const raw=value('pool-withdraw-shares').trim();
+  if(!raw){text('pool-withdraw-quote','Enter LP shares to burn, or pick a share of your position.');return;}
+  try{
+   const pool=selected(),t=tokenOf(pool),shares=parseUnits(raw,0),balance=lpBalances.get(pool.poolId);
+   if(balance!==undefined&&shares>balance)throw new Error(`You have only ${balance} LP shares in this pool`);
+   const f=transition(pool.accounting,{kind:'withdraw',shares,minX:1n,minY:1n}).flows,s=manifest.policy.slippageBps;
+   const pct=balance?` (${Number(shares*10000n/balance)/100}% of your position)`:'';
+   text('pool-withdraw-quote',`You receive about ${ckb(f.receivedX)} · ${tokenAmount(f.receivedY,t)}${pct}. Minimum accepted: ${ckb(minimumOut(f.receivedX,s))} · ${tokenAmount(minimumOut(f.receivedY,s),t)}. Requoted from live state at review.`);
+  }catch(error){text('pool-withdraw-quote',error instanceof Error?error.message:String(error));}
  }
  function quote(){
   if(!snapshots.length||!manifest){text('pool-quote','');return;}
@@ -128,6 +169,7 @@ export function createPoolUi(env:PoolEnv){
   }
   snapshots=found;checkedAt=Date.now();render();
   text('pool-status',`${found.length} of ${manifest.pools.length} listed pools live${skipped?` · ${skipped} malformed candidates skipped`:''}.`);
+  if(session)void loadLp().catch(()=>{});
   return true;
  }
  async function currentPool(poolId:string){await refresh();const pool=snapshots.find(p=>p.poolId===poolId);if(!pool)throw new Error('Pool is no longer live; refresh and choose again');return pool;}
@@ -146,7 +188,7 @@ export function createPoolUi(env:PoolEnv){
   const reports=await recovery.reconcile(recoveryClient(client));
   if(env.signer()!==signer||env.epoch()!==epoch)throw new Error('Wallet changed; try again');
   session={signer,epoch,client,lock,journal,recovery,reservations};
-  await settle(session,reports);renderSubmissions();scheduleRecheck();return session;
+  await settle(session,reports);renderSubmissions();scheduleRecheck();void loadLp().catch(()=>{});return session;
  }
  type Reports=Awaited<ReturnType<PoolSubmissionRecovery['reconcile']>>;
  /** Labels every row from what the node reports and archives committed rows that
@@ -271,11 +313,16 @@ export function createPoolUi(env:PoolEnv){
   }catch(error){
    // submit throws only before persisting, so nothing was sent.
    if(pending===p){pending=undefined;p.funded.release();el<HTMLDialogElement>('pool-review').close();}throw error;
-  }finally{setBusy(false);renderSubmissions();scheduleRecheck();}
+  }finally{setBusy(false);renderSubmissions();scheduleRecheck();void loadLp().catch(()=>{});}
  }
 
- el('pool-refresh').onclick=()=>act('Refreshing pools…',async()=>{invalidate();await refresh();text('pool-action-status','');});
- el('pool-select').onchange=()=>{invalidate();render();};
+ el('pool-refresh').onclick=()=>act('Refreshing pools…',async()=>{invalidate();await refresh();if(env.signer())await ensureSession();text('pool-action-status','');});
+ el('pool-select').onchange=()=>{invalidate();render();void loadLp().catch(()=>{});};
+ el('pool-withdraw-shares').oninput=()=>{invalidate();withdrawQuote();};
+ for(const b of document.querySelectorAll<HTMLButtonElement>('[data-share-pct]'))b.onclick=()=>{
+  const balance=snapshots.length?lpBalances.get(selected().poolId):undefined;if(!balance)return;
+  el<HTMLInputElement>('pool-withdraw-shares').value=String(balance*BigInt(b.dataset.sharePct!)/100n);invalidate();withdrawQuote();
+ };
  for(const id of ['pool-swap-direction','pool-swap-amount'])el(id).oninput=()=>{invalidate();quote();};
  el('pool-swap').onsubmit=e=>{e.preventDefault();if(busy)return;act('Checking the live pool…',()=>prepare('Pool swap',async pool=>{
   const direction=value('pool-swap-direction') as 'xToY'|'yToX',amountIn=parseUnits(value('pool-swap-amount'),direction==='xToY'?8:tokenOf(pool).decimals);

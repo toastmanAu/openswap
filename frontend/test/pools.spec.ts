@@ -26,12 +26,15 @@ function chain(tokenMeta:TokenMeta='match'){
  const creatorFunding=[cell({txHash:hash(20),index:0n},creator,20_000_000_000n,ccc.hexFrom(writeLE(request.y,16)),token),cell({txHash:hash(21),index:0n},creator,2n*10n**12n)];
  const built=buildCreate(deployment,{lock:creator,change:creator,deps:[dep(5)],funding:creatorFunding,feeRate:1000n,maxFee:10000n},{ckb:creator,token:creator,lp:creator},request);
  const tx=built.transaction,txHash=tx.hash();
+ const lp=tx.outputs.find(o=>o.type&&!o.type.eq(token)&&o.lock.eq(creator)&&o.type.codeHash===deployment.codeHash)!.type!;
  const cells=[
   cell(dep(3).outPoint,creator,10n**12n,'0x1234'),cell(dep(4).outPoint,creator,10n**12n,xudt),cell(dep(9).outPoint,creator,10n**12n,'0xabcd',codeType),
   ...tx.outputs.map((o,i)=>cell({txHash,index:BigInt(i)},o.lock,o.capacity,tx.outputsData[i]!,o.type)),
   // The trader: one plain CKB cell and one token cell.
   cell({txHash:hash(30),index:0n},joyLock,10n**13n),cell({txHash:hash(31),index:0n},joyLock,20_000_000_000n,ccc.hexFrom(writeLE(10n**12n,16)),token),
   cell({txHash:hash(32),index:0n},otherJoyLock,10n**13n),
+  // The trader also holds 1,000,000 LP shares of this pool.
+  cell({txHash:hash(33),index:0n},joyLock,20_000_000_000n,ccc.hexFrom(writeLE(1_000_000n,16)),lp),
  ];
  const manifest={version:1,network:'testnet',
   deployment:{genesisHash,codeHash:deployment.codeHash,poolDep:{outPoint:{txHash:hash(3),index:'0'},depType:'code'},tokenDep:{outPoint:{txHash:hash(4),index:'0'},depType:'code'}},
@@ -214,7 +217,9 @@ test('liquidity screens review deposits with an LP minimum and refuse withdrawal
  const review=page.locator('#pool-review-text');
  for(const line of ['Add liquidity','Minimum LP shares:','You receive (exact): 0 CKB · 0 TEST ·','LP shares'])await expect(review).toContainText(line);
  await page.getByRole('button',{name:'Back'}).click();await expect(page.locator('#pool-review')).toBeHidden();
- await page.locator('#pool-withdraw-shares').fill('10');await page.getByRole('button',{name:'Review withdrawal'}).click();
+ await page.locator('#pool-withdraw-shares').fill('2000000');
+ await expect(page.locator('#pool-withdraw-quote')).toHaveText('You have only 1000000 LP shares in this pool');
+ await page.getByRole('button',{name:'Review withdrawal'}).click();
  await expect(page.locator('#status')).toContainText('not enough lp');
  expect(mock.sent).toEqual([]);
 });
@@ -238,6 +243,23 @@ test('decimal token input is quoted and reviewed in whole tokens',async({page})=
  await page.locator('#pool-swap-amount').fill('1.5');await expect(page.locator('#pool-quote')).toContainText(/Expected: [\d.]+ CKB/);
  await page.locator('#pool-swap-direction').selectOption('xToY');await page.locator('#pool-swap-amount').fill('10');
  await expect(page.locator('#pool-quote')).toContainText(/Expected: [\d.]+ TEST · minimum accepted [\d.]+ TEST/);
+});
+
+test('remove liquidity shows the LP position, fills a share of it and estimates the payout',async({page})=>{
+ const mock=await mockPools(page);await openPools(page);await expect(page.locator('#pool-status')).toContainText('listed pools live');
+ await expect(page.locator('#pool-lp-balance')).toHaveText('Connect a wallet to see your LP shares.');
+ await connect(page);await page.getByRole('button',{name:'Refresh pools'}).click();
+ await expect(page.locator('#pool-lp-balance')).toContainText('Your LP shares: 1000000 (worth about');
+ await page.getByRole('button',{name:'50%'}).click();
+ await expect(page.locator('#pool-withdraw-shares')).toHaveValue('500000');
+ await expect(page.locator('#pool-withdraw-quote')).toContainText('(50% of your position)');
+ await expect(page.locator('#pool-withdraw-quote')).toContainText(/You receive about [\d.]+ CKB · [\d.]+ TEST/);
+ await page.getByRole('button',{name:'Max'}).click();
+ await expect(page.locator('#pool-withdraw-shares')).toHaveValue('1000000');
+ await expect(page.locator('#pool-withdraw-quote')).toContainText('(100% of your position)');
+ await page.getByRole('button',{name:'Review withdrawal'}).click();await expect(page.locator('#pool-review')).toBeVisible({timeout:20000});
+ for(const line of ['Remove liquidity','Minimum received:','1000000 LP shares'])await expect(page.locator('#pool-review-text')).toContainText(line);
+ expect(mock.sent).toEqual([]);
 });
 
 test('a malformed manifest is an error, not a silent "not deployed"',async({page})=>{

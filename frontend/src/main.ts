@@ -39,7 +39,7 @@ connector.addEventListener('connection',event=>{
  signer=connection?.value.signerInfo.signer;owner=undefined;walletLocks=[];clearActivity();poolUi.reset();text('connect',signer?'Loading account…':'Connect wallet');text('connected-account','');text('wallet-address',signer?'Loading account…':'Browse without connecting.');invalidate();renderBook();
  const selected=signer;run(async()=>{if(!selected){text('wallet-address','Browse without connecting.');text('connect','Connect wallet');text('connected-account','');renderBook();return;}
  const [address,addresses]=await Promise.all([selected.getRecommendedAddressObj(),selected.getAddressObjs()]);if(signer!==selected||epoch!==connectionEpoch)return;walletLocks=addresses.map(a=>a.script);
- owner=address.script;text('wallet-address',address.toString());text('connected-account',`Account: ${address.toString()}`);text('connect','Switch wallet');renderBook();void refreshActivity();});
+ owner=address.script;text('wallet-address',address.toString());text('connected-account',`Account: ${address.toString()}`);text('connect','Switch wallet');renderBook();void refreshActivity();if(!el('view-pools').hidden)poolUi.show();});
 });
 connector.addEventListener('close',()=>el<HTMLDialogElement>('wallet-dialog').close());
 el('wallet-host').append(connector);
