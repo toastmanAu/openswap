@@ -287,6 +287,9 @@ test('the Swap tab compares venues and routes to the pool through the pool revie
  expect(mock.sent).toEqual([]);
  await page.getByRole('button',{name:'Approve and sign'}).click();
  await expect(page.locator('#pool-review')).toBeHidden();expect(mock.sent).toHaveLength(1);
+ // The outcome is reported where the user is (the Swap tab), not only on the hidden Pools tab.
+ await expect(status).toContainText(/Submitted 0x[0-9a-f]{64}\. It stays listed under pool submissions on the Pools tab/);
+ await expect(page.locator('#swap-submit')).toBeEnabled();
 });
 
 test('a malformed manifest is an error, not a silent "not deployed"',async({page})=>{

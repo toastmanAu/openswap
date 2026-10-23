@@ -32,7 +32,9 @@ export const ARCHIVE_CONFIRMATIONS=24;
 const RECHECK_MS=15000;
 
 interface Session {signer:ccc.Signer;epoch:number;client:ccc.Client;lock:ccc.Script;journal:BrowserSubmissionJournal;recovery:PoolSubmissionRecovery;reservations:PoolFundingReservations}
-interface Pending {generation:number;session:Session;funded:FundedPoolTransaction;review:PoolTransactionReview;sign:()=>Promise<ccc.Transaction>;title:string;token:TokenDisplay}
+interface Pending {generation:number;session:Session;funded:FundedPoolTransaction;review:PoolTransactionReview;sign:()=>Promise<ccc.Transaction>;title:string;token:TokenDisplay;
+ /** Status line that reports this review's outcome: the Pools tab, or the Swap tab for a routed swap. */
+ feedback:string}
 
 export function createPoolUi(env:PoolEnv){
  let manifest:PoolManifest|undefined,loaded=false,snapshots:PoolSnapshot[]=[],checkedAt=0;
@@ -43,7 +45,7 @@ export function createPoolUi(env:PoolEnv){
  const lpBalances=new Map<string,bigint>();let lpGeneration=0;
  let resolving:Promise<void>|undefined,recheckTimer:ReturnType<typeof setTimeout>|undefined;
 
- function setBusy(next:boolean){busy=next;for(const b of document.querySelectorAll<HTMLButtonElement>('#view-pools button,#pool-approve,#pool-dismiss'))b.disabled=next;}
+ function setBusy(next:boolean){busy=next;for(const b of document.querySelectorAll<HTMLButtonElement>('#view-pools button,#pool-approve,#pool-dismiss,#swap-submit'))b.disabled=next;}
  /** Drops any unsigned review and returns its funding reservation. */
  function invalidate(){
   generation++;
@@ -137,9 +139,9 @@ export function createPoolUi(env:PoolEnv){
 
  /** Runs a pool action with progress and errors shown beside the pool forms
   * (and in the global status line). */
- function act(progress:string,fn:()=>Promise<void>){
-  text('pool-action-status',progress);
-  env.run(async()=>{try{await fn();}catch(error){text('pool-action-status',explainError(error));throw error;}});
+ function act(progress:string,fn:()=>Promise<void>,target='pool-action-status'){
+  text(target,progress);
+  env.run(async()=>{try{await fn();}catch(error){text(target,explainError(error));throw error;}});
  }
  /** Retries when the app switches endpoints mid-load (for example at startup). */
  async function refresh(){
@@ -245,12 +247,12 @@ export function createPoolUi(env:PoolEnv){
 
  /** Single-flight: a second preparation must never start (and cancel the first)
   * while the first still holds its funding reservation. */
- async function prepare(title:string,build:(pool?:PoolSnapshot)=>Promise<PoolIntent>,poolId?:string){
-  if(busy)throw new Error('Wait for the current pool transaction');
+ async function prepare(title:string,build:(pool?:PoolSnapshot)=>Promise<PoolIntent>,poolId?:string,feedback='pool-action-status'){
+  if(busy)throw new Error('A pool transaction is still being prepared, signed or sent. Wait for its result before starting another.');
   setBusy(true);
-  try{await prepareReview(title,build,poolId);}finally{setBusy(false);}
+  try{await prepareReview(title,build,poolId,feedback);}finally{setBusy(false);}
  }
- async function prepareReview(title:string,build:(pool?:PoolSnapshot)=>Promise<PoolIntent>,poolId?:string){
+ async function prepareReview(title:string,build:(pool?:PoolSnapshot)=>Promise<PoolIntent>,poolId:string|undefined,feedback:string){
   invalidate();const start=generation,s=await ensureSession(),m=manifest!;
   const pool=poolId?await currentPool(poolId):undefined;
   if(pool){
@@ -259,7 +261,7 @@ export function createPoolUi(env:PoolEnv){
    if(holder)throw new Error(`Pool submission ${holder.hash} (${holder.status}) already spends this pool's current state, and its inputs stay reserved. Use Recheck until it resolves; do not prepare a replacement.`);
   }
   const intent=await build(pool);
-  text('pool-action-status','Preparing the transaction with your JoyID account…');
+  text(feedback,'Preparing the transaction with your JoyID account…');
   // Probe funding for JoyID preparation: one plain, data-free cell of this account.
   let probe:ccc.Cell|undefined;
   for await(const cell of s.client.findCells({script:s.lock,scriptType:'lock',scriptSearchMode:'exact',filter:{scriptLenRange:[0,1],outputDataLenRange:[0,1]},withData:true},'asc',10)){probe=cell;break;}
@@ -277,9 +279,9 @@ export function createPoolUi(env:PoolEnv){
    if(start!==generation)throw new Error('The form, pool selection or connection changed while the review was being prepared. Nothing was signed; prepare again.');
    if(session!==s||env.signer()!==s.signer)throw new Error('The wallet connection changed while the review was being prepared. Nothing was signed; prepare again.');
    const bound=resolved.bindReview(review);
-   pending={generation:start,session:s,funded,review,sign:()=>bound.sign({timeoutMs:60000}),title,token:tokenOf(pool)};
+   pending={generation:start,session:s,funded,review,sign:()=>bound.sign({timeoutMs:60000}),title,token:tokenOf(pool),feedback};
    showReview(pending,resolved.identity.keyType);
-   text('pool-action-status','Review ready. Check every line before approving.');
+   text(feedback,'Review ready. Check every line before approving.');
   }catch(error){funded.release();throw error;}
  }
  function showReview(p:Pending,keyType:string){
@@ -308,7 +310,7 @@ export function createPoolUi(env:PoolEnv){
   const p=pending;
   if(!p||p.generation!==generation||env.signer()!==p.session.signer||env.epoch()!==p.session.epoch)throw new Error('Review is stale; prepare again');
   if(Date.now()>=p.review.summary.expiresAt){invalidate();throw new Error('Review expired. Prepare it again from live state.');}
-  setBusy(true);text('pool-action-status','Waiting for wallet signature…');
+  setBusy(true);text(p.feedback,'Waiting for wallet signature…');
   let signed:ccc.Transaction;
   try{signed=await p.sign();}
   catch(error){if(pending===p){pending=undefined;p.funded.release();el<HTMLDialogElement>('pool-review').close();}setBusy(false);throw error;}
@@ -318,9 +320,9 @@ export function createPoolUi(env:PoolEnv){
    pending=undefined;el<HTMLDialogElement>('pool-review').close();
    if(outcome.outcome==='sent'){sentHere.add(outcome.hash);labels.set(outcome.hash,'SENT · waiting for confirmation');}
    else labels.set(outcome.hash,'UNKNOWN · the send was not confirmed by the node. Do not prepare it again.');
-   text('pool-action-status',outcome.outcome==='sent'
-    ?`Submitted ${outcome.hash}. It stays listed under pool submissions until confirmed and archived.`
-    :`Status unknown for ${outcome.hash}: the node did not confirm receipt. The signed transaction is saved in this browser and its inputs stay reserved. Do not prepare it again; check its status with Recheck. Node response: ${outcome.error.slice(0,300)}`);
+   text(p.feedback,outcome.outcome==='sent'
+    ?`Submitted ${outcome.hash}. It stays listed under pool submissions on the Pools tab until confirmed and archived.`
+    :`Status unknown for ${outcome.hash}: the node did not confirm receipt. The signed transaction is saved in this browser and its inputs stay reserved. Do not prepare it again; check its status with Recheck on the Pools tab. Node response: ${outcome.error.slice(0,300)}`);
   }catch(error){
    // submit throws only before persisting, so nothing was sent.
    if(pending===p){pending=undefined;p.funded.release();el<HTMLDialogElement>('pool-review').close();}throw error;
@@ -356,7 +358,7 @@ export function createPoolUi(env:PoolEnv){
   const c=manifest?.create;if(!c)throw new Error('Pool creation is not enabled for this deployment');
   return {kind:'create',request:{parameters:c.parameters,tokenOwner:c.tokenOwner,x:parseUnits(value('pool-create-ckb'),8),y:parseUnits(value('pool-create-token'),0),minShares:1n}};
  }));};
- el('pool-approve').onclick=()=>act('Waiting for wallet signature…',approve);
+ el('pool-approve').onclick=()=>act('Waiting for wallet signature…',approve,pending?.feedback);
  el('pool-dismiss').onclick=()=>invalidate();
  el('pool-review').addEventListener('cancel',()=>invalidate());
  el('pool-recheck').onclick=()=>act('Rechecking submissions…',async()=>{const s=await ensureSession();await recheck(s);scheduleRecheck();text('pool-action-status','');});
@@ -385,7 +387,7 @@ export function createPoolUi(env:PoolEnv){
    const r=swapExactOut(pool!.accounting,route.direction,amountOut),amountIn=route.direction==='xToY'?r.flows.paidX:r.flows.paidY;
    if(amountIn>maxAmountIn)throw new Error('The pool now needs more than your maximum payment; quote again');
    return {kind:'transition',pool:pool!,action:{kind:'swap',direction:route.direction,amountIn,minOut:amountOut}};
-  },route.poolId);
+  },route.poolId,'quote-status');
  }
 
  return {

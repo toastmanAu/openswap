@@ -226,7 +226,7 @@ el('swap').onsubmit=e=>{e.preventDefault();run(async()=>{
  if(best.venue==='pool'){
   text('quote-status','Best route: pool. Preparing the pool review…');
   try{await poolUi.prepareRouted(best.route,requested,budget);}catch(error){text('quote-status',explainError(error));throw error;}
-  text('quote-status','Best route: pool. Check the pool review before approving.');return;
+  return;
  }
  const tip=await client.getTipHeader();
  const routed=swap.quoteSwap(orders.filter(o=>!isOwnOrder(o,walletLocks)),{assetIn,assetOut,amountOut:requested,maxAmountIn:budget,tipBlock:tip.number,genesisHash:deployment.genesisHash});

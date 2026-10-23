@@ -120,6 +120,33 @@ COMMITTED with its confirmation depth, and had already archived the earlier rows
 With this, the live UI has covered a swap, a deposit and a withdrawal. Each
 transaction committed and matched the model.
 
+## Routed swaps from the Swap tab (2026-10-24)
+
+The user asked for 5 TEST on the Swap tab. The router picked the pool, and the
+normal pool review opened. The user approved it three times, because the Swap tab
+showed no result. Each approval was a separate review and signature, so these are
+three swaps, not one transaction resent:
+
+| Tx | Block | Paid (tCKB) | Received (TEST) | Fee (shannons) |
+| --- | --- | --- | --- | --- |
+| `0xbaed7f3e…` | 22,836,567 | 1.506366 | 5.00000000 | 2,705 |
+| `0xc5a9b1df…` | 22,836,579 | 1.53915152 | 5.00000002 | 2,705 |
+| `0xf628def7d154107d4fce6aa66e81472eb24fdd95c58f7f8b11cb6581828a9a66` | 22,836,798 | 1.5730186 | 5.00000003 | 2,705 |
+
+Each was checked on both endpoints:
+- it spends the previous pool cells;
+- the next state equals the model;
+- minOut is exactly the requested 5 TEST;
+- the fee is under the cap;
+- every wallet output pays the user's JoyID.
+
+Pool after: 144.33598602 tCKB / 455.15210665 TEST.
+
+Defect: a routed review reported its outcome only on the hidden Pools tab. A
+click during sending then showed only "Wait for the current pool transaction".
+Now a routed review reports to the Swap tab's status line. The Swap button is
+also disabled while a pool transaction is being prepared, signed or sent.
+
 UI defects found and fixed during P7:
 - Errors appeared only in the page-bottom status line.
 - Opening Pools during startup could hang on "Loading live pools…".
