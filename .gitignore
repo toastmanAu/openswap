@@ -12,3 +12,4 @@
 /release/
 /.wrangler/
 /.claude/worktrees/
+/test-results/

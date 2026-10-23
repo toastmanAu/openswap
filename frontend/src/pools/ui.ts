@@ -5,6 +5,7 @@ import {transition,type Operation} from '../../../pool-model/src/model.js';
 import {loadPoolManifest,type PoolManifest,type PoolTokenDisplay} from './manifest.js';
 import {BrowserSubmissionJournal} from './journal.js';
 import {parseUnits,formatUnits} from '../amounts.js';
+import {explainError} from '../errors.js';
 
 export interface PoolEnv {client():ccc.Client;signer():ccc.Signer|undefined;epoch():number;run(fn:()=>Promise<void>):void}
 const el=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id)! as T;
@@ -85,15 +86,33 @@ export function createPoolUi(env:PoolEnv){
   }catch(error){text('pool-quote',value('pool-swap-amount').trim()?(error instanceof Error?error.message:String(error)):'Enter an amount to pay.');}
  }
 
+ /** Runs a pool action with progress and errors shown beside the pool forms
+  * (and in the global status line). */
+ function act(progress:string,fn:()=>Promise<void>){
+  text('pool-action-status',progress);
+  env.run(async()=>{try{await fn();}catch(error){text('pool-action-status',explainError(error));throw error;}});
+ }
+ /** Retries when the app switches endpoints mid-load (for example at startup). */
  async function refresh(){
+  for(let attempt=0;;attempt++){
+   try{if(await refreshOnce())return;}
+   catch(error){text('pool-status',`Could not load pools: ${explainError(error)}`);throw error;}
+   if(attempt>=2){const message='Connection kept changing while loading pools; use Refresh';text('pool-status',message);throw new Error(message);}
+  }
+ }
+ /** False when the connection changed during the load and the result was discarded. */
+ async function refreshOnce():Promise<boolean>{
   const client=env.client();
   if(!loaded){manifest=await loadPoolManifest();loaded=true;}
-  if(!manifest){snapshots=[];render();text('pool-status','Pools are not deployed on this network yet. No pool transactions can be prepared.');return;}
-  if((await client.getHeaderByNumberNoCache(0))?.hash!==manifest.deployment.genesisHash){snapshots=[];render();text('pool-status','Pools are not deployed on this network yet: the connected node is not the network in the pool manifest.');return;}
+  if(!manifest){snapshots=[];render();text('pool-status','Pools are not deployed on this network yet. No pool transactions can be prepared.');return true;}
+  if((await client.getHeaderByNumberNoCache(0))?.hash!==manifest.deployment.genesisHash){
+   if(client!==env.client())return false;
+   snapshots=[];render();text('pool-status','Pools are not deployed on this network yet: the connected node is not the network in the pool manifest.');return true;
+  }
   text('pool-status','Loading live pools…');
   const known=new Set(manifest.pools.map(p=>p.poolId)),found:PoolSnapshot[]=[];let skipped=0;
   for await(const pool of scanPools(client,manifest.deployment,{maxCandidates:1000,onMalformed:()=>skipped++}))if(known.has(pool.poolId))found.push(pool);
-  if(client!==env.client())throw new Error('Connection changed while loading pools; refresh again');
+  if(client!==env.client())return false;
   for(const pool of found){
    const token=manifest.pools.find(p=>p.poolId===pool.poolId)?.token;
    if(token&&pool.token.hash()!==token.typeHash){
@@ -103,6 +122,7 @@ export function createPoolUi(env:PoolEnv){
   }
   snapshots=found;checkedAt=Date.now();render();
   text('pool-status',`${found.length} of ${manifest.pools.length} listed pools live${skipped?` · ${skipped} malformed candidates skipped`:''}.`);
+  return true;
  }
  async function currentPool(poolId:string){await refresh();const pool=snapshots.find(p=>p.poolId===poolId);if(!pool)throw new Error('Pool is no longer live; refresh and choose again');return pool;}
 
@@ -139,6 +159,7 @@ export function createPoolUi(env:PoolEnv){
    if(holder)throw new Error(`Pool submission ${holder.hash} (${holder.status}) already spends this pool's current state, and its inputs stay reserved. Use Recheck until it resolves; do not prepare a replacement.`);
   }
   const intent=await build(pool);
+  text('pool-action-status','Preparing the transaction with your JoyID account…');
   // Probe funding for JoyID preparation: one plain, data-free cell of this account.
   let probe:ccc.Cell|undefined;
   for await(const cell of s.client.findCells({script:s.lock,scriptType:'lock',scriptSearchMode:'exact',filter:{scriptLenRange:[0,1],outputDataLenRange:[0,1]},withData:true},'asc',10)){probe=cell;break;}
@@ -157,6 +178,7 @@ export function createPoolUi(env:PoolEnv){
    const bound=resolved.bindReview(review);
    pending={generation:start,session:s,funded,review,sign:()=>bound.sign({timeoutMs:60000}),title,token:tokenOf(pool)};
    showReview(pending,resolved.identity.keyType);
+   text('pool-action-status','Review ready. Check every line before approving.');
   }catch(error){funded.release();throw error;}
  }
  function showReview(p:Pending,keyType:string){
@@ -201,34 +223,34 @@ export function createPoolUi(env:PoolEnv){
   }finally{setBusy(false);renderSubmissions();}
  }
 
- el('pool-refresh').onclick=()=>env.run(async()=>{invalidate();await refresh();});
+ el('pool-refresh').onclick=()=>act('Refreshing pools…',async()=>{invalidate();await refresh();text('pool-action-status','');});
  el('pool-select').onchange=()=>{invalidate();render();};
  for(const id of ['pool-swap-direction','pool-swap-amount'])el(id).oninput=()=>{invalidate();quote();};
- el('pool-swap').onsubmit=e=>{e.preventDefault();env.run(()=>prepare('Pool swap',async pool=>{
+ el('pool-swap').onsubmit=e=>{e.preventDefault();act('Checking the live pool…',()=>prepare('Pool swap',async pool=>{
   const direction=value('pool-swap-direction') as 'xToY'|'yToX',amountIn=parseUnits(value('pool-swap-amount'),direction==='xToY'?8:tokenOf(pool).decimals);
   const flows=transition(pool!.accounting,{kind:'swap',direction,amountIn,minOut:1n}).flows;
   const action:Operation={kind:'swap',direction,amountIn,minOut:minimumOut(direction==='xToY'?flows.receivedY:flows.receivedX,manifest!.policy.slippageBps)};
   return {kind:'transition',pool:pool!,action};
  },selected().poolId));};
- el('pool-deposit').onsubmit=e=>{e.preventDefault();env.run(()=>prepare('Add liquidity',async pool=>{
+ el('pool-deposit').onsubmit=e=>{e.preventDefault();act('Checking the live pool…',()=>prepare('Add liquidity',async pool=>{
   const maxX=parseUnits(value('pool-deposit-ckb'),8),maxY=parseUnits(value('pool-deposit-token'),tokenOf(pool).decimals);
   const minted=transition(pool!.accounting,{kind:'deposit',maxX,maxY,minShares:1n}).flows.mintedShares;
   return {kind:'transition',pool:pool!,action:{kind:'deposit',maxX,maxY,minShares:minimumOut(minted,manifest!.policy.slippageBps)}};
  },selected().poolId));};
- el('pool-withdraw').onsubmit=e=>{e.preventDefault();env.run(()=>prepare('Remove liquidity',async pool=>{
+ el('pool-withdraw').onsubmit=e=>{e.preventDefault();act('Checking the live pool…',()=>prepare('Remove liquidity',async pool=>{
   const burned=parseUnits(value('pool-withdraw-shares'),0);
   const flows=transition(pool!.accounting,{kind:'withdraw',shares:burned,minX:1n,minY:1n}).flows;
   const s=manifest!.policy.slippageBps;
   return {kind:'transition',pool:pool!,action:{kind:'withdraw',shares:burned,minX:minimumOut(flows.receivedX,s),minY:minimumOut(flows.receivedY,s)}};
  },selected().poolId));};
- el('pool-create').onsubmit=e=>{e.preventDefault();env.run(()=>prepare('Create pool',async()=>{
+ el('pool-create').onsubmit=e=>{e.preventDefault();act('Checking the network…',()=>prepare('Create pool',async()=>{
   const c=manifest?.create;if(!c)throw new Error('Pool creation is not enabled for this deployment');
   return {kind:'create',request:{parameters:c.parameters,tokenOwner:c.tokenOwner,x:parseUnits(value('pool-create-ckb'),8),y:parseUnits(value('pool-create-token'),0),minShares:1n}};
  }));};
- el('pool-approve').onclick=()=>env.run(approve);
+ el('pool-approve').onclick=()=>act('Waiting for wallet signature…',approve);
  el('pool-dismiss').onclick=()=>invalidate();
  el('pool-review').addEventListener('cancel',()=>invalidate());
- el('pool-recheck').onclick=()=>env.run(async()=>{const s=await ensureSession();await s.recovery.reconcile(recoveryClient(s.client));renderSubmissions();});
+ el('pool-recheck').onclick=()=>act('Rechecking submissions…',async()=>{const s=await ensureSession();await s.recovery.reconcile(recoveryClient(s.client));renderSubmissions();text('pool-action-status','');});
 
  return {
   show:()=>env.run(async()=>{await refresh();if(env.signer())await ensureSession();}),

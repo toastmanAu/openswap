@@ -123,8 +123,11 @@ test('pool view, swap review gating and a single durable send',async({page})=>{
  await expect(info).toContainText('Permanent backing (never withdrawable): state 340 CKB · CKB reserve 80 CKB · token reserve 160 CKB');
  await page.locator('#pool-swap-amount').fill('100');await page.getByRole('button',{name:'Review pool swap'}).click();
  await expect(page.locator('#status')).toHaveText('Connect a wallet first');
+ // Errors also appear beside the pool forms, not only in the page-bottom status line.
+ await expect(page.locator('#pool-action-status')).toHaveText('Connect a wallet first');
  await connect(page);await reviewSwap(page);
  const review=page.locator('#pool-review-text');
+ await expect(page.locator('#pool-action-status')).toHaveText('Review ready. Check every line before approving.');
  for(const line of ['Pool swap','JoyID main_key','Network: CKB TESTNET','You pay: 100 CKB · 0 TEST','You receive (exact):','Minimum accepted:','Network fee:','Permanent backing (never withdrawable): 580 CKB','Review expires:'])await expect(review).toContainText(line);
  // Approval gating: nothing is signed or sent before the explicit approval.
  expect(await page.evaluate(()=>(globalThis as any).poolSignCalls)).toBe(0);expect(mock.sent).toEqual([]);
