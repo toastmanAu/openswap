@@ -92,3 +92,19 @@ pool fees total 20,344 shannons. After the full withdrawal, only dust and the
 
 The Pools tab manifest `deployments/pool-frontend.json` is generated from this
 evidence (`npm run pool:frontend-manifest`). P7 live acceptance is next.
+
+## P7 live swap through the Pools tab (2026-10-23)
+
+The user ran the local build with JoyID (main key) and swapped 10 tCKB for TEST:
+`0x2b50e473bdff5e6cfd4fb6944fb7784a7730801ff608f262084a362f0c493c80`, committed in
+block 22,835,599. Checked on both endpoints. It spends the re-entry pool cells,
+and the next state equals the model. It received 36.90418151 TEST against a
+minimum of 36.53513969 (1% bound). The fee was 2,705 shannons, and every wallet
+output pays the user's JoyID. Pool after: 110.00000496 tCKB / 370.15229029 TEST.
+
+UI defects found and fixed before this swap succeeded:
+- Errors appeared only in the page-bottom status line.
+- Opening Pools during startup could hang on "Loading live pools…".
+- Token amounts were shown in raw base units.
+- A repeated Review click cancelled the in-flight preparation and collided with
+  its funding reservation.
