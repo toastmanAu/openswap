@@ -102,6 +102,14 @@ and the next state equals the model. It received 36.90418151 TEST against a
 minimum of 36.53513969 (1% bound). The fee was 2,705 shannons, and every wallet
 output pays the user's JoyID. Pool after: 110.00000496 tCKB / 370.15229029 TEST.
 
+Add liquidity through the Pools tab:
+`0xcd8100f0a73d7294ede34dfae0c787b217ed5dc66a9ddfdea55f59d62502e2ec`, block
+22,836,055. Checked on both endpoints with the same checks. The budget was a
+maximum of 100 tCKB and 100 TEST. The deposit took 29.71749949 tCKB and 100 TEST;
+the other 70.28250051 tCKB stayed in the wallet. It minted 5,446,755,795 LP
+shares (minimum 5,392,288,237), and the fee was 2,991 shannons. Pool after:
+139.71750445 tCKB / 470.15229029 TEST, 25,608,047,117 total shares.
+
 UI defects found and fixed before this swap succeeded:
 - Errors appeared only in the page-bottom status line.
 - Opening Pools during startup could hang on "Loading live pools…".
