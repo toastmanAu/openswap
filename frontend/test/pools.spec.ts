@@ -60,10 +60,10 @@ function matches(c:ccc.Cell,search:any){
  if(f.script){const t=c.cellOutput.type;if(!t||t.codeHash!==f.script.code_hash||t.hashType!==f.script.hash_type||t.args!==f.script.args)return false;}
  return true;
 }
-interface Mock {sent:string[];journalAtSend:string[];send:'ok'|'abort'}
+interface Mock {sent:string[];journalAtSend:string[];send:'ok'|'abort';committedAt?:bigint;tip:bigint}
 async function mockPools(page:Page,options:{manifest?:boolean;token?:TokenMeta}={}):Promise<Mock>{
  const {cells,manifest,parents}=chain(options.token),live=new Map(cells.map(c=>[`${c.outPoint.txHash}:${c.outPoint.index}`,c]));
- const mock:Mock={sent:[],journalAtSend:[],send:'ok'},pool=new Map<string,unknown>();
+ const mock:Mock={sent:[],journalAtSend:[],send:'ok',tip:100n},pool=new Map<string,unknown>();
  if(options.manifest!==false)await page.route('**/pool-manifest.json',route=>route.fulfill({json:manifest}));
  await page.route('https://testnet.ckb.dev/**',async route=>{
   const body=route.request().postDataJSON();let result:unknown;
@@ -79,10 +79,13 @@ async function mockPools(page:Page,options:{manifest?:boolean;token?:TokenMeta}=
    case 'get_transaction':{
     // Like a real node, report an accepted transaction as pending; otherwise unknown.
     const sent=pool.get(body.params[0]),parent=parents.get(body.params[0]);
-    if(sent)result={transaction:sent,tx_status:{status:'pending',block_hash:null,block_number:null,reason:null},cycles:null,time_added_to_pool:null,fee:null,min_replace_fee:null};
+    if(sent&&mock.committedAt!==undefined)result={transaction:sent,tx_status:{status:'committed',block_hash:hash(41),block_number:ccc.numToHex(mock.committedAt),reason:null},cycles:null,time_added_to_pool:null,fee:null,min_replace_fee:null};
+    else if(sent)result={transaction:sent,tx_status:{status:'pending',block_hash:null,block_number:null,reason:null},cycles:null,time_added_to_pool:null,fee:null,min_replace_fee:null};
     else if(parent)result={transaction:JsonRpcTransformers.transactionFrom(parent),tx_status:{status:'committed',block_hash:hash(40),block_number:'0x1',reason:null},cycles:null,time_added_to_pool:null,fee:null,min_replace_fee:null};
     else return route.fallback();
     break;}
+   case 'get_tip_header':
+    result={compact_target:'0x1d08a2a4',dao:`0x${'00'.repeat(32)}`,epoch:'0x0',extra_hash:hash(42),hash:hash(43),nonce:'0x0',number:ccc.numToHex(mock.tip),parent_hash:hash(44),proposals_hash:hash(45),timestamp:'0x0',transactions_root:hash(46),version:'0x0'};break;
    default:return route.fallback();
   }
   await route.fulfill({json:{jsonrpc:'2.0',id:body.id,result}});
@@ -135,7 +138,18 @@ test('pool view, swap review gating and a single durable send',async({page})=>{
  await expect(page.locator('#pool-action-status')).toContainText('Submitted 0x');await expect(page.locator('#pool-review')).toBeHidden();
  expect(mock.sent).toHaveLength(1);expect(mock.journalAtSend[0]).toContain(mock.sent[0]!);
  const saved=await records(page);expect(saved).toHaveLength(1);expect(saved[0].transaction).toBe(mock.sent[0]);
- await expect(page.locator('#pool-submissions')).toContainText(`UNKNOWN · ${saved[0].hash}`);
+ await expect(page.locator('#pool-submissions')).toContainText(`SENT · waiting for confirmation · ${saved[0].hash}`);
+ // Recheck: the node reports it pending, then committed but shallow, then deep enough to archive.
+ await page.getByRole('button',{name:'Recheck'}).click();
+ await expect(page.locator('#pool-submissions')).toContainText(`PENDING · accepted by the node, waiting to be committed · ${saved[0].hash}`);
+ mock.committedAt=95n;await page.getByRole('button',{name:'Recheck'}).click();
+ await expect(page.locator('#pool-submissions')).toContainText(`COMMITTED · 6 of 24 confirmations`);
+ expect(await records(page)).toHaveLength(1);
+ mock.tip=118n;await page.getByRole('button',{name:'Recheck'}).click();
+ await expect(page.locator('#pool-submissions-status')).toHaveText('No unresolved pool submissions from this browser.');
+ expect(await records(page)).toEqual([]);
+ const archived=await page.evaluate(()=>Object.keys(localStorage).filter(k=>k.startsWith('toastdex-pool-journal:')&&k.endsWith(':archive')).map(k=>localStorage.getItem(k)).join(''));
+ expect(archived).toContain(saved[0].hash);expect(mock.sent).toHaveLength(1);
  await page.screenshot({path:'frontend/test-results/pool-submitted.png',fullPage:true});
 });
 
@@ -180,11 +194,12 @@ test('an ambiguous send stays unknown, is never retried and survives a reload',a
  await expect(page.locator('#pool-action-status')).toContainText('Status unknown for 0x');
  await expect(page.locator('#pool-action-status')).toContainText('Do not prepare it again');
  const [row]=await records(page);expect(row.status).toBe('unknown');expect(mock.sent).toEqual([row.transaction]);
- await expect(page.locator('#pool-submissions')).toContainText(`UNKNOWN · ${row.hash}`);
+ await expect(page.locator('#pool-submissions')).toContainText(`UNKNOWN · the send was not confirmed by the node. Do not prepare it again. · ${row.hash}`);
  await expect(page.locator('#pool-submissions button')).toHaveCount(0);
  await page.reload();await expect(page.locator('#scan-status')).toContainText('supported live orders',{timeout:35000});
  await connect(page);await page.getByRole('button',{name:'Pools',exact:true}).click();
- await expect(page.locator('#pool-submissions')).toContainText(`UNKNOWN · ${row.hash}`);
+ await expect(page.locator('#pool-submissions')).toContainText(`UNKNOWN · the node does not report this transaction yet`);
+ await expect(page.locator('#pool-submissions')).toContainText(row.hash);
  // Its inputs (including the pool state) stay reserved, so a conflicting swap cannot be prepared.
  await page.locator('#pool-swap-amount').fill('100');await page.getByRole('button',{name:'Review pool swap'}).click();
  await expect(page.locator('#status')).toContainText(`Pool submission ${row.hash} (unknown) already spends this pool's current state`);

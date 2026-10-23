@@ -255,6 +255,13 @@ Rules:
 - An ambiguous send is shown as unknown, with no retry control. Its inputs,
   including the pool state, stay reserved across reloads. Preparing against that
   state is refused with the blocking submission's hash.
+- Each submission row shows what the node reports. The states are SENT
+  (accepted by this browser's send), PENDING, COMMITTED with its depth, REJECTED
+  and UNKNOWN. The tab rechecks every 15 s while rows remain, skipping the check
+  while preparing or reviewing; Recheck forces one. Recheck never signs or sends.
+- A row committed at 24 or more confirmations is archived (`archiveCommitted`)
+  and its reservations are released. Abandoning a never-committed row is still an
+  explicit operator step, not a UI action.
 
 `frontend/src/pools/journal.ts` is a localStorage-backed `ArchivableSubmissionJournal`
 with the solver journal's record validation. A write from another tab poisons

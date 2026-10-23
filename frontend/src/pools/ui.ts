@@ -24,6 +24,9 @@ export const minimumOut=(quoted:bigint,slippageBps:number)=>{const n=quoted*BigI
  * unknown hash with `transaction: null` / status `unknown`, which CCC maps to
  * `undefined`; outages still throw and never read as an absent transaction. */
 const recoveryClient=(client:ccc.Client)=>client as unknown as PoolSubmitClient;
+/** Committed rows are archived (and their reservations dropped) at this depth. */
+export const ARCHIVE_CONFIRMATIONS=24;
+const RECHECK_MS=15000;
 
 interface Session {signer:ccc.Signer;epoch:number;client:ccc.Client;lock:ccc.Script;journal:BrowserSubmissionJournal;recovery:PoolSubmissionRecovery;reservations:PoolFundingReservations}
 interface Pending {generation:number;session:Session;funded:FundedPoolTransaction;review:PoolTransactionReview;sign:()=>Promise<ccc.Transaction>;title:string;token:TokenDisplay}
@@ -31,6 +34,9 @@ interface Pending {generation:number;session:Session;funded:FundedPoolTransactio
 export function createPoolUi(env:PoolEnv){
  let manifest:PoolManifest|undefined,loaded=false,snapshots:PoolSnapshot[]=[],checkedAt=0;
  let session:Session|undefined,pending:Pending|undefined,generation=0,busy=false;
+ /** Latest observed label per journaled hash; hashes whose send succeeded here. */
+ const labels=new Map<string,string>(),sentHere=new Set<string>();
+ let resolving:Promise<void>|undefined,recheckTimer:ReturnType<typeof setTimeout>|undefined;
 
  function setBusy(next:boolean){busy=next;for(const b of document.querySelectorAll<HTMLButtonElement>('#view-pools button,#pool-approve,#pool-dismiss'))b.disabled=next;}
  /** Drops any unsigned review and returns its funding reservation. */
@@ -40,7 +46,7 @@ export function createPoolUi(env:PoolEnv){
   const dialog=el<HTMLDialogElement>('pool-review');if(dialog.open)dialog.close();
   text('pool-review-text','');
  }
- function reset(){invalidate();session=undefined;el('pool-submissions').replaceChildren();text('pool-submissions-status','Connect a wallet to see pool submissions from this browser.');}
+ function reset(){invalidate();stopRecheck();labels.clear();session=undefined;el('pool-submissions').replaceChildren();text('pool-submissions-status','Connect a wallet to see pool submissions from this browser.');}
 
  function selected():PoolSnapshot {
   const pool=snapshots.find(p=>p.poolId===value('pool-select'));
@@ -137,16 +143,51 @@ export function createPoolUi(env:PoolEnv){
   const journal=new BrowserSubmissionJournal(localStorage,scope),reservations=new PoolFundingReservations();
   const recovery=new PoolSubmissionRecovery(journal,reservations,scope);
   // Restores reservations for every recorded submission before any new funding.
-  await recovery.reconcile(recoveryClient(client));
+  const reports=await recovery.reconcile(recoveryClient(client));
   if(env.signer()!==signer||env.epoch()!==epoch)throw new Error('Wallet changed; try again');
   session={signer,epoch,client,lock,journal,recovery,reservations};
-  renderSubmissions();return session;
+  await settle(session,reports);renderSubmissions();scheduleRecheck();return session;
+ }
+ type Reports=Awaited<ReturnType<PoolSubmissionRecovery['reconcile']>>;
+ /** Labels every row from what the node reports and archives committed rows that
+  * are deep enough. Read-only: never signs, sends or retries. */
+ async function settle(s:Session,reports:Reports){
+  for(const r of reports){
+   if(r.status==='committed'){
+    try{await s.recovery.archiveCommitted(recoveryClient(s.client) as never,r.hash,{minConfirmations:ARCHIVE_CONFIRMATIONS});labels.delete(r.hash);sentHere.delete(r.hash);continue;}
+    catch(error){
+     const depth=/only (\d+) confirmations/.exec(error instanceof Error?error.message:'')?.[1];
+     if(!depth)throw error;
+     labels.set(r.hash,`COMMITTED · ${depth} of ${ARCHIVE_CONFIRMATIONS} confirmations; cleared from this list at ${ARCHIVE_CONFIRMATIONS}`);continue;
+    }
+   }
+   labels.set(r.hash,r.status==='rejected'?'REJECTED · the node refused it. Its inputs stay reserved until it is resolved.'
+    :r.observedStatus==='pending'||r.observedStatus==='proposed'?'PENDING · accepted by the node, waiting to be committed'
+    :sentHere.has(r.hash)?'SENT · waiting for the node to report it'
+    :'UNKNOWN · the node does not report this transaction yet. It may not have arrived; it may still commit.');
+  }
+ }
+ /** One reconcile+settle at a time; submit waits for it so the two never overlap. */
+ function recheck(s:Session):Promise<void>{
+  resolving??=(async()=>{try{await settle(s,await s.recovery.reconcile(recoveryClient(s.client)));}finally{resolving=undefined;}})();
+  return resolving.then(()=>{if(session===s)renderSubmissions();});
+ }
+ function stopRecheck(){if(recheckTimer)clearTimeout(recheckTimer);recheckTimer=undefined;}
+ /** While rows remain, recheck in the background (skipped while busy or reviewing). */
+ function scheduleRecheck(){
+  stopRecheck();const s=session;
+  if(!s||!s.journal.list().length)return;
+  recheckTimer=setTimeout(()=>{
+   if(session!==s)return;
+   if(busy||pending){scheduleRecheck();return;}
+   void recheck(s).catch(()=>{}).finally(()=>{if(session===s)scheduleRecheck();});
+  },RECHECK_MS);
  }
  function renderSubmissions(){
   const root=el('pool-submissions');root.replaceChildren();if(!session)return;
   const rows=session.journal.list();
-  text('pool-submissions-status',rows.length?'Signed pool transactions saved in this browser before sending. Unknown means the node has not confirmed it; it does not prove failure. Their inputs stay reserved and nothing is retried automatically.':'No unresolved pool submissions from this browser.');
-  for(const row of rows){const item=document.createElement('p');item.className='activity-row';item.textContent=`${row.status.toUpperCase()} · ${row.hash}`;root.append(item);}
+  text('pool-submissions-status',rows.length?`Signed pool transactions saved in this browser before sending, checked against the node every ${RECHECK_MS/1000} s. Their inputs stay reserved until they are resolved, and nothing is retried automatically.`:'No unresolved pool submissions from this browser.');
+  for(const row of rows){const item=document.createElement('p');item.className='activity-row';item.textContent=`${labels.get(row.hash)??row.status.toUpperCase()} · ${row.hash}`;root.append(item);}
  }
 
  /** Single-flight: a second preparation must never start (and cancel the first)
@@ -219,15 +260,18 @@ export function createPoolUi(env:PoolEnv){
   try{signed=await p.sign();}
   catch(error){if(pending===p){pending=undefined;p.funded.release();el<HTMLDialogElement>('pool-review').close();}setBusy(false);throw error;}
   try{
+   await resolving;
    const outcome=await p.session.recovery.submit(recoveryClient(p.session.client),p.review,signed,p.funded);
    pending=undefined;el<HTMLDialogElement>('pool-review').close();
+   if(outcome.outcome==='sent'){sentHere.add(outcome.hash);labels.set(outcome.hash,'SENT · waiting for confirmation');}
+   else labels.set(outcome.hash,'UNKNOWN · the send was not confirmed by the node. Do not prepare it again.');
    text('pool-action-status',outcome.outcome==='sent'
     ?`Submitted ${outcome.hash}. It stays listed under pool submissions until confirmed and archived.`
     :`Status unknown for ${outcome.hash}: the node did not confirm receipt. The signed transaction is saved in this browser and its inputs stay reserved. Do not prepare it again; check its status with Recheck. Node response: ${outcome.error.slice(0,300)}`);
   }catch(error){
    // submit throws only before persisting, so nothing was sent.
    if(pending===p){pending=undefined;p.funded.release();el<HTMLDialogElement>('pool-review').close();}throw error;
-  }finally{setBusy(false);renderSubmissions();}
+  }finally{setBusy(false);renderSubmissions();scheduleRecheck();}
  }
 
  el('pool-refresh').onclick=()=>act('Refreshing pools…',async()=>{invalidate();await refresh();text('pool-action-status','');});
@@ -257,7 +301,7 @@ export function createPoolUi(env:PoolEnv){
  el('pool-approve').onclick=()=>act('Waiting for wallet signature…',approve);
  el('pool-dismiss').onclick=()=>invalidate();
  el('pool-review').addEventListener('cancel',()=>invalidate());
- el('pool-recheck').onclick=()=>act('Rechecking submissions…',async()=>{const s=await ensureSession();await s.recovery.reconcile(recoveryClient(s.client));renderSubmissions();text('pool-action-status','');});
+ el('pool-recheck').onclick=()=>act('Rechecking submissions…',async()=>{const s=await ensureSession();await recheck(s);scheduleRecheck();text('pool-action-status','');});
 
  return {
   show:()=>env.run(async()=>{await refresh();if(env.signer())await ensureSession();}),
