@@ -216,8 +216,9 @@ el('swap').onsubmit=e=>{e.preventDefault();run(async()=>{
  await poolUi.load().catch(()=>{});
  if(start!==generation)throw new Error('Wallet or market changed; quote again');
  // Re-select the venue from fresh orders and pool state; the pool path has its own review.
- const {best}=bestRoute();
- if(best?.venue==='pool'){
+ const {best,notes}=bestRoute();
+ if(!best)throw new Error(`No available swap for ${amount(requested,assetOut)} paying ${label(assetIn)}. ${notes.join(' · ')}.`);
+ if(best.venue==='pool'){
   text('quote-status','Best route: pool. Preparing the pool review…');
   try{await poolUi.prepareRouted(best.route,requested,budget);}catch(error){text('quote-status',explainError(error));throw error;}
   text('quote-status','Best route: pool. Check the pool review before approving.');return;
@@ -239,7 +240,7 @@ el('sign').onclick=()=>run(async()=>{const pending=review;if(!pending||pending.g
 run(async()=>{
  try{for(const item of JSON.parse(localStorage.getItem('openswap-assets')??'[]'))addAsset(String(item.label),ccc.Script.from(item.script));}catch{report(new Error('Stored token list was invalid; add the tokens again.'));}
  const testOwner=await ccc.Address.fromString('ckt1qrfrwcdnvssswdwpn3s9v8fp87emat306ctjwsm3nmlkjg8qyza2cqgqq9qha8uqganyw9aavyyqeltvrlg59lp4svl02uvq',client);
- const testToken=await ccc.Script.fromKnownScript(client,ccc.KnownScript.XUdt,testOwner.script.hash());addAsset('Test xUDT',testToken);
+ const testToken=await ccc.Script.fromKnownScript(client,ccc.KnownScript.XUdt,testOwner.script.hash());addAsset('Order-test xUDT',testToken);
  for(const token of swap.tokensForNetwork('testnet'))if(token.profile!=='resolver-required')addAsset(token.symbol,ccc.Script.from(token.script));renderCatalog();refreshAssets();if(value('quote')==='ckb')el<HTMLSelectElement>('quote').value=testToken.hash();await configure(value('rpc'),value('indexer'));
  // Pool tokens join the asset list (and the resolver) before the order scan, so
  // orders in a pool's token are recognised and both venues can be compared.

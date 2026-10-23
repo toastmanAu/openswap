@@ -50,7 +50,7 @@ available wallet balance before building a fill. CKB fees/storage are separate.
   Spent quotes fail with a request to refresh/requote; no silent repricing occurs.
 
 Amounts use **human-readable decimals** for CKB and catalog tokens (eight for
-CKB and iCKB). Conversion uses exact bigint arithmetic. Test xUDT and manually
+CKB and iCKB). Conversion uses exact bigint arithmetic. Order-test xUDT and manually
 added tokens with unknown decimals use integer units; decimals are never guessed
 from symbols. Existing on-chain orders retain their original amounts: an old
 entry of 10000 shannons now displays as 0.0001 CKB.

@@ -29,7 +29,7 @@ test('mismatched custom indexer is rejected and the current connection remains u
 
 test('swap quotes use decimal CKB and derive payment without a budget',async({page})=>{
  await mockBook(page);await page.goto('/');await expect(page.locator('#scan-status')).toContainText('120 supported live orders',{timeout:35000});
- await page.locator('#swap-output').fill('0.0000001');await expect(page.locator('#pay-estimate')).toHaveText('1');await expect(page.locator('#quote-status')).toContainText('Receive 0.0000001 CKB for 1 Test xUDT');
+ await page.locator('#swap-output').fill('0.0000001');await expect(page.locator('#pay-estimate')).toHaveText('1');await expect(page.locator('#quote-status')).toContainText('Receive 0.0000001 CKB for 1 Order-test xUDT');
  await page.locator('#swap-submit').click();await expect(page.locator('#status')).toHaveText('Connect a wallet first');
  await page.getByRole('button',{name:'Reverse tokens'}).click();await page.locator('#swap-output').fill('1');await expect(page.locator('#quote-status')).toContainText('No available swap');
  await expect(page.locator('#available-orders button').first()).toBeVisible();
