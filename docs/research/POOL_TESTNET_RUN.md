@@ -110,9 +110,21 @@ the other 70.28250051 tCKB stayed in the wallet. It minted 5,446,755,795 LP
 shares (minimum 5,392,288,237), and the fee was 2,991 shannons. Pool after:
 139.71750445 tCKB / 470.15229029 TEST, 25,608,047,117 total shares.
 
-UI defects found and fixed before this swap succeeded:
+Remove liquidity through the Pools tab:
+`0x92cba3363fc06267e149c59f802485217f384880b9a04ab618ee27cc538db214`, block
+22,836,113. Checked on both endpoints. It burned 10,000 LP shares and received
+0.00005455 tCKB and 0.00018359 TEST, against minimums of 0.000054 and 0.00018175.
+The fee was 3,102 shannons. The new submission-status view showed the row as
+COMMITTED with its confirmation depth, and had already archived the earlier rows.
+
+With this, the live UI has covered a swap, a deposit and a withdrawal. Each
+transaction committed and matched the model.
+
+UI defects found and fixed during P7:
 - Errors appeared only in the page-bottom status line.
 - Opening Pools during startup could hang on "Loading live pools…".
 - Token amounts were shown in raw base units.
 - A repeated Review click cancelled the in-flight preparation and collided with
   its funding reservation.
+- Submissions showed UNKNOWN after a successful send and were never archived.
+- The dev server let browsers keep a stale bundle across restarts.

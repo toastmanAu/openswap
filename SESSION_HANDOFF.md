@@ -4,6 +4,22 @@ Saved 2026-10-12 (Australia/Adelaide). Read this first when resuming.
 
 ## Current request and stopping point
 
+### P7 live acceptance passed (2026-10-23)
+
+A JoyID swap, deposit and withdrawal through the local Pools tab
+(`npm run dev:frontend`) were verified on two endpoints. Fixes made along the way:
+- token decimals;
+- inline errors and progress;
+- single-flight preparation;
+- submission status labels and archival;
+- dev bundle versioning.
+
+Next candidates, all user decisions:
+- public UI hosting;
+- order/pool routing;
+- the reviewer engagement;
+- the CoTA proof service for subkeys.
+
 ### P6 testnet pool lifecycle passed (2026-10-23)
 
 The pool code was deployed and the test token minted. All seven lifecycle steps
