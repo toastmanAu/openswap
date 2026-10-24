@@ -11,7 +11,7 @@ import {mkdir,readFile,writeFile} from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import {CKB,udt,createOrder,submit,parse,payment,decodeTerms,assertNetwork,CatalogAssetResolver,PinnedXudtResolver,type Deployment} from '../sdk/src/index.js';
 import {scanPools,type PoolDeployment} from '../pool-sdk/src/pools.js';
-import {ENDPOINTS,GENESIS,MAX_FEE,XUDT} from './lib/pool-live.js';
+import {ENDPOINTS,FEE_RATE,GENESIS,MAX_FEE,XUDT} from './lib/pool-live.js';
 
 const keyFile=new URL('../.local/testnet-split-maker-key',import.meta.url);
 const configFile=new URL('../deployments/split-maker.json',import.meta.url);
@@ -62,7 +62,7 @@ if(command==='prepare'){
   const lots=LOTS.map(l=>({offerAmount:l.offerCkb,askAmount:l.offerCkb*y*10000n/(x*(10000n+l.premiumBps))}));
   const marginal=Number(x)*(10000-Number(feeBps))/10000/Number(y);
   const plan=lots.map(l=>({offerCkb:ccc.fixedPointToString(l.offerAmount),askTest:ccc.fixedPointToString(l.askAmount),ckbPerTest:(Number(l.offerAmount)/Number(l.askAmount)).toFixed(4)}));
-  const built=await createOrder({signer,deployment,resolver:resolver(client),maxFee:MAX_FEE},{offerAsset:CKB,askAsset:udt(token),lots});
+  const built=await createOrder({signer,deployment,resolver:resolver(client),maxFee:MAX_FEE,feeRate:FEE_RATE},{offerAsset:CKB,askAsset:udt(token),lots});
   for(const input of built.tx.inputs)assert((await input.getCell(client)).cellOutput.lock.eq(maker.script),'Inputs must all belong to the maker');
   const fee=await built.tx.getFee(client);
   console.log(ccc.stringify({maker:maker.toString(),poolState:pool.stateCell.outPoint,poolMarginalCkbPerTest:marginal.toFixed(4),lots:plan,lockedCapacity:built.tx.outputs.slice(0,lots.length).reduce((s,o)=>s+o.capacity,0n),fee}));

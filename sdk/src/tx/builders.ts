@@ -6,7 +6,7 @@ import { nonces } from '../lots.js';
 import { assertNetwork, parse } from '../orders.js';
 import { type AssetId, type Deployment, type OpenSwapOrder, assetKey } from '../types.js';
 
-export interface BuildContext { signer: ccc.Signer; deployment: Deployment; resolver?: AssetResolver; maxFee?: bigint }
+export interface BuildContext { signer: ccc.Signer; deployment: Deployment; resolver?: AssetResolver; maxFee?: bigint; feeRate?: bigint }
 export interface BuiltTransaction {
   tx: ccc.Transaction;
   deployment: Deployment;
@@ -69,8 +69,8 @@ async function finish(tx: ccc.Transaction, context: BuildContext, check: (tx: cc
   if (feeOutput === undefined) await tokens(tx, context);
   check(tx);
   await tx.completeInputsByCapacity(context.signer); check(tx);
-  if (feeOutput === undefined) await tx.completeFeeBy(context.signer);
-  else await tx.completeFeeChangeToOutput(context.signer, feeOutput);
+  if (feeOutput === undefined) await tx.completeFeeBy(context.signer, context.feeRate);
+  else await tx.completeFeeChangeToOutput(context.signer, feeOutput, context.feeRate);
   check(tx);
   const fee = await tx.getFee(context.signer.client);
   if (fee < 0n || fee > (context.maxFee ?? 100_000_000n)) throw new Error('Transaction fee exceeds configured maximum');
