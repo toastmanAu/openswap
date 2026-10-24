@@ -73,6 +73,12 @@ serve files byte-identical to the reproducible release.
   endpoints: it matches the pool model, the fee was 2,705 shannons, and every
   wallet output pays the user's JoyID.
 
+Follow-up deployment `https://991cef6a.toastdex.pages.dev` (source `75ced03`,
+2026-10-24): faster pool review preparation. Files on all origins are
+byte-identical to the reproducible release, and all 22 browser tests pass on
+both origins. On toastdex.org, the pay-TEST review was ready in 12.5 s, down
+from 20–24 s.
+
 Rollback: select the previous successful deployment in Pages. Published contract
 code and outstanding order cells remain unchanged by frontend rollbacks.
 
