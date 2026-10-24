@@ -217,8 +217,9 @@ async function prepare(built:swap.BuiltTransaction,summary:string){if(!signer)th
 el('swap').onsubmit=e=>{e.preventDefault();run(async()=>{
  const ctx=context(),start=generation;await assertActiveAccount(ctx.signer,start);const base=selected('base'),quote=selected('quote');
  const assetOut=value('swap-direction')==='buy'?base:quote,assetIn=value('swap-direction')==='buy'?quote:base;
- const requested=parseUnits(value('swap-output'),decimals(assetOut)),budget=value('swap-budget').trim()?parseUnits(value('swap-budget'),decimals(assetIn)):swap.U128_MAX;await scan();
- await poolUi.load().catch(()=>{});
+ const requested=parseUnits(value('swap-output'),decimals(assetOut)),budget=value('swap-budget').trim()?parseUnits(value('swap-budget'),decimals(assetIn)):swap.U128_MAX;
+ // Fresh orders and fresh pool state are independent reads.
+ await Promise.all([scan(),poolUi.load().catch(()=>{})]);
  if(start!==generation)throw new Error('Wallet or market changed; quote again');
  // Re-select the venue from fresh orders and pool state; the pool path has its own review.
  const {best,notes}=bestRoute();

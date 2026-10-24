@@ -1,7 +1,7 @@
 /** JoyID resolution, preparation and explicit reviewed signing. Never sends. */
 import {ccc} from '@ckb-ccc/core';
 import type {BuiltPoolTransaction,Wallet} from './builders.js';
-import {assertPoolNetwork,liveCell,pointKey,readBounded,sameCell,withPoolDeadline as deadline,type PoolDeployment,type ReadOptions} from './pools.js';
+import {assertPoolNetwork,liveCell,liveCells,pointKey,readBounded,sameCell,withPoolDeadline as deadline,type PoolDeployment,type ReadOptions} from './pools.js';
 import {validateJoyIdProof,type JoyIdProofSource} from './joyid-proof.js';
 import type {PoolTransactionReview} from './review.js';
 
@@ -76,10 +76,8 @@ export async function resolveJoyIdWallet(
  return deadline(options,async o=>{
   const bound=await binding(o),snapshots:ccc.Cell[]=[];
   requireJoy(probeFunding.cellOutput.lock.eq(bound.lock),'funding belongs to another account');
-  for(const code of codes){
-   const cell=await liveCell(client,code.dep.outPoint,o);check();
-   requireJoy(ccc.hashCkb(cell.outputData)===code.dataHash,'wallet code hash mismatch');snapshots.push(cell);
-  }
+  const codeCells=await liveCells(client,codes.map(code=>code.dep.outPoint),o);check();
+  for(const [i,cell] of codeCells.entries()){requireJoy(ccc.hashCkb(cell.outputData)===codes[i]!.dataHash,'wallet code hash mismatch');snapshots.push(cell);}
   requireJoy(snapshots.some(cell=>expectedHashType==='type'?cell.cellOutput.type?.hash()===expectedCode:ccc.hashCkb(cell.outputData)===expectedCode),'pinned code does not resolve wallet lock');
   const stateCells:ccc.Cell[]=[];
   let proof:ccc.Hex|undefined;
@@ -110,7 +108,8 @@ export async function resolveJoyIdWallet(
   };
   const fresh=async(options:ReadOptions)=>{
    await assertBinding(options);
-   for(const cell of snapshots){requireJoy(sameCell(cell,await liveCell(client,cell.outPoint,options)),'wallet dependency changed or spent');check();}
+   const live=await liveCells(client,snapshots.map(cell=>cell.outPoint),options);check();
+   for(const [i,cell] of snapshots.entries())requireJoy(sameCell(cell,live[i]!),'wallet dependency changed or spent');
    await assertBinding(options);
   };
   // Empty-output preflight is never signed. Pre-resolved proof means the real

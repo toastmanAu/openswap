@@ -4,7 +4,7 @@ import {parseAmount} from '../../sdk/src/codec.js';
 import {createPool,transition,type Operation} from '../../pool-model/src/model.js';
 import {XUDT_CODE_HASH} from './codec.js';
 import {buildCreate,buildTransition,PoolBuildError,type Wallet,type Recipients,type CreateRequest,type BuiltPoolTransaction} from './builders.js';
-import {assertPoolNetwork,liveCell,parsePool,pointKey,sameCell,validateCell,readBounded,withPoolDeadline,type PoolClient,type PoolDeployment,type PoolSnapshot,type ReadOptions} from './pools.js';
+import {assertPoolNetwork,liveCells,parsePool,pointKey,sameCell,validateCell,readBounded,withPoolDeadline,type PoolClient,type PoolDeployment,type PoolSnapshot,type ReadOptions} from './pools.js';
 
 export type PoolIntent={kind:'create';request:CreateRequest}|{kind:'transition';pool:PoolSnapshot;action:Operation};
 export class PoolFundingError extends Error {
@@ -98,11 +98,10 @@ export async function fundPoolTransaction(
    o.signal?.throwIfAborted();
    if(chosen.length===0){const first=remainder[next++];if(!first)throw new PoolFundingError(scanComplete?'INSUFFICIENT':'LIMIT','no eligible funding in bounded candidate set');chosen.push(first);}
    if(chosen.length>maxInputs)throw new PoolFundingError('LIMIT','selected funding exceeds input budget');
-   for(let i=live.length;i<chosen.length;i++){
-    const expected=chosen[i]!.cell;
-    if(reservations.has(selectedDeployment.genesisHash,expected.outPoint))throw new PoolFundingError('RESERVED','funding reserved during selection');
-    const current=await liveCell(client,expected.outPoint,o);requireFunding(sameCell(expected,current),'indexer/live funding mismatch');live.push(current);
-   }
+   const fresh=chosen.slice(live.length).map(c=>c.cell);
+   for(const expected of fresh)if(reservations.has(selectedDeployment.genesisHash,expected.outPoint))throw new PoolFundingError('RESERVED','funding reserved during selection');
+   const current=await liveCells(client,fresh.map(c=>c.outPoint),o);
+   for(const [i,expected] of fresh.entries()){requireFunding(sameCell(expected,current[i]!),'indexer/live funding mismatch');live.push(current[i]!);}
    let built:BuiltPoolTransaction;
    try{
     const funded={...selectedWallet,funding:live};

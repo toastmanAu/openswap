@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {ccc} from '@ckb-ccc/core';
 import {writeLE} from '../../sdk/src/codec.js';
 import {fundPoolTransaction,PoolFundingReservations} from '../src/funding.js';
-import {parsePool,pointKey} from '../src/pools.js';
+import {liveCells,parsePool,pointKey,type PoolClient} from '../src/pools.js';
 import {reviewPoolTransaction} from '../src/review.js';
 import {hash,dep,request,fixture} from './funding-fixture.js';
 
@@ -167,4 +167,18 @@ test('review expires and rejects stale inputs or cancellation without authorizin
  assert.throws(()=>expiring.assertIntegrity(funded.built.transaction),/expired/);
  await assert.rejects(expiring.assertFresh(f.client),/expired/);
  funded.release();
+});
+
+test('liveCells reads concurrently within a bound, keeps input order and fails closed on a spent cell',async()=>{
+ const f=fixture(),points=Array.from({length:20},(_,i)=>f.cell(100+i,10n**10n));
+ for(const c of points)f.cells.set(pointKey(c.outPoint),c);
+ let inFlight=0,peak=0;
+ const client={getCellLiveNoCache:async(p:ccc.OutPointLike)=>{inFlight++;peak=Math.max(peak,inFlight);
+  // Later points answer sooner, so order must come from position, not arrival.
+  await new Promise(r=>setTimeout(r,20-Number(ccc.OutPoint.from(p).index)%20));inFlight--;return f.cells.get(pointKey(p))?.clone();}} as unknown as PoolClient;
+ const cells=await liveCells(client,points.map(c=>c.outPoint),{},4);
+ assert.deepEqual(cells.map(c=>pointKey(c.outPoint)),points.map(c=>pointKey(c.outPoint)));
+ assert.equal(peak,4);
+ f.cells.delete(pointKey(points[7]!.outPoint));
+ await assert.rejects(liveCells(client,points.map(c=>c.outPoint)),{code:'STALE'});
 });

@@ -288,6 +288,14 @@ route goes through the normal pool review with `minOut` set to the requested
 amount, so the receipt can only meet or exceed the request. Order routes are
 unchanged.
 
+Review preparation time. Every check still runs: pool, dependency, input and
+JoyID code-cell freshness, repeated at funding, wallet preparation and review.
+Independent reads within each check now run concurrently through `liveCells`
+(at most 8 in flight). Ordering-sensitive rechecks, such as the final pool-state
+read, still happen after the batch. On Review, the order scan and pool reload
+also run together. A live testnet run of the pay-TEST review (57 live-cell reads,
+about 200 ms per RPC) went from 20–24 s to 10.5–12 s.
+
 A single trade is never split across orders and a pool. Splitting would need a
 combined builder and review, and is a separate, untracked design.
 

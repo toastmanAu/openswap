@@ -83,11 +83,10 @@ export async function withPoolDeadline<T>(options:ReadOptions,work:(options:Read
 }
 /** The prototype requires direct Data1 code deps, never caller-labelled dep groups. */
 export async function assertPoolDependencies(client:PoolClient,deployment:PoolDeployment,options:ReadOptions={}):Promise<void> {
- for(const [dependency,hash] of [[deployment.poolDep,deployment.codeHash],[deployment.tokenDep,XUDT_CODE_HASH]] as const){
-  const dep=ccc.CellDep.from(dependency);requirePool(dep.depType==='code','Pool/token dependency must be a direct code cell');
-  const cell=await liveCell(client,dep.outPoint,options);
-  requirePool(ccc.hashCkb(cell.outputData)===hash,'Dependency data hash does not match selected validator');
- }
+ const pairs=[[ccc.CellDep.from(deployment.poolDep),deployment.codeHash],[ccc.CellDep.from(deployment.tokenDep),XUDT_CODE_HASH]] as const;
+ for(const [dep] of pairs)requirePool(dep.depType==='code','Pool/token dependency must be a direct code cell');
+ const cells=await liveCells(client,pairs.map(([dep])=>dep.outPoint),options);
+ for(const [i,cell] of cells.entries())requirePool(ccc.hashCkb(cell.outputData)===pairs[i]![1],'Dependency data hash does not match selected validator');
 }
 export async function liveCell(client:PoolClient,point:ccc.OutPointLike,options:ReadOptions={}):Promise<ccc.Cell> {
  const expected=ccc.OutPoint.from(point).clone();
@@ -98,13 +97,22 @@ export async function liveCell(client:PoolClient,point:ccc.OutPointLike,options:
  requirePool(value.outputData.length<=2+2*1024*1024,'Live cell data exceeds 1 MiB bound');
  validateCell(value);return value.clone();
 }
+/** Reads independent live cells concurrently (at most `concurrency` in flight),
+ * returning them in input order with the same checks as `liveCell`. Ordering
+ * between reads is not observable, so callers that rely on "read X last" must
+ * await this first and read X afterwards. */
+export async function liveCells(client:PoolClient,points:readonly ccc.OutPointLike[],options:ReadOptions={},concurrency=8):Promise<ccc.Cell[]> {
+ const result:ccc.Cell[]=new Array(points.length);let next=0;
+ const worker=async()=>{while(next<points.length){const i=next++;result[i]=await liveCell(client,points[i]!,options);}};
+ await Promise.all(Array.from({length:Math.min(concurrency,points.length)},worker));
+ return result;
+}
 export async function loadPool(client:PoolClient,deployment:PoolDeployment,point:ccc.OutPointLike,options:ReadOptions={}):Promise<PoolSnapshot> {
  await assertPoolNetwork(client,deployment,options);
  const state=await liveCell(client,point,options);
  let metadata:StateData;
  try{metadata=decodeState(state.outputData);}catch(e){throw new PoolReadError('INVALID',String(e));}
- const x=await liveCell(client,{txHash:state.outPoint.txHash,index:metadata.rx},options);
- const y=await liveCell(client,{txHash:state.outPoint.txHash,index:metadata.ry},options);
+ const [x,y]=await liveCells(client,[{txHash:state.outPoint.txHash,index:metadata.rx},{txHash:state.outPoint.txHash,index:metadata.ry}],options) as [ccc.Cell,ccc.Cell];
  const parsed=parsePool(deployment,state,x,y);
  // Detect a transition that raced the reserve reads. This is not an atomic chain snapshot.
  if(!sameCell(state,await liveCell(client,point,options)))throw new PoolReadError('STALE','Pool changed during discovery');

@@ -3,7 +3,7 @@ import {ccc} from '@ckb-ccc/core';
 import {writeLE,parseAmount} from '../../sdk/src/codec.js';
 import {createPool,transition,type Parameters,type Operation,type Result} from '../../pool-model/src/model.js';
 import {encodeAction,encodeState,poolScript,Role,XUDT_CODE_HASH,type Action,type StateData} from './codec.js';
-import {parsePool,validateCell,minimumCapacity,pointKey,sameCell,assertPoolNetwork,assertPoolDependencies,liveCell,type PoolDeployment,type PoolSnapshot,type PoolClient,type ReadOptions} from './pools.js';
+import {parsePool,validateCell,minimumCapacity,pointKey,sameCell,assertPoolNetwork,assertPoolDependencies,liveCell,liveCells,type PoolDeployment,type PoolSnapshot,type PoolClient,type ReadOptions} from './pools.js';
 
 export interface Wallet {
  /** All funding inputs must use this one lock. Default signing shape is 65-byte secp. */
@@ -142,9 +142,10 @@ function build(deployment:PoolDeployment,wallet:Wallet,recipients:Recipients,id:
  const capturedDeployment={...deployment,poolDep:ccc.CellDep.from(deployment.poolDep).clone(),tokenDep:ccc.CellDep.from(deployment.tokenDep).clone()};
  return {transaction,poolId:id,result,fee,ckbReceiptTopUp,walletWitnessIndex,stateOutputIndex,assertIntegrity,
   assertFresh:async(client,options={},candidate=transaction)=>{
-   assertIntegrity(candidate);await assertPoolNetwork(client,capturedDeployment,options);
-   await assertPoolDependencies(client,capturedDeployment,options);
-   for(const cell of reviewedInputs)requireBuild(sameCell(cell,await liveCell(client,cell.outPoint,options)),'live input content changed');
+   assertIntegrity(candidate);
+   // Network, dependencies and inputs are independent reads; run them together.
+   const [,,live]=await Promise.all([assertPoolNetwork(client,capturedDeployment,options),assertPoolDependencies(client,capturedDeployment,options),liveCells(client,reviewedInputs.map(c=>c.outPoint),options)]);
+   for(const [i,cell] of reviewedInputs.entries())requireBuild(sameCell(cell,live[i]!),'live input content changed');
    // Recheck state last to detect a transition racing the wallet reads.
    if(previous)requireBuild(sameCell(reviewedInputs[0]!,await liveCell(client,reviewedInputs[0]!.outPoint,options)),'pool changed during freshness check');
    // Wallet preparation or application code may mutate the transaction during RPC awaits.
