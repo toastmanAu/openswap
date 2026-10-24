@@ -1,7 +1,7 @@
 #!/usr/bin/env -S npx tsx
 // Live split-route test (docs/research/POOL_TESTNET_RUN.md). TESTNET ONLY.
 //   prepare             create a dedicated maker key, print its address (fund it from the faucet)
-//   place [--execute]   place two CKB-for-TEST order lots priced better than the live pool (dry run by default)
+//   place [--execute] [--round=N]  place two CKB-for-TEST order lots priced better than the live pool (dry run by default)
 //   verify <tx-hash>    verify the JoyID split swap that filled the lots plus the pool
 // The maker must differ from the JoyID taker: the frontend never routes through your own lots.
 // The key stays in ignored .local/testnet-split-maker-key and is never printed.
@@ -15,7 +15,7 @@ import {ENDPOINTS,FEE_RATE,GENESIS,MAX_FEE,XUDT} from './lib/pool-live.js';
 
 const keyFile=new URL('../.local/testnet-split-maker-key',import.meta.url);
 const configFile=new URL('../deployments/split-maker.json',import.meta.url);
-const resultFile=new URL('../deployments/split-live-result.json',import.meta.url);
+
 const deployment=JSON.parse(await readFile(new URL('../deployments/testnet.json',import.meta.url),'utf8')) as Deployment;
 const pools=JSON.parse(await readFile(new URL('../deployments/pool-frontend.json',import.meta.url),'utf8'));
 const poolDeployment=pools.deployment as PoolDeployment,poolId=pools.pools[0].poolId as ccc.Hex;
@@ -26,6 +26,12 @@ assert.equal(token.hash(),pools.pools[0].token.typeHash,'Pool token mismatch');
 const LOTS=[{offerCkb:20_00000000n,premiumBps:800n},{offerCkb:30_00000000n,premiumBps:500n}];
 const [command,arg,...flags]=process.argv.slice(2);
 const execute=[arg,...flags].includes('--execute');
+// Each round has its own journal: round 1 is the local-build run, later rounds are new lot pairs.
+const roundFlag=[arg,...flags].find(f=>f?.startsWith('--round='));
+const round=roundFlag?Number(roundFlag.slice(8)):1;
+assert(Number.isSafeInteger(round)&&round>=1,'--round=N must be a positive integer');
+const resultName=round===1?'split-live-result.json':`split-live-result-${round}.json`;
+const resultFile=new URL(`../deployments/${resultName}`,import.meta.url);
 
 async function open(url:string){
  const owned=ccc.ClientPublicTestnet.open({urls:[url]});
@@ -68,9 +74,9 @@ if(command==='prepare'){
   console.log(ccc.stringify({maker:maker.toString(),poolState:pool.stateCell.outPoint,poolMarginalCkbPerTest:marginal.toFixed(4),lots:plan,lockedCapacity:built.tx.outputs.slice(0,lots.length).reduce((s,o)=>s+o.capacity,0n),fee}));
   if(!execute){console.log('Dry run: nothing signed or sent. Add --execute to place the lots once.');process.exit(0);}
   const exists=await readFile(resultFile,'utf8').then(()=>true,(e:NodeJS.ErrnoException)=>{if(e.code==='ENOENT')return false;throw e;});
-  if(exists)throw new Error('deployments/split-live-result.json exists: the lots were already placed or are pending. Inspect it; do not place twice.');
+  if(exists)throw new Error(`deployments/${resultName} exists: this round's lots were already placed or are pending. Inspect it; do not place twice, or start a new --round=N.`);
   const hash=await submit(built,signer,{beforeBroadcast:(hash,transaction)=>writeFile(resultFile,ccc.stringify({status:'sent',create:hash,transaction,maker:maker.toString(),lots:plan})+'\n',{flag:'wx'})})
-   .catch(error=>{console.error('Send outcome unknown; do not retry blindly. Inspect deployments/split-live-result.json.');throw error;});
+   .catch(error=>{console.error(`Send outcome unknown; do not retry blindly. Inspect deployments/${resultName}.`);throw error;});
   console.log('CREATE TX HASH:',hash);
   await client.waitTransaction(hash,1,600000);
   const points=lots.map((_,index)=>({txHash:hash,index}));
@@ -86,7 +92,7 @@ if(command==='prepare'){
   console.log('Lots placed and verified on both endpoints.');
  }finally{await primary.dispose();await secondary.dispose();}
 }else if(command==='verify'){
- assert(/^0x[0-9a-f]{64}$/.test(arg??''),'Usage: npx tsx scripts/split-live-test.ts verify <tx-hash>');
+ assert(/^0x[0-9a-f]{64}$/.test(arg??''),'Usage: npx tsx scripts/split-live-test.ts verify <tx-hash> [--round=N]');
  const journal=JSON.parse(await readFile(resultFile,'utf8'));
  assert.equal(journal.status,'placed','Lots are not recorded as placed');
  const [primary,secondary]=[await open(ENDPOINTS[0]),await open(ENDPOINTS[1])];
@@ -113,4 +119,4 @@ if(command==='prepare'){
   await writeFile(resultFile,ccc.stringify({...journal,status:'filled',split:arg,checks,verifiedAt:new Date().toISOString()})+'\n');
   console.log(ccc.stringify(checks[0]),'\nSplit swap verified on both endpoints.');
  }finally{await primary.dispose();await secondary.dispose();}
-}else throw new Error('Usage: npx tsx scripts/split-live-test.ts prepare | place [--execute] | verify <tx-hash>');
+}else throw new Error('Usage: npx tsx scripts/split-live-test.ts prepare | place [--execute] [--round=N] | verify <tx-hash> [--round=N]');
