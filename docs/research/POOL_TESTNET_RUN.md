@@ -154,6 +154,37 @@ block 22,842,588, fee 2,705 shannons. It was checked on both endpoints with the
 same checks, and the Swap tab reported the submission in place. Pool after:
 185.0988857 tCKB / 355.15210664 TEST.
 
+## Live split route (2026-10-24)
+
+A dedicated maker wallet (new key in ignored `.local/testnet-split-maker-key`,
+funded from the faucet; address in `deployments/split-maker.json`) placed two
+CKB-for-TEST lots priced above the pool with `scripts/split-live-test.ts place`.
+Tx `0x3271ecf6256d19438e3300f4d4de15d4a42c2e284be017b8b1f5eab63257f358`, fee 945
+shannons at a fixed 1,000 shannons/KB. The node's 33,222 shannons/KB estimate
+would have exceeded the fee cap, so the SDK builders gained an optional `feeRate`.
+
+| Lot | Maker pays | Maker asks | CKB/TEST |
+|---|---|---|---|
+| `:0` | 20 tCKB | 35.53176908 TEST | 0.5629 |
+| `:1` | 30 tCKB | 54.82044372 TEST | 0.5472 |
+
+Pool margin at the time: 0.5196 tCKB per TEST after fee.
+
+From the Swap tab of the local build, the user's JoyID requested exactly 70 tCKB
+for TEST. The frontend quoted "split, 2 order lots + pool in one transaction".
+Tx `0x16027a46a7919ebae45589baf924d4950d6b39663a2801b76af235957c8444a5`, block
+22,844,350, fee 3,429 shannons, one JoyID signature:
+
+- Lots: 50 tCKB to the taker; makers paid 90.35221280 TEST at outputs #0 and #1.
+- Pool: 20 tCKB out for 43.15241347 TEST in. The pool state was input/output #2.
+- Total: 133.50462627 TEST for 70 tCKB. The pool alone would have needed about
+  216.64 TEST, so the split saved about 83 TEST.
+
+`scripts/split-live-test.ts verify` checked both endpoints: committed, both lots
+spent, each maker payment byte-equal to the order lock's required payment at its
+lot's index, and the pool state directly after the lots. Pool after:
+165.0988857 tCKB / 398.30452011 TEST.
+
 UI defects found and fixed during P7:
 - Errors appeared only in the page-bottom status line.
 - Opening Pools during startup could hang on "Loading live pools…".
