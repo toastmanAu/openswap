@@ -9,7 +9,7 @@
     "name": "toastdex.org",
     "httpsVerified": true
   },
-  "verifiedAt": "2026-10-23T14:09:57.658Z",
+  "verifiedAt": "2026-10-24T02:05:57.635Z",
   "files": {
     "https://toastdex.org": {
       "index.html": "a6f17b7abb67c0f7cfaa767cad12c76ca340edf24f981b052e7597baacd777f4",
@@ -40,9 +40,8 @@
       "failed": 0
     },
     "https://toastdex.org": {
-      "passed": 0,
-      "failed": 22,
-      "reason": "Cloudflare Web Analytics on the toastdex.org zone injects https://static.cloudflareinsights.com/beacon.min.js into browser HTML responses; the test network guard rejects this third-party script. Served files are otherwise byte-identical (fetched without browser headers)."
+      "passed": 22,
+      "failed": 0
     }
   },
   "walletAcceptanceEvidence": "deployments/public-wallet-verification.json",
@@ -51,5 +50,6 @@
     "deploymentUrl": "https://d52df91a.toastdex.pages.dev",
     "sourceCommit": "98ae54cf8b74dddca3c09083db9d4d14410106d0",
     "verifiedAt": "2026-09-18T05:18:31.444Z"
-  }
+  },
+  "analytics": "Cloudflare Web Analytics automatic injection disabled for toastdex.org on 2026-10-24 by the domain owner; browser-served HTML is again byte-identical to the release."
 }

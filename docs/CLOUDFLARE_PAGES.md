@@ -61,12 +61,12 @@ serve files byte-identical to the reproducible release.
 - **Browser tests:** all 22 pass on toastdex.pages.dev. The network guard now
   allows the origin named by `TOASTDEX_BASE_URL`; before this, every live run
   was blocked.
-- **toastdex.org fails the guard.** Cloudflare Web Analytics on that zone
-  injects `static.cloudflareinsights.com/beacon.min.js` into HTML served to
-  browsers. That is third-party script on a page that drives wallet signing, so
-  the guard rejects it. To pass, turn off Web Analytics automatic injection for
-  toastdex.org in the Cloudflare dashboard (zone setting, not in this repo), then
-  rerun the tests against toastdex.org.
+- **toastdex.org** first failed the guard. Cloudflare Web Analytics on that
+  zone injected `static.cloudflareinsights.com/beacon.min.js` into HTML served
+  to browsers, which is third-party script on a page that drives wallet signing.
+  The domain owner disabled automatic injection. HTML served to browsers is
+  again byte-identical to the release, and all 22 tests pass on toastdex.org.
+  Keep Web Analytics injection off. The guard fails if it comes back.
 - **JoyID signing on the deployed origin** has not been re-run since the
   2026-09-18 acceptance.
 
