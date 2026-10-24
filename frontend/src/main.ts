@@ -7,7 +7,7 @@ import {explainError} from './errors.js';
 import {capacityReview} from './review.js';
 import {isOwnOrder,assertExternalFill} from './ownership.js';
 import {readActivity,mergeActivity,fetchActivity,accountKey,type Activity} from './activity.js';
-import {createPoolUi,type PoolRoute} from './pools/ui.js';
+import {createPoolUi,type PoolRoute,type SplitRoute} from './pools/ui.js';
 import {XUDT_CODE_HASH} from '../../pool-sdk/src/codec.js';
 const deployment=deploymentJson as swap.Deployment;
 const el=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id)! as T;
@@ -73,14 +73,16 @@ for(const b of document.querySelectorAll<HTMLButtonElement>('[data-view]'))b.onc
 el('reverse').onclick=()=>{const base=value('base');el<HTMLSelectElement>('base').value=value('quote');el<HTMLSelectElement>('quote').value=base;el<HTMLInputElement>('swap-output').value='';el<HTMLInputElement>('swap-budget').value='';invalidate();renderBook();};
 function swapAssets(){const base=selected('base'),quote=selected('quote');return value('swap-direction')==='buy'?{assetOut:base,assetIn:quote}:{assetOut:quote,assetIn:base};}
 function localQuote(){if(!scanFresh)throw new Error('Refresh live orders before requesting a quote.');const {assetIn,assetOut}=swapAssets();return swap.quoteSwap(orders.filter(o=>!isOwnOrder(o,walletLocks)),{assetIn,assetOut,amountOut:parseUnits(value('swap-output'),decimals(assetOut)),maxAmountIn:value('swap-budget').trim()?parseUnits(value('swap-budget'),decimals(assetIn)):swap.U128_MAX,tipBlock:0n,genesisHash:deployment.genesisHash});}
-type Route={venue:'orders';quote:swap.SwapQuote}|{venue:'pool';route:PoolRoute};
-/** Best single venue for the request: the order book (whole lots) or a listed pool
- * (exact output). Lowest input wins; ties go to the larger output, then orders.
- * The pool needs a JoyID wallet, so another connected wallet makes it ineligible. */
+type Route={venue:'orders';quote:swap.SwapQuote}|{venue:'pool';route:PoolRoute}|{venue:'split';route:SplitRoute<swap.OpenSwapOrder>};
+/** Best route for the request: the order book (whole lots), a listed pool (exact
+ * output), or a split of whole lots plus the pool in one transaction. Lowest
+ * input wins; ties go to the larger output, then orders, then the pool. A split
+ * must be strictly cheaper than both. Pool and split routes need a JoyID wallet. */
 function bestRoute(){
  const {assetIn,assetOut}=swapAssets(),amountOut=parseUnits(value('swap-output'),decimals(assetOut));
  const budget=value('swap-budget').trim()?parseUnits(value('swap-budget'),decimals(assetIn)):swap.U128_MAX;
- let orderRoute:Route|undefined,poolRoute:Route|undefined,orderNote:string,poolNote:string|undefined;
+ let orderRoute:Route|undefined,poolRoute:Route|undefined,splitRoute:Route|undefined,orderNote:string,poolNote:string|undefined,splitNote:string|undefined;
+ const joyIdOnly=signer!==undefined&&signer.signType!==ccc.SignerSignType.JoyId;
  try{orderRoute={venue:'orders',quote:localQuote()};orderNote=`Order book: ${amount(orderRoute.quote.amountOut,assetOut)} for ${amount(orderRoute.quote.amountIn,assetIn)} (${orderRoute.quote.selectedOrders.length} whole lot${orderRoute.quote.selectedOrders.length===1?'':'s'})`;}
  catch(error){orderNote=`Order book: ${String(error).includes('No whole-lot')?'no whole-lot route for this amount':error instanceof Error?error.message:String(error)}`;}
  const token=assetIn.kind==='ckb'?assetOut:assetOut.kind==='ckb'?assetIn:undefined;
@@ -89,14 +91,26 @@ function bestRoute(){
   if(route){
    poolNote=`Pool: ${amount(route.amountOut,assetOut)} for ${amount(route.amountIn,assetIn)}`;
    if(route.amountIn>budget)poolNote+=' (over your maximum payment)';
-   else if(signer&&signer.signType!==ccc.SignerSignType.JoyId)poolNote+=' (needs a JoyID wallet)';
+   else if(joyIdOnly)poolNote+=' (needs a JoyID wallet)';
    else poolRoute={venue:'pool',route};
+  }
+  if(scanFresh){
+   // Distinct, supported lots of this pair from other owners; the builder rechecks each.
+   const locks=new Set<string>();
+   const lots=orders.filter(o=>o.supported&&o.genesisHash===deployment.genesisHash&&!isOwnOrder(o,walletLocks)&&swap.assetKey(o.offerAsset)===swap.assetKey(assetOut)&&swap.assetKey(o.askAsset)===swap.assetKey(assetIn)
+    &&!locks.has(o.lock.hash())&&locks.add(o.lock.hash()));
+   const split=poolUi.splitQuote(token.scriptHash,assetIn.kind==='ckb',amountOut,budget,lots);
+   if(split){
+    splitNote=`Split: ${amount(split.amountOut,assetOut)} for ${amount(split.amountIn,assetIn)} (${split.lots.length} lot${split.lots.length===1?'':'s'} + pool)`;
+    if(joyIdOnly)splitNote+=' (needs a JoyID wallet)';else splitRoute={venue:'split',route:split};
+   }
   }
  }
  const cost=(r:Route)=>r.venue==='orders'?{input:r.quote.amountIn,output:r.quote.amountOut}:{input:r.route.amountIn,output:r.route.amountOut};
  let best=orderRoute;
  if(poolRoute&&(!best||cost(poolRoute).input<cost(best).input||(cost(poolRoute).input===cost(best).input&&cost(poolRoute).output>cost(best).output)))best=poolRoute;
- return {best,assetIn,assetOut,notes:[orderNote,...(poolNote?[poolNote]:[])]};
+ if(splitRoute&&(!best||cost(splitRoute).input<cost(best).input))best=splitRoute;
+ return {best,assetIn,assetOut,notes:[orderNote,...(poolNote?[poolNote]:[]),...(splitNote?[splitNote]:[])]};
 }
 function updateQuote(){
  text('pay-estimate','—');
@@ -106,7 +120,7 @@ function updateQuote(){
   if(!best){text('quote-status',`No available swap for this amount and direction. ${notes.join(' · ')}. Try a listed swap below, reverse the tokens, or place an order.`);return;}
   const input=best.venue==='orders'?best.quote.amountIn:best.route.amountIn,output=best.venue==='orders'?best.quote.amountOut:best.route.amountOut;
   text('pay-estimate',formatUnits(input,decimals(assetIn)));
-  text('quote-status',`Best route: ${best.venue==='pool'?'pool':'order book'}. Receive ${amount(output,assetOut)} for ${amount(input,assetIn)}. Price ≈ ${unitPrice(input,output,decimals(assetIn),decimals(assetOut))} ${label(assetIn)} per ${label(assetOut)}. Compared: ${notes.join(' · ')}. Fees and storage are additional.`);
+  text('quote-status',`Best route: ${best.venue==='pool'?'pool':best.venue==='split'?`split, ${best.route.lots.length} order lot${best.route.lots.length===1?'':'s'} + pool in one transaction`:'order book'}. Receive ${amount(output,assetOut)} for ${amount(input,assetIn)}. Price ≈ ${unitPrice(input,output,decimals(assetIn),decimals(assetOut))} ${label(assetIn)} per ${label(assetOut)}. Compared: ${notes.join(' · ')}. Fees and storage are additional.`);
  }catch(error){text('quote-status',error instanceof Error?error.message:String(error));}
 }
 for(const id of ['swap-output','swap-budget','swap-direction','offer','ask','lots','direction'])el(id).oninput=()=>{invalidate();updateQuote();updateOrderPreview();};
@@ -227,6 +241,12 @@ el('swap').onsubmit=e=>{e.preventDefault();run(async()=>{
  if(best.venue==='pool'){
   text('quote-status','Best route: pool. Preparing the pool review…');
   try{await poolUi.prepareRouted(best.route,requested,budget);}catch(error){text('quote-status',explainError(error));throw error;}
+  return;
+ }
+ if(best.venue==='split'){
+  text('quote-status',`Best route: split, ${best.route.lots.length} order lot${best.route.lots.length===1?'':'s'} + pool. Preparing one review…`);
+  try{await assertExternalFill(ctx.signer,best.route.lots);await poolUi.prepareSplit(best.route,{codeHash:deployment.codeHash,cellDep:deployment.cellDep},requested,budget);}
+  catch(error){text('quote-status',explainError(error));throw error;}
   return;
  }
  const tip=await client.getTipHeader();

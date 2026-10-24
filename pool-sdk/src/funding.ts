@@ -3,10 +3,13 @@ import {ccc} from '@ckb-ccc/core';
 import {parseAmount} from '../../sdk/src/codec.js';
 import {createPool,transition,type Operation} from '../../pool-model/src/model.js';
 import {XUDT_CODE_HASH} from './codec.js';
-import {buildCreate,buildTransition,PoolBuildError,type Wallet,type Recipients,type CreateRequest,type BuiltPoolTransaction} from './builders.js';
+import {buildCreate,buildTransition,PoolBuildError,type Wallet,type Recipients,type CreateRequest,type BuiltPoolTransaction,type OrderFill} from './builders.js';
+import {decodeOrder} from '../../sdk/src/orders.js';
 import {assertPoolNetwork,liveCells,parsePool,pointKey,sameCell,validateCell,readBounded,withPoolDeadline,type PoolClient,type PoolDeployment,type PoolSnapshot,type ReadOptions} from './pools.js';
 
-export type PoolIntent={kind:'create';request:CreateRequest}|{kind:'transition';pool:PoolSnapshot;action:Operation};
+export type PoolIntent={kind:'create';request:CreateRequest}|{kind:'transition';pool:PoolSnapshot;action:Operation;
+ /** Order lots settled in the same transaction (split route); the builder checks them. */
+ orders?:OrderFill};
 export class PoolFundingError extends Error {
  constructor(readonly code:'INVALID'|'INSUFFICIENT'|'LIMIT'|'RESERVED',message:string){super(`Pool funding: ${message}`);this.name='PoolFundingError';}
 }
@@ -45,13 +48,15 @@ export async function fundPoolTransaction(
  const selectedWallet={...wallet,lock:owner,change:ccc.Script.from(wallet.change).clone(),deps:wallet.deps.map(d=>ccc.CellDep.from(d).clone()),witness:wallet.witness?{...wallet.witness}:undefined};
  const selectedRecipients={ckb:ccc.Script.from(recipients.ckb).clone(),token:ccc.Script.from(recipients.token).clone(),lp:ccc.Script.from(recipients.lp).clone()};
  const captured:PoolIntent=intent.kind==='create'?{kind:'create',request:{...intent.request,parameters:{...intent.request.parameters,backing:{...intent.request.parameters.backing}}}}:
-  {kind:'transition',pool:parsePool(selectedDeployment,intent.pool.stateCell,intent.pool.ckbCell,intent.pool.tokenCell),action:{...intent.action}};
+  {kind:'transition',pool:parsePool(selectedDeployment,intent.pool.stateCell,intent.pool.ckbCell,intent.pool.tokenCell),action:{...intent.action},
+   orders:intent.orders&&{codeHash:intent.orders.codeHash,cellDep:ccc.CellDep.from(intent.orders.cellDep).clone(),cells:intent.orders.cells.map(c=>c.clone())}};
+ const orders=captured.kind==='transition'?captured.orders:undefined;
  const result=captured.kind==='create'?createPool(captured.request.parameters,captured.request.x,captured.request.y,captured.request.minShares):transition(captured.pool.accounting,captured.action);
  const token=captured.kind==='create'?ccc.Script.from({codeHash:XUDT_CODE_HASH,hashType:'data1',args:captured.request.tokenOwner}):captured.pool.token;
  const lp=captured.kind==='transition'?captured.pool.lp:undefined;
  requireFunding(owner.hash()!==token.args,'issuer-mode funding is not supported');
  const {maxCandidates=1000,maxPages=20,pageSize=50,reservations}=options;
- const protocolMax=captured.kind==='create'?256:253,maxInputs=options.maxInputs??protocolMax;
+ const protocolMax=captured.kind==='create'?256:253-(orders?.cells.length??0),maxInputs=options.maxInputs??protocolMax;
  for(const [value,max] of [[maxCandidates,10000],[maxPages,100],[pageSize,100],[maxInputs,protocolMax]])requireFunding(Number.isSafeInteger(value)&&value!>=1&&value!<=max!,'invalid search bound');
  return withPoolDeadline(options,async o=>{
   await assertPoolNetwork(client,selectedDeployment,o);
@@ -83,7 +88,11 @@ export async function fundPoolTransaction(
   const byPoint=(a:typeof candidates[number],b:typeof candidates[number])=>{const x=pointKey(a.cell.outPoint),y=pointKey(b.cell.outPoint);return x<y?-1:x>y?1:0;};
   const descending=(a:bigint,b:bigint)=>a>b?-1:a<b?1:0;
   const chosen:typeof candidates=[],used=new Set<string>();
-  for(const [kind,needed] of [['token',result.flows.paidY],['lp',result.flows.burnedShares]] as const){
+  // Maker payments in the token come out of the same funding as the pool leg. The
+  // builder re-derives and checks every lot; this only sizes the selection.
+  let lotTokenOut=0n;
+  if(orders)for(const cell of orders.cells){try{const o=decodeOrder(cell,orders.codeHash);if(o.askAsset.kind==='udt'&&o.askAsset.script.eq(token))lotTokenOut+=o.askAmount;}catch{/* rejected by the builder */}}
+  for(const [kind,needed] of [['token',result.flows.paidY+lotTokenOut],['lp',result.flows.burnedShares]] as const){
    let total=0n;
    for(const candidate of candidates.filter(c=>c.kind===kind).sort((a,b)=>descending(a.amount,b.amount)||byPoint(a,b))){
     if(total>=needed)break;chosen.push(candidate);used.add(pointKey(candidate.cell.outPoint));total+=candidate.amount;
@@ -105,7 +114,7 @@ export async function fundPoolTransaction(
    let built:BuiltPoolTransaction;
    try{
     const funded={...selectedWallet,funding:live};
-    built=captured.kind==='create'?buildCreate(selectedDeployment,funded,selectedRecipients,captured.request):buildTransition(selectedDeployment,funded,selectedRecipients,captured.pool,captured.action);
+    built=captured.kind==='create'?buildCreate(selectedDeployment,funded,selectedRecipients,captured.request):buildTransition(selectedDeployment,funded,selectedRecipients,captured.pool,captured.action,captured.orders);
    }catch(error){
     if(!(error instanceof PoolBuildError)||error.code!=='FUNDING')throw error;
     const more=remainder[next++];

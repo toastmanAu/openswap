@@ -1,6 +1,7 @@
 //! Execute the actual TypeScript builder output, without complete_tx repairing deps.
 mod composition;
 mod resource;
+mod split;
 use crate::fixture::{CYCLES, FUNDING, TOKENS, amount, cell};
 use ckb_system_scripts::BUNDLED_CELL;
 use ckb_testtool::{
@@ -47,6 +48,19 @@ fn build(request: &Value) -> (TransactionView, usize) {
 }
 /// `Err(code)` only when the request sets `allowSkip` and the builder refused.
 fn build_or_skip(request: &Value) -> Result<(TransactionView, usize), String> {
+    let response = bridge(request);
+    if let Some(skip) = response["skip"].as_str() {
+        return Err(skip.to_string());
+    }
+    Ok((
+        Transaction::from_slice(&unhex(response["transaction"].as_str().unwrap()))
+            .unwrap()
+            .into_view(),
+        response["walletWitnessIndex"].as_u64().unwrap() as usize,
+    ))
+}
+/// Runs the TypeScript bridge on one JSON request and returns its JSON reply.
+fn bridge(request: &Value) -> Value {
     let mut child = Command::new("node")
         .args([
             "node_modules/tsx/dist/cli.mjs",
@@ -70,16 +84,7 @@ fn build_or_skip(request: &Value) -> Result<(TransactionView, usize), String> {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    let response: Value = serde_json::from_slice(&output.stdout).unwrap();
-    if let Some(skip) = response["skip"].as_str() {
-        return Err(skip.to_string());
-    }
-    Ok((
-        Transaction::from_slice(&unhex(response["transaction"].as_str().unwrap()))
-            .unwrap()
-            .into_view(),
-        response["walletWitnessIndex"].as_u64().unwrap() as usize,
-    ))
+    serde_json::from_slice(&output.stdout).unwrap()
 }
 fn sign(tx: &TransactionView, key: &Privkey, first: usize) -> TransactionView {
     // Builders put all same-wallet funding inputs contiguously after pool inputs.
@@ -464,6 +469,12 @@ fn sdk_joyid_layout_with_secp_authorization() {
 fn sdk_distinct_owner_compositions() {
     let mut fixture = setup();
     composition::run(&mut fixture);
+}
+
+#[test]
+fn sdk_split_route_orders_and_pool() {
+    let mut fixture = setup();
+    split::run(&mut fixture);
 }
 
 #[test]

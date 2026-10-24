@@ -2,8 +2,10 @@ import type {Page} from '@playwright/test';
 import {test,expect} from './fixtures.js';
 import {ccc} from '@ckb-ccc/core';
 import {JsonRpcTransformers} from '@ckb-ccc/core/advanced';
-import {readFileSync} from 'node:fs';
+import {readFileSync,existsSync} from 'node:fs';
 import {writeLE} from '../../sdk/src/codec.js';
+import {estimateCapacity} from '../../sdk/src/capacity.js';
+import {CKB,udt} from '../../sdk/src/types.js';
 import {buildCreate,XUDT_CODE_HASH} from '../../pool-sdk/src/index.js';
 
 // Offline fixture only: a real SDK-built genesis served by a mocked node, and a
@@ -20,7 +22,17 @@ const creator=ccc.Script.from({codeHash:hash(8),hashType:'type',args:'0x0002'});
 const token=ccc.Script.from({codeHash:XUDT_CODE_HASH,hashType:'data1',args:hash(7)});
 
 type TokenMeta='match'|'mismatch'|'none';
-function chain(tokenMeta:TokenMeta='match'){
+// Split routes run the real order-lock code check, so the mock serves the built
+// binary at the deployed code OutPoint (its data hash is the deployed code hash).
+const orderBinary=new URL('../../target/riscv64imac-unknown-none-elf/release/openswap-lock',import.meta.url);
+const orderDeployment=JSON.parse(readFileSync(new URL('../../deployments/testnet.json',import.meta.url),'utf8'));
+/** Lots offering TEST for CKB, owned by the pool creator (not the trader). */
+function orderLots(sizes:[bigint,bigint][]){
+ const d={network:'testnet' as const,genesisHash,codeHash:orderDeployment.codeHash,hashType:'data1' as const,cellDep:orderDeployment.cellDep};
+ return sizes.map(([offer,ask],i)=>{const c=estimateCapacity(d,{ownerLock:creator,nonce:new Uint8Array(16).fill(i+1),askAsset:CKB,askAmount:ask},udt(token),offer).cell;
+  return ccc.Cell.from({outPoint:{txHash:hash(60+i),index:0n},cellOutput:c.cellOutput,outputData:c.outputData});});
+}
+function chain(tokenMeta:TokenMeta='match',lots:ccc.Cell[]=[]){
  const cell=(point:{txHash:ccc.Hex;index:bigint},lock:ccc.Script,capacity:bigint,data:ccc.Hex='0x',type?:ccc.Script)=>ccc.Cell.from({outPoint:point,cellOutput:{capacity,lock,type},outputData:data});
  const request={parameters:{feeBps:30n,lockedShares:1000n,backing:{state:34_000_000_000n,ckb:8_000_000_000n,token:16_000_000_000n}},x:10n**12n,y:4n*10n**12n,minShares:1n,tokenOwner:hash(7)};
  const creatorFunding=[cell({txHash:hash(20),index:0n},creator,20_000_000_000n,ccc.hexFrom(writeLE(request.y,16)),token),cell({txHash:hash(21),index:0n},creator,2n*10n**12n)];
@@ -35,6 +47,8 @@ function chain(tokenMeta:TokenMeta='match'){
   cell({txHash:hash(32),index:0n},otherJoyLock,10n**13n),
   // The trader also holds 1,000,000 LP shares of this pool.
   cell({txHash:hash(33),index:0n},joyLock,20_000_000_000n,ccc.hexFrom(writeLE(1_000_000n,16)),lp),
+  ...lots,
+  ...(lots.length?[cell({txHash:orderDeployment.cellDep.outPoint.txHash,index:BigInt(orderDeployment.cellDep.outPoint.index)},creator,10n**12n,ccc.hexFrom(readFileSync(orderBinary)))]:[]),
  ];
  const manifest={version:1,network:'testnet',
   deployment:{genesisHash,codeHash:deployment.codeHash,poolDep:{outPoint:{txHash:hash(3),index:'0'},depType:'code'},tokenDep:{outPoint:{txHash:hash(4),index:'0'},depType:'code'}},
@@ -64,8 +78,8 @@ function matches(c:ccc.Cell,search:any){
  return true;
 }
 interface Mock {sent:string[];journalAtSend:string[];send:'ok'|'abort';committedAt?:bigint;tip:bigint}
-async function mockPools(page:Page,options:{manifest?:boolean;token?:TokenMeta}={}):Promise<Mock>{
- const {cells,manifest,parents}=chain(options.token),live=new Map(cells.map(c=>[`${c.outPoint.txHash}:${c.outPoint.index}`,c]));
+async function mockPools(page:Page,options:{manifest?:boolean;token?:TokenMeta;lots?:ccc.Cell[]}={}):Promise<Mock>{
+ const {cells,manifest,parents}=chain(options.token,options.lots),live=new Map(cells.map(c=>[`${c.outPoint.txHash}:${c.outPoint.index}`,c]));
  const mock:Mock={sent:[],journalAtSend:[],send:'ok',tip:100n},pool=new Map<string,unknown>();
  if(options.manifest!==false)await page.route('**/pool-manifest.json',route=>route.fulfill({json:manifest}));
  await page.route('https://testnet.ckb.dev/**',async route=>{
@@ -290,6 +304,36 @@ test('the Swap tab compares venues and routes to the pool through the pool revie
  // The outcome is reported where the user is (the Swap tab), not only on the hidden Pools tab.
  await expect(status).toContainText(/Submitted 0x[0-9a-f]{64}\. It stays listed under pool submissions on the Pools tab/);
  await expect(page.locator('#swap-submit')).toBeEnabled();
+});
+
+test('a split route fills cheap lots and the pool in one reviewed transaction',async({page})=>{
+ test.skip(!existsSync(orderBinary),'build the order lock (make build) to serve its code cell');
+ // Pool: 1 TEST ≈ 0.25 CKB. Both lots are cheaper; together they cover 8 of 10 TEST.
+ const lots=orderLots([[5_00000000n,1_00000000n],[3_00000000n,70000000n]]);
+ const mock=await mockPools(page,{lots});
+ await page.goto('/');await expect(page.locator('#scan-status')).toContainText('2 supported live orders',{timeout:35000});
+ await page.getByRole('button',{name:'Trade this pair'}).click();
+ await page.locator('#swap-output').fill('10');
+ const status=page.locator('#quote-status');
+ await expect(status).toContainText('Best route: split, 2 order lots + pool in one transaction');
+ await expect(status).toContainText(/Pool: 10(\.\d+)? TEST for [\d.]+ CKB/);
+ await expect(status).toContainText('Order book: no whole-lot route for this amount');
+ await connect(page);await page.locator('#swap-output').fill('10');
+ await page.getByRole('button',{name:'Review swap'}).click();
+ await expect(page.locator('#pool-review')).toBeVisible({timeout:30000});
+ const review=page.locator('#pool-review-text');
+ for(const line of ['Split route: 2 order lots + pool','Order lots (2, filled whole at fixed prices)','you get 5 TEST · maker paid 1 CKB at output #0','you get 3 TEST · maker paid 0.7 CKB at output #1',
+  'Total you receive (exact): 0 CKB · 10','Minimum accepted from the pool: 2 TEST'])await expect(review).toContainText(line);
+ expect(mock.sent).toEqual([]);
+ await page.getByRole('button',{name:'Approve and sign'}).click();
+ await expect(page.locator('#pool-review')).toBeHidden();expect(mock.sent).toHaveLength(1);
+ // One transaction: lots at inputs 0..1 with each maker paid at the same index, then the pool.
+ const sent=ccc.Transaction.fromBytes(mock.sent[0]!);
+ expect(sent.inputs.slice(0,2).map(i=>i.previousOutput.txHash)).toEqual(lots.map(l=>l.outPoint.txHash));
+ for(const i of [0,1])expect(sent.outputs[i]!.lock.eq(creator)).toBe(true);
+ expect(sent.outputs[0]!.capacity).toBe(lots[0]!.cellOutput.capacity+1_00000000n);
+ expect(sent.cellDeps.some(d=>d.outPoint.txHash===orderDeployment.cellDep.outPoint.txHash)).toBe(true);
+ await expect(status).toContainText(/Submitted 0x[0-9a-f]{64}/);
 });
 
 test('a malformed manifest is an error, not a silent "not deployed"',async({page})=>{

@@ -296,8 +296,49 @@ read, still happen after the batch. On Review, the order scan and pool reload
 also run together. A live testnet run of the pay-TEST review (57 live-cell reads,
 about 200 ms per RPC) went from 20–24 s to 10.5–12 s.
 
-A single trade is never split across orders and a pool. Splitting would need a
-combined builder and review, and is a separate, untracked design.
+### Split routes (offline, 2026-10-24)
+
+A third candidate fills cheap whole lots and tops up the remainder from the
+pool, in one transaction with one review and one signature (`quoteSplit` in
+`pool-sdk/src/split.ts`). It takes cheapest-first prefixes of the eligible lots:
+other owners' lots, distinct lock groups, at most 32. Each prefix is topped up
+with an exact-output pool swap. A split is chosen only when it is strictly
+cheaper than both single venues. Like the pool, it needs a JoyID wallet.
+
+Layout:
+- **Inputs:** lots `0..n-1`, then the pool state at `n`, the reserves at
+  `n+1`/`n+2`, then wallet funding.
+- **Outputs:** maker payment `i` at output `i`, which the order lock requires.
+  The pool cells follow at `n..n+2` (`rx`/`ry` record `n+1`/`n+2`), then
+  receipts and change.
+- **Witnesses:** the pool action at witness `n` and the wallet signature at
+  `n+3`.
+- **Dependencies:** the order-lock code dependency follows the pool and token
+  dependencies.
+
+The builder derives every lot's terms and payment from the exact cell. It
+refuses:
+- lots outside the pool's pair or swap direction;
+- duplicate lots;
+- lots combined with anything but a swap.
+
+Freshness checks every lot's liveness and the order code's data hash. The review
+lists each lot, its maker payment index, the pool leg and the combined totals.
+Funding covers token payments to makers as well as the pool leg.
+
+Evidence (offline):
+- `pool-tests` `sdk_split_route_orders_and_pool` runs the deployed-identity
+  order lock and pool validator, with real xUDT and secp, on SDK-built
+  transactions. It covers 2 lots paying CKB, 3 lots paying the token, and 32
+  lots: 4.4M, 4.8M and 12.8M cycles, at 2.5, 3.0 and 7.4 KB.
+- That test rejects re-signed tampering in each case: swapped maker payments,
+  an underpaid maker and a moved pool action.
+- Unit tests: `pool-sdk/test/split.test.ts` and `split-quote.test.ts`.
+- Browser test: the split test in `frontend/test/pools.spec.ts`. It serves the
+  built order binary at the deployed code OutPoint and is skipped if the binary
+  has not been built.
+
+Not yet done: live testnet acceptance and deployment, pending the user's review.
 
 `frontend/src/pools/journal.ts` is a localStorage-backed `ArchivableSubmissionJournal`
 with the solver journal's record validation. A write from another tab poisons

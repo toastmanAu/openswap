@@ -1,6 +1,6 @@
 import {ccc} from '@ckb-ccc/core';
-import {scanPools,resolveJoyIdWallet,joyIdProofSource,fundPoolTransaction,reviewPoolTransaction,PoolFundingReservations,PoolSubmissionRecovery,
- type PoolSnapshot,type PoolIntent,type PoolJoyIdSigner,type FundedPoolTransaction,type PoolTransactionReview,type PoolSubmitClient} from '../../../pool-sdk/src/index.js';
+import {scanPools,resolveJoyIdWallet,joyIdProofSource,fundPoolTransaction,reviewPoolTransaction,PoolFundingReservations,PoolSubmissionRecovery,quoteSplit,
+ type PoolSnapshot,type SplitLot,type PoolIntent,type PoolJoyIdSigner,type FundedPoolTransaction,type PoolTransactionReview,type PoolSubmitClient} from '../../../pool-sdk/src/index.js';
 import {transition,swapExactOut,type Operation} from '../../../pool-model/src/model.js';
 import {loadPoolManifest,type PoolManifest,type PoolTokenDisplay} from './manifest.js';
 import {BrowserSubmissionJournal} from './journal.js';
@@ -10,6 +10,9 @@ import {parseAmount} from '../../../sdk/src/codec.js';
 
 export interface PoolMarket {poolId:ccc.Hex;token:ccc.Script;symbol:string;decimals:number;x:bigint;y:bigint}
 export interface PoolRoute {poolId:ccc.Hex;direction:'xToY'|'yToX';amountIn:bigint;amountOut:bigint;checkedAt:number}
+/** Whole order lots plus a pool swap for the rest, settled in one transaction. */
+export interface SplitRoute<T extends SplitLot> extends PoolRoute {lots:T[];lotIn:bigint;lotOut:bigint;poolIn:bigint;poolOut:bigint}
+export interface OrderCode {codeHash:ccc.Hex;cellDep:ccc.CellDepLike}
 export interface PoolEnv {client():ccc.Client;signer():ccc.Signer|undefined;epoch():number;run(fn:()=>Promise<void>):void}
 const el=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id)! as T;
 const text=(id:string,message:string)=>{el(id).textContent=message;};
@@ -286,15 +289,25 @@ export function createPoolUi(env:PoolEnv){
  }
  function showReview(p:Pending,keyType:string){
   const r=p.review.summary,f=r.flows,a=r.action,units=(n:bigint)=>tokenAmount(n,p.token),address=ccc.Address.fromScript(p.session.lock,p.session.client).toString();
-  const minimum=a.kind==='swap'?`Minimum accepted: ${a.direction==='xToY'?units(a.minOut):ckb(a.minOut)}`:a.kind==='deposit'?`Minimum LP shares: ${a.minShares}`:a.kind==='withdraw'?`Minimum received: ${ckb(a.minX)} · ${units(a.minY)}`:`Minimum LP shares: ${a.minShares}`;
-  const outputs=r.outputs.filter(o=>!o.pool).map(o=>`  #${o.index} ${o.asset==='ckb'?'CKB':o.asset==='token'?units(o.amount!):shares(o.amount!)} · capacity ${ckb(o.capacity)} (storage ${ckb(o.occupiedCapacity)})`);
+  const minimum=a.kind==='swap'?`Minimum accepted${r.orders.length?' from the pool':''}: ${a.direction==='xToY'?units(a.minOut):ckb(a.minOut)}`:a.kind==='deposit'?`Minimum LP shares: ${a.minShares}`:a.kind==='withdraw'?`Minimum received: ${ckb(a.minX)} · ${units(a.minY)}`:`Minimum LP shares: ${a.minShares}`;
+  const outputs=r.outputs.filter(o=>!o.pool&&!o.maker).map(o=>`  #${o.index} ${o.asset==='ckb'?'CKB':o.asset==='token'?units(o.amount!):shares(o.amount!)} · capacity ${ckb(o.capacity)} (storage ${ckb(o.occupiedCapacity)})`);
+  const asset=(kind:'ckb'|'token',n:bigint)=>kind==='ckb'?ckb(n):units(n),t=r.total;
+  // Split route: whole lots at their fixed terms, each maker paid at its own index.
+  const split=r.orders.length?[
+   `Order lots (${r.orders.length}, filled whole at fixed prices):`,
+   ...r.orders.map(o=>`  lot ${o.outPoint.txHash.slice(0,10)}…:${o.outPoint.index} · you get ${asset(o.offer,o.offerAmount)} · maker paid ${asset(o.ask,o.askAmount)} at output #${o.paymentIndex}`),
+   `Pool leg: pay ${ckb(f.paidX)} · ${units(f.paidY)} · receive ${ckb(f.receivedX)} · ${units(f.receivedY)}`,
+   `Total you pay: ${ckb(t.paidX)} · ${units(t.paidY)}`,
+   `Total you receive (exact): ${ckb(t.receivedX)} · ${units(t.receivedY)}`,
+  ]:[];
   text('pool-review-text',[
    p.title,
    `Account: ${address} · JoyID ${keyType}`,
    `Network: CKB TESTNET · genesis ${r.genesisHash.slice(0,18)}…`,
    `Pool: ${r.poolId}`,
+   ...(split.length?split:[
    `You pay: ${ckb(f.paidX)} · ${units(f.paidY)}${f.burnedShares?` · ${shares(f.burnedShares)}`:''}`,
-   `You receive (exact): ${ckb(f.receivedX)} · ${units(f.receivedY)}${f.mintedShares?` · ${shares(f.mintedShares)}`:''}`,
+   `You receive (exact): ${ckb(f.receivedX)} · ${units(f.receivedY)}${f.mintedShares?` · ${shares(f.mintedShares)}`:''}`]),
    minimum,
    `Network fee: ${ckb(r.fee)} (cap ${ckb(r.maxFee)})`,
    `CKB added to receipt cells for storage: ${ckb(r.ckbReceiptTopUp)}`,
@@ -380,6 +393,30 @@ export function createPoolUi(env:PoolEnv){
   }
   return best;
  }
+ /** Cheapest split over listed pools for this pair, from the last loaded state. */
+ function splitQuote<T extends SplitLot>(tokenHash:ccc.Hex,payCkb:boolean,amountOut:bigint,maxAmountIn:bigint,lots:readonly T[]):SplitRoute<T>|undefined {
+  let best:SplitRoute<T>|undefined;
+  for(const market of markets()){
+   if(market.token.hash()!==tokenHash)continue;
+   const pool=snapshots.find(p=>p.poolId===market.poolId)!,direction=payCkb?'xToY' as const:'yToX' as const;
+   const q=quoteSplit(lots,pool.accounting,direction,amountOut,maxAmountIn);
+   if(q&&(!best||q.amountIn<best.amountIn))best={...q,poolId:pool.poolId,direction,checkedAt};
+  }
+  return best;
+ }
+ /** Prepares a split route from live pool state: the chosen lots at their fixed
+  * terms, and an exact-output pool swap for the remainder. One review, one
+  * signature; the order lock and pool validator both run in the transaction. */
+ function prepareSplit(route:Pick<SplitRoute<SplitLot&{cell:ccc.Cell}>,'poolId'|'direction'|'lots'>,orderCode:OrderCode,amountOut:bigint,maxAmountIn:bigint){
+  const lotIn=route.lots.reduce((n,l)=>n+l.askAmount,0n),lotOut=route.lots.reduce((n,l)=>n+l.offerAmount,0n);
+  return prepare(`Split route: ${route.lots.length} order lot${route.lots.length===1?'':'s'} + pool`,async pool=>{
+   if(lotOut>=amountOut)throw new Error('The selected lots already cover the request; quote again');
+   const r=swapExactOut(pool!.accounting,route.direction,amountOut-lotOut),poolIn=route.direction==='xToY'?r.flows.paidX:r.flows.paidY;
+   if(lotIn+poolIn>maxAmountIn)throw new Error('The lots plus the pool now cost more than your maximum payment; quote again');
+   return {kind:'transition',pool:pool!,action:{kind:'swap',direction:route.direction,amountIn:poolIn,minOut:amountOut-lotOut},
+    orders:{codeHash:orderCode.codeHash,cellDep:orderCode.cellDep,cells:route.lots.map(l=>l.cell.clone())}};
+  },route.poolId,'quote-status');
+ }
  /** Prepares the routed swap from live state through the normal pool review:
   * exact output (minOut = requested), input bounded by the caller's maximum. */
  function prepareRouted(route:Pick<PoolRoute,'poolId'|'direction'>,amountOut:bigint,maxAmountIn:bigint){
@@ -392,7 +429,7 @@ export function createPoolUi(env:PoolEnv){
 
  return {
   show:()=>env.run(async()=>{await refresh();if(env.signer())await ensureSession();}),
-  load:refresh,markets,routeQuote,prepareRouted,tokenDep:()=>manifest?.deployment.tokenDep,
+  load:refresh,markets,routeQuote,prepareRouted,splitQuote,prepareSplit,tokenDep:()=>manifest?.deployment.tokenDep,
   invalidate,reset,
  };
 }

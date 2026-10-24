@@ -7,3 +7,4 @@ export * from './joyid-proof.js';
 export * from './funding.js';
 export * from './review.js';
 export * from './recovery.js';
+export * from './split.js';

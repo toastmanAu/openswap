@@ -134,7 +134,8 @@ export async function resolveJoyIdWallet(
     requireJoy(review.summary.genesisHash===selected.genesisHash&&review.summary.owner===capturedIdentity.lock,'review account/network mismatch');
     const tx=review.transaction(),index=review.summary.walletWitnessIndex;
     requireJoy(tx.witnesses[index]===walletWitness,'review wallet witness mismatch');
-    const expected=[selected.poolDep,selected.tokenDep,...deps].filter((dep,index,all)=>all.findIndex(other=>other.eq(dep))===index);
+    const d=review.summary.orderDependency,order=d?[ccc.CellDep.from({outPoint:{txHash:d.txHash,index:d.index},depType:d.depType})]:[];
+    const expected=[selected.poolDep,selected.tokenDep,...order,...deps].filter((dep,index,all)=>all.findIndex(other=>other.eq(dep))===index);
     requireJoy(tx.cellDeps.length===expected.length&&tx.cellDeps.every((dep,i)=>dep.eq(expected[i]!)),'review dependency mismatch');
     boundReviews.add(review);let attempted=false;
     return Object.freeze({identity:capturedIdentity,summary:review.summary,
@@ -156,7 +157,8 @@ export async function resolveJoyIdWallet(
     const tx=built.transaction.clone(),index=built.walletWitnessIndex;
     requireJoy(Number.isSafeInteger(index)&&index>=0&&index<tx.inputs.length,'invalid wallet witness index');
     requireJoy(tx.witnesses[index]===walletWitness,'transaction does not use the resolved wallet witness');
-    const expected=[selected.poolDep,selected.tokenDep,...deps].filter((dep,index,all)=>all.findIndex(other=>other.eq(dep))===index);
+    // A split route adds the order lock's code; the builder checks its data hash on every freshness pass.
+    const expected=[selected.poolDep,selected.tokenDep,...(built.orderDep?[built.orderDep]:[]),...deps].filter((dep,index,all)=>all.findIndex(other=>other.eq(dep))===index);
     requireJoy(tx.cellDeps.length===expected.length&&tx.cellDeps.every((dep,i)=>dep.eq(expected[i]!)),'transaction dependency set differs from resolved profile');
     const input=await liveCell(client,tx.inputs[index]!.previousOutput,o);check();
     requireJoy(input.cellOutput.lock.eq(bound.lock),'transaction belongs to another account');

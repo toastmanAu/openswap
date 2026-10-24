@@ -1,14 +1,16 @@
 import { ccc } from '@ckb-ccc/core';
 import { decodeTerms, parseAmount, U64_MAX } from './codec.js';
 import { payment } from './capacity.js';
-import { assetKey, CKB, udt, type Deployment, type OpenSwapOrder } from './types.js';
+import { assetKey, CKB, udt, type AssetId, type Deployment, type OpenSwapOrder, type OpenSwapTerms } from './types.js';
 import type { AssetResolver } from './assets.js';
 export async function assertNetwork(client: ccc.Client, deployment: Deployment): Promise<void> {
   if (client.addressPrefix !== (deployment.network === 'testnet' ? 'ckt' : 'ckb') || (await client.getHeaderByNumber(0))?.hash !== deployment.genesisHash) throw new Error('OpenSwap deployment/network mismatch');
 }
-export async function parse(cell: ccc.Cell, deployment: Deployment, resolver: AssetResolver): Promise<OpenSwapOrder> {
+/** Structural decode of an order cell: terms, offer asset and amount. Synchronous
+ * and resolver-free; `parse` adds asset support and payment feasibility. */
+export function decodeOrder(cell: ccc.Cell, codeHash: ccc.Hex): OpenSwapTerms & { offerAsset: AssetId; offerAmount: bigint } {
   const { cellOutput: output, outputData: data } = cell;
-  if (output.lock.codeHash !== deployment.codeHash || output.lock.hashType !== 'data1') throw new Error('Not an OpenSwap Data1 cell');
+  if (output.lock.codeHash !== codeHash || output.lock.hashType !== 'data1') throw new Error('Not an OpenSwap Data1 cell');
   const terms = decodeTerms(output.lock.args);
   if (terms.ownerLock.eq(output.lock)) throw new Error('Self-owner lock');
   const offerAsset = output.type ? udt(output.type) : CKB;
@@ -23,6 +25,11 @@ export async function parse(cell: ccc.Cell, deployment: Deployment, resolver: As
     offerAmount = output.capacity - terms.capacityRefund;
   }
   if (output.capacity > U64_MAX || offerAmount <= 0n || assetKey(offerAsset) === assetKey(terms.askAsset)) throw new Error('Invalid offer');
+  return { ...terms, offerAsset, offerAmount };
+}
+export async function parse(cell: ccc.Cell, deployment: Deployment, resolver: AssetResolver): Promise<OpenSwapOrder> {
+  const { cellOutput: output, outputData: data } = cell;
+  const { offerAsset, offerAmount, ...terms } = decodeOrder(cell, deployment.codeHash);
   const offer = await resolver.identify(output.type, data);
   const ask = await resolver.identify(terms.askAsset.kind === 'udt' ? terms.askAsset.script : undefined);
   let supportReason = offer.reason ?? ask.reason;

@@ -4,8 +4,17 @@ import {ccc} from '@ckb-ccc/core';
 import {buildCreate,buildTransition,PoolBuildError} from '../src/builders.js';
 import {parsePool} from '../src/pools.js';
 import {ModelError,type Operation} from '../../pool-model/src/model.js';
+import {estimateCapacity} from '../../sdk/src/capacity.js';
+import {CKB,udt} from '../../sdk/src/types.js';
 const input=JSON.parse(readFileSync(0,'utf8'));
 const dep=(s:ccc.Hex)=>({outPoint:ccc.OutPoint.fromBytes(s),depType:'code' as const});
+// Order cells made by the real order SDK, for the split-route VM tests.
+if(input.makeOrders){
+ const m=input.makeOrders,token=ccc.Script.fromBytes(m.token),asset=(k:string)=>k==='ckb'?CKB:udt(token);
+ const deployment={network:'testnet' as const,genesisHash:`0x${'00'.repeat(32)}` as ccc.Hex,codeHash:m.codeHash,hashType:'data1' as const,cellDep:dep(m.dep)};
+ const cells=m.lots.map((lot:{offer:string;ask:string},i:number)=>estimateCapacity(deployment,{ownerLock:ccc.Script.fromBytes(m.owner),nonce:new Uint8Array(16).fill(i+1),askAsset:asset(m.ask),askAmount:BigInt(lot.ask)},asset(m.offer),BigInt(lot.offer)).cell);
+ console.log(JSON.stringify({cells:cells.map((c:ccc.CellAny)=>({output:ccc.hexFrom(c.cellOutput.toBytes()),data:c.outputData}))}));process.exit(0);
+}
 const cell=(s:{point:ccc.Hex;output:ccc.Hex;data:ccc.Hex})=>ccc.Cell.from({outPoint:ccc.OutPoint.fromBytes(s.point),cellOutput:ccc.CellOutput.fromBytes(s.output),outputData:s.data});
 const deployment={genesisHash:`0x${'00'.repeat(32)}` as ccc.Hex,codeHash:input.codeHash,poolDep:dep(input.poolDep),tokenDep:dep(input.tokenDep)};
 const lock=ccc.Script.fromBytes(input.lock);
@@ -33,11 +42,13 @@ const initial=input.initial??{fee:'30',locked:'1000',x:'1000000000000',y:'400000
 // Endurance campaigns opt in to reporting builder refusals (exhausted wallet
 // funding, model rejection) as a skip, so the caller can choose another action.
 let built;
-try{built=pool?buildTransition(deployment,wallet,recipients,pool,actions[input.action as keyof typeof actions]):buildCreate(deployment,wallet,recipients,{parameters:{feeBps:BigInt(initial.fee),lockedShares:BigInt(initial.locked),backing:{state:34000000000n,ckb:8000000000n,token:16000000000n}},x:BigInt(initial.x),y:BigInt(initial.y),minShares:1n,tokenOwner:`0x${'11'.repeat(32)}`});}
+const orders=input.orders&&{codeHash:input.orders.codeHash,cellDep:dep(input.orders.dep),cells:input.orders.cells.map(cell)};
+if(input.swapAmountIn!==undefined){actions.xToY.amountIn=BigInt(input.swapAmountIn);actions.yToX.amountIn=BigInt(input.swapAmountIn);}
+try{built=pool?buildTransition(deployment,wallet,recipients,pool,actions[input.action as keyof typeof actions],orders):buildCreate(deployment,wallet,recipients,{parameters:{feeBps:BigInt(initial.fee),lockedShares:BigInt(initial.locked),backing:{state:34000000000n,ckb:8000000000n,token:16000000000n}},x:BigInt(initial.x),y:BigInt(initial.y),minShares:1n,tokenOwner:`0x${'11'.repeat(32)}`});}
 catch(error){
  const code=error instanceof PoolBuildError&&error.code==='FUNDING'?'FUNDING':error instanceof ModelError?error.code:undefined;
  if(!input.allowSkip||!code)throw error;
  console.log(JSON.stringify({skip:code}));process.exit(0);
 }
 built.assertIntegrity();
-console.log(JSON.stringify({transaction:ccc.hexFrom(built.transaction.toBytes()),walletWitnessIndex:built.walletWitnessIndex}));
+console.log(JSON.stringify({transaction:ccc.hexFrom(built.transaction.toBytes()),walletWitnessIndex:built.walletWitnessIndex,stateOutputIndex:built.stateOutputIndex}));
