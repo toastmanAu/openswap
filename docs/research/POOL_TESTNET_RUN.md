@@ -147,6 +147,13 @@ click during sending then showed only "Wait for the current pool transaction".
 Now a routed review reports to the Swap tab's status line. The Swap button is
 also disabled while a pool transaction is being prepared, signed or sent.
 
+Deployed-origin check: from the Swap tab on https://toastdex.org (deployment of
+`b327f03`), the user swapped 40.76289968 tCKB for 100.00000001 TEST (minimum
+exactly 100). Tx `0x1961a4a3dff3959e942c347c28d237fa4dcf4db0ddcbf94c2cbf3e223ef52340`,
+block 22,842,588, fee 2,705 shannons. It was checked on both endpoints with the
+same checks, and the Swap tab reported the submission in place. Pool after:
+185.0988857 tCKB / 355.15210664 TEST.
+
 UI defects found and fixed during P7:
 - Errors appeared only in the page-bottom status line.
 - Opening Pools during startup could hang on "Loading live pools…".

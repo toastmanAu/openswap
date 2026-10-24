@@ -67,8 +67,11 @@ serve files byte-identical to the reproducible release.
   The domain owner disabled automatic injection. HTML served to browsers is
   again byte-identical to the release, and all 22 tests pass on toastdex.org.
   Keep Web Analytics injection off. The guard fails if it comes back.
-- **JoyID signing on the deployed origin** has not been re-run since the
-  2026-09-18 acceptance.
+- **JoyID signing on the deployed origin:** the user made a routed Swap-tab swap
+  on toastdex.org, `0x1961a4a3…2340`, block 22,842,588. It paid 40.76289968 tCKB
+  for 100.00000001 TEST, and the Swap tab showed the outcome. Verified on both
+  endpoints: it matches the pool model, the fee was 2,705 shannons, and every
+  wallet output pays the user's JoyID.
 
 Rollback: select the previous successful deployment in Pages. Published contract
 code and outstanding order cells remain unchanged by frontend rollbacks.

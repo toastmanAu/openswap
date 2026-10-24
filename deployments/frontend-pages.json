@@ -33,7 +33,7 @@
       "pool-manifest.json": "a7f90a4d1c13d0ae8bb5ce964985eafa071538b58cdcb0f2c593c6f20de8d2e9"
     }
   },
-  "deployedOriginPasskeySigningVerified": false,
+  "deployedOriginPasskeySigningVerified": true,
   "browserTests": {
     "https://toastdex.pages.dev": {
       "passed": 22,
@@ -45,7 +45,7 @@
     }
   },
   "walletAcceptanceEvidence": "deployments/public-wallet-verification.json",
-  "passkeySigningNote": "The 2026-09-18 deployment was passkey-verified. This deployment adds the pool UI and routing; JoyID signing on the deployed origin has not been re-run yet.",
+  "passkeySigningNote": "2026-10-24: routed Swap-tab pool swap signed with JoyID on https://toastdex.org, tx 0x1961a4a3dff3959e942c347c28d237fa4dcf4db0ddcbf94c2cbf3e223ef52340 (block 22,842,588), verified on both testnet endpoints against the pool model.",
   "previous": {
     "deploymentUrl": "https://d52df91a.toastdex.pages.dev",
     "sourceCommit": "98ae54cf8b74dddca3c09083db9d4d14410106d0",
