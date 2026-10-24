@@ -79,6 +79,13 @@ byte-identical to the reproducible release, and all 22 browser tests pass on
 both origins. On toastdex.org, the pay-TEST review was ready in 12.5 s, down
 from 20–24 s.
 
+Follow-up deployment `https://1e2f445d.toastdex.pages.dev` (source `250e964`,
+2026-10-24): split routes (whole order lots plus a pool swap in one
+transaction). Files on all origins are byte-identical to the reproducible
+release, and all 23 browser tests pass on toastdex.org and the deployment URL.
+The live split swap was signed from the local build of the same source before
+deployment ([run](research/POOL_TESTNET_RUN.md)).
+
 Rollback: select the previous successful deployment in Pages. Published contract
 code and outstanding order cells remain unchanged by frontend rollbacks.
 
