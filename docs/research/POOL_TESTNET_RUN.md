@@ -185,6 +185,26 @@ spent, each maker payment byte-equal to the order lock's required payment at its
 lot's index, and the pool state directly after the lots. Pool after:
 165.0988857 tCKB / 398.30452011 TEST.
 
+Deployed-origin split (round 2, `--round=2`, journal
+`deployments/split-live-result-2.json`). The same maker placed two new lots
+priced against the moved pool (margin 0.4133 tCKB per TEST): 20 tCKB for
+44.67631383 TEST and 30 tCKB for 68.92916991 TEST. Tx
+`0x92d8908156e12c7e9400b8f48d929e96bd145be16ecb23c2ffc9e406c179ee4e`, fee 945
+shannons.
+
+From the Swap tab on https://toastdex.org (deployment of `250e964`), the user's
+JoyID requested exactly 70 tCKB for TEST, and the frontend routed it as a split.
+Tx `0xae8436cdb22ef94fcfe26df75badb477a3ef2b70b595e6f6e4989a39b1816262`, block
+22,845,472, fee 3,429 shannons:
+
+- Lots: 50 tCKB to the taker; makers paid 113.60548374 TEST at outputs #0 and #1.
+- Pool: 20 tCKB out for 55.06631251 TEST in.
+- Total: 168.67179625 TEST for 70 tCKB. The pool alone would have needed about
+  294.06 TEST.
+
+It passed the same checks on both endpoints. Pool after: 145.0988857 tCKB /
+453.37083262 TEST.
+
 UI defects found and fixed during P7:
 - Errors appeared only in the page-bottom status line.
 - Opening Pools during startup could hang on "Loading live pools…".
