@@ -296,7 +296,7 @@ read, still happen after the batch. On Review, the order scan and pool reload
 also run together. A live testnet run of the pay-TEST review (57 live-cell reads,
 about 200 ms per RPC) went from 20–24 s to 10.5–12 s.
 
-### Split routes (offline, 2026-10-24)
+### Split routes (2026-10-24, live 2026-10-25)
 
 A third candidate fills cheap whole lots and tops up the remainder from the
 pool, in one transaction with one review and one signature (`quoteSplit` in
@@ -337,8 +337,24 @@ Evidence (offline):
 - Browser test: the split test in `frontend/test/pools.spec.ts`. It serves the
   built order binary at the deployed code OutPoint and is skipped if the binary
   has not been built.
+- One-lot cases (both directions) were added after the `split-vm` campaign found
+  that a one-lot split triggered the JoyID genesis receipt move (fixed in
+  `a1cfaa9`). The pool validator rejected that layout, so nothing unsafe could
+  commit, but a one-lot split could not be sent.
+- The `split-vm` campaign runs random 1–32-lot splits in CKB-VM with one
+  tampered copy per case ([campaigns](campaigns/README.md)).
 
-Not yet done: live testnet acceptance and deployment, pending the user's review.
+Live: JoyID split swaps from the local build and from toastdex.org are verified
+on two endpoints ([run](research/POOL_TESTNET_RUN.md)).
+
+Limits:
+- **Fee cap.** The manifest caps pool fees at 10,000 shannons at 1,000
+  shannons/KB, so a transaction can be at most about 10 KB. Splits with roughly
+  28 or more token-paid lots exceed this. The builder refuses them before
+  signing, and the page asks for a smaller amount. The router does not yet size
+  routes against the cap.
+- **Greedy quotes.** Lots are taken cheapest-first as whole lots; the quote is
+  not optimal over every combination.
 
 `frontend/src/pools/journal.ts` is a localStorage-backed `ArchivableSubmissionJournal`
 with the solver journal's record validation. A write from another tab poisons

@@ -115,6 +115,10 @@ directories and compares the bytes.
   exactly this for one-lot splits.
 - **Split quotes are greedy.** Lots are taken cheapest-first as whole lots. The
   quote is not globally optimal over lot combinations.
+- **Fee cap bounds split size.** At the frontend policy (1,000 shannons/KB, cap
+  10,000 shannons) a split of roughly 28 or more token-paid lots exceeds the cap,
+  and the builder refuses it before signing. The router does not size routes
+  against the cap.
 
 Full detail, the internal R1/R2 findings and their fixes are in the
 [internal review](research/POOL_INTERNAL_REVIEW.md).
