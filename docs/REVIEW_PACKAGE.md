@@ -38,6 +38,21 @@ ignored `release/` directory:
 Give the reviewer the commit, archive SHA256 and manifest. They should rebuild the
 binaries and recompute the hashes independently, not trust the manifest.
 
+## Latest freeze (2026-10-25, local only)
+
+- **Commit:** `9f8f520edee42012cd20134a923f789903a226ea`
+- **Archive SHA256:** `61d3a4b45d3a6c77f58f8a8ec1dc5feb650b4a3d7b1ab015b8145601828d84fa`
+
+The archive and manifest are in ignored `release/`. Nothing has been shared or
+uploaded. The rebuilt identities match the pins: order lock `060b0b73…`, pool
+`d3a6520f…`.
+
+The manifest lists every clean campaign record, including the failed `split-vm`
+runs. The `split-vm` pass is on `dd4e9d0`; its only later non-documentation
+change is the deployment record. The other four targets were recorded on
+`a82d72a`, which is 61 non-documentation paths behind this freeze. A reviewer may
+ask for them to be rerun on the frozen commit.
+
 ## Freeze rules
 
 - Freeze only from a commit whose readiness index and evidence are committed. Do
