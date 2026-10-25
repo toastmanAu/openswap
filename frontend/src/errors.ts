@@ -1,5 +1,6 @@
 export function explainError(error:unknown):string{
  const raw=error instanceof Error?error.message:String(error);
+ if(/fee exceeds explicit cap/.test(raw))return 'This transaction is too large for the network-fee cap, usually because a split route uses many order lots. Request a smaller amount. Nothing was signed.';
  if(/No whole-lot route/.test(raw))return 'No available swap meets this amount and maximum payment. Try a smaller amount, reverse the tokens, or place an order.';
  if(/Input spent|order spent|no longer live|Quote is stale/.test(raw))return 'This order or a funding cell was already spent. Refresh the orders and prepare a new quote. Nothing has been signed by this attempt.';
  if(/user.*(reject|cancel)|(reject|cancel).*user|request rejected/i.test(raw))return 'Wallet request cancelled. You can review and try again when ready.';

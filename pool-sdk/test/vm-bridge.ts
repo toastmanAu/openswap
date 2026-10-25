@@ -40,13 +40,13 @@ if(input.fullWithdraw&&pool)actions.withdraw.shares=pool.accounting.totalShares-
 if(input.reenter){actions.deposit.maxX=BigInt(input.reenter.x);actions.deposit.maxY=BigInt(input.reenter.y);}
 const initial=input.initial??{fee:'30',locked:'1000',x:'1000000000000',y:'4000000000000'};
 // Endurance campaigns opt in to reporting builder refusals (exhausted wallet
-// funding, model rejection) as a skip, so the caller can choose another action.
+// funding, fee over the cap, model rejection) as a skip, so the caller can choose another action.
 let built;
 const orders=input.orders&&{codeHash:input.orders.codeHash,cellDep:dep(input.orders.dep),cells:input.orders.cells.map(cell)};
 if(input.swapAmountIn!==undefined){actions.xToY.amountIn=BigInt(input.swapAmountIn);actions.yToX.amountIn=BigInt(input.swapAmountIn);}
 try{built=pool?buildTransition(deployment,wallet,recipients,pool,actions[input.action as keyof typeof actions],orders):buildCreate(deployment,wallet,recipients,{parameters:{feeBps:BigInt(initial.fee),lockedShares:BigInt(initial.locked),backing:{state:34000000000n,ckb:8000000000n,token:16000000000n}},x:BigInt(initial.x),y:BigInt(initial.y),minShares:1n,tokenOwner:`0x${'11'.repeat(32)}`});}
 catch(error){
- const code=error instanceof PoolBuildError&&error.code==='FUNDING'?'FUNDING':error instanceof ModelError?error.code:undefined;
+ const code=error instanceof PoolBuildError&&(error.code==='FUNDING'||error.code==='FEE')?error.code:error instanceof ModelError?error.code:undefined;
  if(!input.allowSkip||!code)throw error;
  console.log(JSON.stringify({skip:code}));process.exit(0);
 }
