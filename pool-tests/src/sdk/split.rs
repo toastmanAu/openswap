@@ -83,6 +83,21 @@ pub(super) fn run(fixture: &mut SdkFixture) {
             ],
             4_000_000_000,
         ),
+        // One lot: the state lands at output 1, like the JoyID genesis layout.
+        (
+            "xToY",
+            "token",
+            "ckb",
+            vec![(10_000_000_000, 2_000_000_000)],
+            1_000_000_000,
+        ),
+        (
+            "yToX",
+            "ckb",
+            "token",
+            vec![(1_000_000_000, 3_000_000_000)],
+            4_000_000_000,
+        ),
         // Worst case: the 32-lot maximum plus the pool swap in one transaction.
         (
             "xToY",

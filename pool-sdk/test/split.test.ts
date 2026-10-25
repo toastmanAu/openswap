@@ -40,6 +40,9 @@ test('a split route puts lots first, pays each maker at its own index and conser
  for(const [direction,offer,ask,sizes,amountIn] of [
   ['xToY','token','ckb',[[10_000_000_000n,2_000_000_000n],[20_000_000_000n,4_500_000_000n]],1_000_000_000n],
   ['yToX','ckb','token',[[1_000_000_000n,3_000_000_000n],[2_000_000_000n,7_000_000_000n]],4_000_000_000n],
+  // One lot puts the state at output 1, which the JoyID genesis layout also uses.
+  ['xToY','token','ckb',[[10_000_000_000n,2_000_000_000n]],1_000_000_000n],
+  ['yToX','ckb','token',[[1_000_000_000n,3_000_000_000n]],4_000_000_000n],
  ] as const){
   const {pool:p,funding:f}=pool(),lot=lots(offer,ask,sizes.map(s=>[...s]) as [bigint,bigint][]),n=lot.length;
   const w={...wallet,funding:f},action={kind:'swap',direction,amountIn,minOut:1n} as const;

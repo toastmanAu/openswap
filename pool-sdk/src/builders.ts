@@ -131,9 +131,10 @@ function build(deployment:PoolDeployment,wallet:Wallet,recipients:Recipients,id:
  if(availableY>flows.paidY+lotTokenOut)cells.push(output(change,token,amount(availableY-flows.paidY-lotTokenOut)));
  if(availableLp>flows.burnedShares)cells.push(output(change,roles[4]!,amount(availableLp-flows.burnedShares)));
  const changeCell=output(change);cells.push(changeCell);
- // Genesis always mints LP. Move that wallet receipt before the three pool
+ // JoyID genesis always mints LP. Move that wallet receipt before the three pool
  // outputs; keep final plain change last for fee accounting. Legacy layout is unchanged.
- if(stateOutputIndex===1)cells.unshift(cells.splice(3,1)[0]!);
+ // A one-lot split also has the state at output 1 but keeps its receipts after the pool.
+ if(!previous&&stateOutputIndex===1)cells.unshift(cells.splice(3,1)[0]!);
  cells.unshift(...legs.map(l=>l.payment));
  const remaining=inputs.reduce((n,c)=>n+c.cellOutput.capacity,0n)-cells.slice(0,-1).reduce((n,c)=>n+c.cellOutput.capacity,0n);
  requireBuild(remaining>=minimumCapacity(changeCell),'insufficient capacity for receipts and change','FUNDING');
