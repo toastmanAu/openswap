@@ -478,6 +478,14 @@ fn sdk_split_route_orders_and_pool() {
 }
 
 #[test]
+fn sdk_seeded_split_campaign() {
+    // Campaign target `split-vm`. CI runs a short default.
+    let campaign = crate::campaign::Campaign::from_env("split-vm", 4);
+    let mut fixture = setup();
+    split::campaign(&mut fixture, &campaign);
+}
+
+#[test]
 fn sdk_combined_resource_envelope() {
     let SdkFixture {
         mut context,

@@ -13,6 +13,7 @@ const targets={
  'pool-wire':{cases:1_000_000,command:(o:Run)=>['cargo',['test','--locked','-q','-p','openswap-pool-arithmetic','--test','wire','seeded_arbitrary_bytes_never_panic','--','--nocapture']] as const,env:true},
  'pool-model-diff':{cases:200_000,command:(o:Run)=>['npx',['tsx','pool-model/src/campaign.ts',`--seed=${o.seed}`,`--cases=${o.cases}`,...(o.seconds===undefined?[]:[`--seconds=${o.seconds}`])]] as const,env:false},
  'pool-vm':{cases:100,command:(o:Run)=>['cargo',['test','--locked','-q','-p','openswap-pool-tests','sdk_seeded_vm_endurance','--','--nocapture']] as const,env:true},
+ 'split-vm':{cases:100,command:(o:Run)=>['cargo',['test','--locked','-q','-p','openswap-pool-tests','sdk_seeded_split_campaign','--','--nocapture']] as const,env:true},
 };
 type Target=keyof typeof targets;
 interface Run {seed:bigint;cases:number;seconds?:number}
