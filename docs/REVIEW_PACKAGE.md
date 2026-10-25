@@ -9,7 +9,7 @@ One package covers both consensus targets and their off-chain paths:
 | Target | Brief |
 | --- | --- |
 | Order lock `openswap-lock` (deployed on testnet) | [EXTERNAL_REVIEW.md](EXTERNAL_REVIEW.md) |
-| Pool validator `openswap-pool` and pool SDK (undeployed) | [POOL_REVIEW_BRIEF.md](POOL_REVIEW_BRIEF.md) |
+| Pool validator `openswap-pool` and pool SDK (testnet only) | [POOL_REVIEW_BRIEF.md](POOL_REVIEW_BRIEF.md) |
 
 Findings are reported with [REVIEW_REPORT_TEMPLATE.md](REVIEW_REPORT_TEMPLATE.md).
 The draft inquiry is in [REVIEW_CANDIDATES.md](REVIEW_CANDIDATES.md).
@@ -52,5 +52,7 @@ binaries and recompute the hashes independently, not trust the manifest.
 ## Not included
 
 The package contains no private keys, passkey exports, recovery phrases or
-`.local/` journals. It includes no live pool deployment or live JoyID evidence
-(P6), because those don't exist yet.
+`.local/` journals. Public testnet records are included: the pool deployment,
+the live JoyID and contention runs in `deployments/` and
+`docs/research/POOL_TESTNET_RUN.md`. These are testnet acceptance records, not
+review evidence. No mainnet deployment exists.

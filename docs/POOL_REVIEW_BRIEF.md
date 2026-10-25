@@ -1,7 +1,8 @@
 # ToastDEX pool external-review brief
 
 Status: **prepared for an independent reviewer; no external audit completed.**
-The pool validator is an undeployed prototype. The order lock has its own brief,
+The pool validator is deployed on CKB testnet only, for staged acceptance. It
+has no mainnet deployment and no approval for real funds. The order lock has its own brief,
 [EXTERNAL_REVIEW.md](EXTERNAL_REVIEW.md). Both are covered by one frozen
 [review package](REVIEW_PACKAGE.md).
 
@@ -13,7 +14,7 @@ The pool validator is an undeployed prototype. The order lock has its own brief,
 | Size / SHA256 | 42,176 bytes / `d3a6520f08859787e34b5497d0f0f4c893b81b96fe7aaa280e50584024f67829` |
 | Data1 code hash | `0xc58432bfaf1cfaab12532bd4d9ce7e5a43196bd0c867a43b63f19096727a12ed` |
 | Token profile | Vendored xUDT fixture, Data1 `0x50bd8d6680b8b9cf98b73f3c08faf8b2a21914311954118ad6609be6e78a1b95`, 32-byte owner args, 16-byte amounts |
-| Deployment | None. No live dependency OutPoint exists in any approved manifest |
+| Deployment | Testnet only: code cell `0xfc8c182adf14387e29be1a4bdcba21d49f28a3c1d6ec37e14984969f31306f7d:0`, deployed by the user's JoyID (2026-10-23). See [pool-testnet.json](../deployments/pool-testnet.json). No mainnet deployment |
 
 `scripts/check-pool-identity.py` verifies the size, SHA256 and Data1 hash.
 `scripts/check-reproducible.sh` builds both contracts twice in separate target
@@ -42,7 +43,16 @@ directories and compares the bytes.
      reservations.
    - **Submission and recovery:** `recovery.ts` handles durable submission.
      `solver/src/resolution.ts` holds the explicit resolution checks.
-4. **Shared journal** (`solver/src/journal.ts`). Check the atomic snapshot and
+   - **Split routes:** `builders.ts` (`orderLegs`) fills 1..32 order-book lots
+     and a pool swap in one transaction. Lot `i` is input `i` and its maker
+     payment is output `i`, as the order lock requires; the pool cells follow at
+     `n..n+2`, with the action witness at `n`. Every lot's terms and payment are
+     derived from the cell itself. `split.ts` quotes cheapest-first lot prefixes
+     topped up by the pool.
+4. **Order lock composition.** The order lock is already deployed and has its
+   own brief. Here, check only how it composes with the pool in one transaction
+   (priority question 8).
+5. **Shared journal** (`solver/src/journal.ts`). Check the atomic snapshot and
    archive writes, scope binding, the single-writer lock and fail-closed
    poisoning.
 
@@ -70,6 +80,14 @@ directories and compares the bytes.
    durable? Any path that releases a reservation while the signed transaction
    can still commit? Any path that retries automatically? Is the
    abandon-after-conflict rule sound given reorgs?
+8. Split routes: the order lock reads no witness and requires exactly one input
+   per lock group, with its payment at the same output index. The pool reads its
+   action from the witness at the state input index and does not check cell
+   deps. In a combined transaction, can either script be satisfied while value
+   moves out of the other: a maker underpaid, a payment shifted onto a pool
+   output, a lot spent without payment, or reserves moved? The VM tests and the
+   `split-vm` campaign re-sign tampered copies and expect rejection. Are there
+   mutations they miss?
 
 ## Known limitations (stated, please challenge)
 
@@ -89,6 +107,14 @@ directories and compares the bytes.
   conflicting spend that justified abandoning it is reorganized away.
 - **Economic risk.** Price impact, MEV, thin liquidity and parameter choice are
   economic risks.
+- **Node-rejected sends stay reserved.** A send that the node rejects outright
+  (for example a script failure) is recorded as `unknown`, because one node's
+  word is not proof. All its inputs are still live, so `abandonConflicted`
+  refuses it, and its funding stays reserved in that journal until an operator
+  resolves it by hand. The builder bug fixed in `a1cfaa9` would have produced
+  exactly this for one-lot splits.
+- **Split quotes are greedy.** Lots are taken cheapest-first as whole lots. The
+  quote is not globally optimal over lot combinations.
 
 Full detail, the internal R1/R2 findings and their fixes are in the
 [internal review](research/POOL_INTERNAL_REVIEW.md).
@@ -105,9 +131,12 @@ python3 scripts/check-pool-identity.py
 npm run test:pool-model && npm run test:pool-cross && npm run test:pool-wire
 npm run test:pool-sdk && npm run test:sdk
 npm run campaign -- all --seed=1          # seeded campaigns, see docs/campaigns
+npm run test:frontend                     # browser tests, mocked RPC and wallet
 ```
 
-No keys, network access or deployment are needed for any of these.
+No keys, network access or deployment are needed for any of these. The live
+testnet runs in the evidence index need keys and approval and are records, not
+steps to reproduce.
 
 ## Evidence index
 
@@ -119,11 +148,19 @@ No keys, network access or deployment are needed for any of these.
 | TS/Rust arithmetic and wire vectors | `pool-model/src/cross-check.ts`, `pool-model/src/wire-vectors.ts` |
 | Seeded fuzz/endurance campaigns with provenance | [campaigns](campaigns/README.md), `docs/campaigns/results.jsonl` |
 | JoyID, review, signing, funding and submission tests (mock signer and mock chain only) | `pool-sdk/test/*.test.ts`, `solver/test/*.test.ts` |
+| Split routes in CKB-VM with the real order lock: 1, 2, 3 and 32 lots, both directions, tamper rejections | `pool-tests/src/sdk/split.rs`; `split-vm` campaign in [campaigns](campaigns/README.md) |
+| Live testnet: JoyID lifecycle, Pools tab, routed and split swaps, two-wallet contention | [POOL_TESTNET_RUN.md](research/POOL_TESTNET_RUN.md), `deployments/pool-*.json`, `deployments/split-live-result*.json` |
+| Public frontend deployments and browser acceptance | [CLOUDFLARE_PAGES.md](CLOUDFLARE_PAGES.md), `deployments/frontend-pages.json` |
 | Internal review, threat model, coverage matrix | [POOL_INTERNAL_REVIEW.md](research/POOL_INTERNAL_REVIEW.md) |
 | Staged readiness and open gates | [READINESS.md](READINESS.md) |
 
 ## Not yet evidenced
 
-There is no deployment, no live JoyID authorization, and no node admission,
-contention or reorg evidence (P6). There is no pool UI (P7) and no independent
-review. Report findings using [REVIEW_REPORT_TEMPLATE.md](REVIEW_REPORT_TEMPLATE.md).
+Live testnet evidence now exists (P6, P7). The JoyID main key signed the full
+pool lifecycle, the Pools tab flows, and routed and split swaps. Two-wallet
+contention was resolved through recovery. The following are still not
+evidenced:
+- reorgs;
+- JoyID subkey/CoTA sessions, which need an unapproved proof service;
+- any mainnet deployment or real funds;
+- independent review. Report findings using [REVIEW_REPORT_TEMPLATE.md](REVIEW_REPORT_TEMPLATE.md).

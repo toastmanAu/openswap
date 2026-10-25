@@ -21,6 +21,7 @@ affect results). Only records with `dirty: false` count as evidence.
 | `pool-wire` | Arbitrary bytes into every pool codec (args, state, action, script, both witness phases) | No panic | 1,000,000 |
 | `pool-model-diff` | Random pool walks (wide parameter/magnitude ranges, boundary specials, slippage-edge minima, corrupted-state probes) | Each vector matches the Rust arithmetic exactly; every accepted TS transition passes `validateTransition` | 200,000 vectors |
 | `pool-vm` | One long walk of real SDK-built, secp-signed transitions in CKB-VM, each spending the prior outputs | VM accepts within 6M cycles and 3,000 bytes; exact predecessor inputs; every 8th step a signed one-bit state mutation must be rejected | 100 steps |
+| `split-vm` | One long walk of split routes. Each case places 1–32 random order lots (one base unit to 1,000 CKB / 10,000 tokens, with edge amounts) in a random direction. It fills them with a random pool swap in one SDK-built, secp-signed transaction, running the real order lock and pool validator, and continues from its outputs | VM accepts within 12,000 bytes. Lots are inputs `0..n-1` with payments at the same indices, the state is at `n`, and the reserve indices are `n+1`/`n+2`. Each case re-signs one tampered copy (swapped payments, moved action witness, payment redirected to the taker, maker underpaid by one unit), which must be rejected | 100 cases |
 
 ## Stopping criteria
 
@@ -35,8 +36,8 @@ Each run ends at exactly one of:
   names the case index.
 
 With no `CAMPAIGN_*` variables, each harness keeps its original fixed CI seed and
-count. CI also runs a 20,000-vector `pool-model-diff` smoke and a six-step
-`pool-vm` walk.
+count. CI also runs a 20,000-vector `pool-model-diff` smoke, a six-step
+`pool-vm` walk and a four-case `split-vm` walk.
 
 ## Recorded results (2026-10-22, commit `a82d72a`, clean tree)
 

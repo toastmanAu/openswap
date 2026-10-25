@@ -367,7 +367,8 @@ pub(super) fn campaign(fixture: &mut SdkFixture, campaign: &crate::campaign::Cam
             .unwrap_or_else(|e| panic!("step={step} {action} lots={n}: {e}"));
         let bytes = signed.data().as_slice().len();
         (peak, max_bytes) = (peak.max(cycles), max_bytes.max(bytes));
-        assert!(bytes <= 8000, "step={step}: byte regression {bytes}");
+        // 32 lots paid in the token measure about 9.3 KB (each payment carries the type script).
+        assert!(bytes <= 12_000, "step={step}: byte regression {bytes}");
 
         // One tamper per case, rotating; each copy is re-signed by the wallet.
         let k = next(n as u64) as usize;
