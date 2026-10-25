@@ -208,6 +208,7 @@ separate leap/ownership integration before they can become CKB-side pool reserve
 4. Direct indexer scanner and create/deposit/swap/withdraw builders; no hosted API.
 5. Two-wallet testnet race and stale-quote tests; absent-solver withdrawal; fresh
    transaction rebuild after contention; measured cycles, size and capacity.
+   (Race, stale-quote and fresh rebuild done live on testnet 2026-10-25; see POOL_TESTNET_RUN.md.)
 6. Atomic order-plus-pool settlement tests preserving every existing maker index.
    (Done offline 2026-10-24: `pool-tests` `sdk_split_route_orders_and_pool`; see docs/FRONTEND.md.)
 7. Separate independent review before placing real funds in the new contracts.

@@ -205,6 +205,52 @@ Tx `0xae8436cdb22ef94fcfe26df75badb477a3ef2b70b595e6f6e4989a39b1816262`, block
 It passed the same checks on both endpoints. Pool after: 145.0988857 tCKB /
 453.37083262 TEST.
 
+## Live pool contention (2026-10-25)
+
+User-approved: two script-run secp wallets, about 10 transactions, fee cap 0.0001
+tCKB each, no JoyID signing. Wallet A is the split-test maker. Wallet B is a new
+key in ignored `.local/testnet-contention-key`, funded by A with 2,000 tCKB (tx
+`0xf2afd95b7c568942e4ecea997a092ab170fc20cc85a5b3c57e90a09b0599fc56`, block
+22,853,921). Addresses are in `deployments/pool-contention-wallets.json`.
+
+`scripts/pool-contention.ts` gives each wallet its own client and endpoint, its own
+funding reservations, and its own `FileSubmissionJournal` with
+`PoolSubmissionRecovery` under ignored `.local/pool-contention/`. That is how two
+separate users would look. In each round:
+
+1. Both wallets captured the same pool state.
+2. Each funded, reviewed and signed an exact-in CKB→TEST swap (5 and 6 tCKB).
+3. Both submitted at the same moment, A to testnet.ckb.dev and B to
+   testnet.ckbapp.dev.
+
+| Round | Both sends | Winner (block) | Loser | Fresh swap by the loser (block) |
+|---|---|---|---|---|
+| 1 | `sent` on both nodes, ~2 s | B `0x44be8cd5…822a` (22,853,933) | A `0x68675ef8…0c2d` | `0x5016793c…15cb` (22,853,940) |
+| 2 | `sent` on both nodes, ~2 s | A `0x2848333a…4fed` (22,853,947) | B `0xbbc01754…fd48` | `0x3dbe5e92…1cdd` (22,853,955) |
+
+Evidence (`deployments/pool-contention-result-{1,2}.json`):
+- **Both nodes accepted their competing transaction**, so the race was on chain,
+  not refused locally. Exactly one committed each time; the winner was checked on
+  both endpoints. The loser was absent from both nodes once the winner committed.
+- **Recovery:** while unresolved, every loser input stayed reserved.
+  `abandonConflicted` (reorg risk acknowledged) found 3 of its 4 inputs spent (the
+  pool cells) and archived it, which released its funding cell.
+  `archiveCommitted` archived the winner at 4 and 5 confirmations. Both journals
+  ended empty.
+- **Stale quote:** after the winner committed, a new review built from the
+  pre-race snapshot was refused before any send. In round 2, with separate
+  reservations, it was refused by the chain check ("Input no longer live").
+  Round 1's probe was refused by the loser's own journaled reservation instead,
+  so the probe was changed before round 2.
+- **Fresh rebuild:** the loser then built, reviewed and signed a new swap on the
+  new pool state, which committed and was archived. Nothing resent recorded bytes.
+
+Nine transactions were sent: 1 funding, 4 racing and 2 rebuilds, with the 2
+losers never committing. Each swap's fee was 1,618 shannons. A setup slip sent
+nothing: a dry run exited without closing its journals, so the next run could not
+open them. Dry runs now close the journals.
+Pool after: 167.0988857 tCKB / 393.84451213 TEST.
+
 UI defects found and fixed during P7:
 - Errors appeared only in the page-bottom status line.
 - Opening Pools during startup could hang on "Loading live pools…".
