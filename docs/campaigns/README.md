@@ -51,6 +51,27 @@ count. CI also runs a 20,000-vector `pool-model-diff` smoke, a six-step
 Raw records are in [results.jsonl](results.jsonl). `pool-model-diff` can exceed its
 budget by one vector when a corrupted-state probe follows the last step.
 
+## Recorded results: `split-vm` (2026-10-25, commit `dd4e9d0`, clean tree)
+
+| Seeds | Split transactions | Lots filled | Skips | Tampered copies rejected | Peak cycles | Max bytes | Max lots |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1–3 (200 cases each) | 599 | 3,103 | 1 (`FEE`) | 599/599 | 11.99M | 9,243 | 28 |
+
+All three seeds stopped at the budget. The rejected tampering breaks down as
+150 moved action witnesses, 150 payments redirected to the taker, 120 swapped
+payments and 179 underpaid makers. The random walk never reached 32 lots; the
+fixed test `sdk_split_route_orders_and_pool` covers 32.
+
+Earlier `split-vm` records in the ledger are kept as found:
+- **`546f859` seed 1, case 7:** a real SDK bug. One-lot splits triggered the
+  JoyID genesis receipt move; the pool validator rejected the layout. Fixed in
+  `a1cfaa9`.
+- **`a1cfaa9` seed 1, case 42:** a harness limit. The VM accepted a 9,243-byte
+  transaction, above my 8,000-byte ceiling, now 12,000.
+- **`1febadb` seed 2, case 67:** a 28-lot token-paid split over the
+  10,000-shannon fee cap. The builder refuses it before signing; this is policy,
+  and it now counts as a skip (`dd4e9d0`). Seed 1 at `1febadb` passed.
+
 ## What a pass does and does not show
 
 A pass shows no counterexample in the sampled space for these oracles at the
