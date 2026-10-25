@@ -2,32 +2,32 @@
   "project": "toastdex",
   "url": "https://toastdex.org",
   "pagesUrl": "https://toastdex.pages.dev",
-  "deploymentUrl": "https://1e2f445d.toastdex.pages.dev",
-  "sourceCommit": "250e96438756e7599ce29306444224fc1ab8d014",
+  "deploymentUrl": "https://0f39d8d6.toastdex.pages.dev",
+  "sourceCommit": "db81739f150a8b65541996850a9b1db34385ecef",
   "network": "testnet",
   "customDomain": {
     "name": "toastdex.org",
     "httpsVerified": true
   },
-  "verifiedAt": "2026-10-24T06:07:15.682067Z",
+  "verifiedAt": "2026-10-25T12:46:17.787151Z",
   "files": {
     "https://toastdex.org": {
       "index.html": "a6f17b7abb67c0f7cfaa767cad12c76ca340edf24f981b052e7597baacd777f4",
-      "main.js": "3edc2bd446fe47270537d11ac4715518ab5241c9192401f860db02a80a8ccef6",
+      "main.js": "9bec2f27948006f10f409652928b543b542cabcd473e0a6e09c7d017a50c572a",
       "main.css": "d7632f30ae9c1bf43ff3bcf19c42654b9c4f5966e2da05adde4530647a05670a",
       "toastDexLogo.png": "92b7f6e15d9a0aa168a5ffd7b6d093c1c88dc39f315729a0d5f33415d152c9d7",
       "pool-manifest.json": "a7f90a4d1c13d0ae8bb5ce964985eafa071538b58cdcb0f2c593c6f20de8d2e9"
     },
     "https://toastdex.pages.dev": {
       "index.html": "a6f17b7abb67c0f7cfaa767cad12c76ca340edf24f981b052e7597baacd777f4",
-      "main.js": "3edc2bd446fe47270537d11ac4715518ab5241c9192401f860db02a80a8ccef6",
+      "main.js": "9bec2f27948006f10f409652928b543b542cabcd473e0a6e09c7d017a50c572a",
       "main.css": "d7632f30ae9c1bf43ff3bcf19c42654b9c4f5966e2da05adde4530647a05670a",
       "toastDexLogo.png": "92b7f6e15d9a0aa168a5ffd7b6d093c1c88dc39f315729a0d5f33415d152c9d7",
       "pool-manifest.json": "a7f90a4d1c13d0ae8bb5ce964985eafa071538b58cdcb0f2c593c6f20de8d2e9"
     },
-    "https://1e2f445d.toastdex.pages.dev": {
+    "https://0f39d8d6.toastdex.pages.dev": {
       "index.html": "a6f17b7abb67c0f7cfaa767cad12c76ca340edf24f981b052e7597baacd777f4",
-      "main.js": "3edc2bd446fe47270537d11ac4715518ab5241c9192401f860db02a80a8ccef6",
+      "main.js": "9bec2f27948006f10f409652928b543b542cabcd473e0a6e09c7d017a50c572a",
       "main.css": "d7632f30ae9c1bf43ff3bcf19c42654b9c4f5966e2da05adde4530647a05670a",
       "toastDexLogo.png": "92b7f6e15d9a0aa168a5ffd7b6d093c1c88dc39f315729a0d5f33415d152c9d7",
       "pool-manifest.json": "a7f90a4d1c13d0ae8bb5ce964985eafa071538b58cdcb0f2c593c6f20de8d2e9"
@@ -39,7 +39,7 @@
       "passed": 23,
       "failed": 0
     },
-    "https://1e2f445d.toastdex.pages.dev": {
+    "https://0f39d8d6.toastdex.pages.dev": {
       "passed": 23,
       "failed": 0
     }
@@ -47,9 +47,9 @@
   "walletAcceptanceEvidence": "deployments/public-wallet-verification.json",
   "passkeySigningNote": "2026-10-24: routed Swap-tab pool swap signed with JoyID on https://toastdex.org, tx 0x1961a4a3dff3959e942c347c28d237fa4dcf4db0ddcbf94c2cbf3e223ef52340 (block 22,842,588), verified on both testnet endpoints against the pool model. The 75ced03 deployment changes only read concurrency in review preparation; its pay-TEST review was timed on toastdex.org at 12.5 s (57 live-cell reads) with a non-signing test wallet. 2026-10-24 (250e964): adds split routes; the live split swap (tx 0x16027a46a7919ebae45589baf924d4950d6b39663a2801b76af235957c8444a5) was signed from the local build before deployment.",
   "previous": {
-    "deploymentUrl": "https://991cef6a.toastdex.pages.dev",
-    "sourceCommit": "75ced031a977753fb90580fab85384694f1231aa",
-    "verifiedAt": "2026-10-24T03:09:36.193Z"
+    "deploymentUrl": "https://1e2f445d.toastdex.pages.dev",
+    "sourceCommit": "250e96438756e7599ce29306444224fc1ab8d014",
+    "verifiedAt": "2026-10-24T06:07:15.682067Z"
   },
   "analytics": "Cloudflare Web Analytics automatic injection disabled for toastdex.org on 2026-10-24 by the domain owner; browser-served HTML is again byte-identical to the release."
 }

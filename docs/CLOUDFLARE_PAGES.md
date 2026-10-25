@@ -88,6 +88,12 @@ deployment ([run](research/POOL_TESTNET_RUN.md)). A second split swap was then s
 with JoyID on toastdex.org (tx `0xae8436cd…6262`, block 22,845,472) and verified on
 both endpoints.
 
+Follow-up deployment `https://0f39d8d6.toastdex.pages.dev` (source `db81739`,
+2026-10-25): the one-lot split fix (`a1cfaa9`) and a clear message when a
+transaction exceeds the fee cap (`dd4e9d0`). Files on all origins are
+byte-identical to the reproducible release, and all 23 browser tests pass on
+toastdex.org and the deployment URL.
+
 Rollback: select the previous successful deployment in Pages. Published contract
 code and outstanding order cells remain unchanged by frontend rollbacks.
 
