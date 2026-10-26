@@ -133,8 +133,13 @@ The full connected CKB address is visible above trading and in each transaction
 review. Account scripts are rechecked before preparing/reviewing/signing and when
 the page regains focus; pending reviews are invalidated on account changes.
 
-Own orders are marked **Your order / Manage order**, excluded from swap quotes,
-and rejected by a fresh address check before direct fills. Ownership checks use
+Own orders are marked **Your order**, excluded from swap quotes, pool splits
+and direct fills, and rejected by a fresh address check before direct fills.
+Since 2026-10-26 the Swap tab cancels them in place: Available swaps rows and a
+**Your orders on this pair** list (first 10, with a link to the Orders tab for
+the rest) each have **Cancel order**, which opens the same cancel review as the
+Orders tab. When the quote skips lots this account owns in the requested
+direction, it says how many. Ownership checks use
 all CKB scripts exposed by the signer, not wallet names. The low-level permissionless
 SDK/contract still permits self-settlement; the frontend prevents presenting it
 as an economic trade. Browser tests include switching between distinct

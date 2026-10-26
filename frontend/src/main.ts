@@ -110,17 +110,20 @@ function bestRoute(){
  let best=orderRoute;
  if(poolRoute&&(!best||cost(poolRoute).input<cost(best).input||(cost(poolRoute).input===cost(best).input&&cost(poolRoute).output>cost(best).output)))best=poolRoute;
  if(splitRoute&&(!best||cost(splitRoute).input<cost(best).input))best=splitRoute;
- return {best,assetIn,assetOut,notes:[orderNote,...(poolNote?[poolNote]:[]),...(splitNote?[splitNote]:[])]};
+ // Lots this account owns in the requested direction: never routed, but say so.
+ const ownSkipped=scanFresh?orders.filter(o=>o.supported&&o.genesisHash===deployment.genesisHash&&isOwnOrder(o,walletLocks)&&swap.assetKey(o.offerAsset)===swap.assetKey(assetOut)&&swap.assetKey(o.askAsset)===swap.assetKey(assetIn)).length:0;
+ return {best,assetIn,assetOut,notes:[orderNote,...(poolNote?[poolNote]:[]),...(splitNote?[splitNote]:[])],ownSkipped};
 }
 function updateQuote(){
  text('pay-estimate','—');
  if(!value('swap-output').trim()){text('quote-status','Enter the amount you want to receive, or choose an available swap below.');return;}
  try{
-  const {best,assetIn,assetOut,notes}=bestRoute();
-  if(!best){text('quote-status',`No available swap for this amount and direction. ${notes.join(' · ')}. Try a listed swap below, reverse the tokens, or place an order.`);return;}
+  const {best,assetIn,assetOut,notes,ownSkipped}=bestRoute();
+  const own=ownSkipped?` Skipped ${ownSkipped} of your own lot${ownSkipped===1?'':'s'} in this direction: you cannot fill your own orders. Cancel ${ownSkipped===1?'it':'them'} under Your orders on this pair.`:'';
+  if(!best){text('quote-status',`No available swap for this amount and direction. ${notes.join(' · ')}. Try a listed swap below, reverse the tokens, or place an order.${own}`);return;}
   const input=best.venue==='orders'?best.quote.amountIn:best.route.amountIn,output=best.venue==='orders'?best.quote.amountOut:best.route.amountOut;
   text('pay-estimate',formatUnits(input,decimals(assetIn)));
-  text('quote-status',`Best route: ${best.venue==='pool'?'pool':best.venue==='split'?`split, ${best.route.lots.length} order lot${best.route.lots.length===1?'':'s'} + pool in one transaction`:'order book'}. Receive ${amount(output,assetOut)} for ${amount(input,assetIn)}. Price ≈ ${unitPrice(input,output,decimals(assetIn),decimals(assetOut))} ${label(assetIn)} per ${label(assetOut)}. Compared: ${notes.join(' · ')}. Fees and storage are additional.`);
+  text('quote-status',`Best route: ${best.venue==='pool'?'pool':best.venue==='split'?`split, ${best.route.lots.length} order lot${best.route.lots.length===1?'':'s'} + pool in one transaction`:'order book'}. Receive ${amount(output,assetOut)} for ${amount(input,assetIn)}. Price ≈ ${unitPrice(input,output,decimals(assetIn),decimals(assetOut))} ${label(assetIn)} per ${label(assetOut)}. Compared: ${notes.join(' · ')}. Fees and storage are additional.${own}`);
  }catch(error){text('quote-status',error instanceof Error?error.message:String(error));}
 }
 for(const id of ['swap-output','swap-budget','swap-direction','offer','ask','lots','direction'])el(id).oninput=()=>{invalidate();updateQuote();updateOrderPreview();};
@@ -150,13 +153,25 @@ async function checkFunding(wallet:ccc.Signer,asset:swap.AssetId,required:bigint
 let balanceGeneration=0;
 function showBalance(){const generation=++balanceGeneration,wallet=signer;if(!wallet||!owner){text('pay-balance','Connect to see your balance');text('receive-balance','');return;}const {assetIn,assetOut}=swapAssets();
  for(const [id,asset] of [['pay-balance',assetIn],['receive-balance',assetOut]] as const){text(id,'Checking balance…');void tokenBalance(wallet,asset).then(n=>{if(generation===balanceGeneration&&signer===wallet)text(id,`Wallet: ${amount(n,asset)}${asset.kind==='ckb'?' total capacity (includes cell storage)':''}`);}).catch(()=>{if(generation===balanceGeneration)text(id,'Balance unavailable; checked again when preparing');});}}
-function renderAvailable(){const root=el('available-orders');root.replaceChildren();text('quote-age',scanFresh?`Orders checked ${new Date(lastScan).toLocaleTimeString()}`:'Live orders need refreshing.');const markets=poolUi.markets();
+/** The connected account's live lots on the selected pair, both directions, cancellable here. */
+function renderSwapOwnOrders(){
+ const root=el('swap-own-orders');root.replaceChildren();if(!owner||!assets.has(value('base'))||!assets.has(value('quote')))return;
+ const pair=new Set([swap.assetKey(selected('base')),swap.assetKey(selected('quote'))]);
+ const owned=orders.filter(o=>isOwnOrder(o,walletLocks)&&pair.has(swap.assetKey(o.offerAsset))&&pair.has(swap.assetKey(o.askAsset))&&swap.assetKey(o.offerAsset)!==swap.assetKey(o.askAsset));
+ if(!owned.length)return;
+ const heading=document.createElement('h2');heading.textContent=`Your orders on this pair (${owned.length})`;
+ const note=document.createElement('p');note.textContent='Swaps never fill your own orders. Cancel one to recover its CKB and tokens.';root.append(heading,note);
+ for(const order of owned.slice(0,10)){const row=document.createElement('div');row.className='quote-row';const copy=document.createElement('span');copy.textContent=`Offer ${amount(order.offerAmount,order.offerAsset)} for ${amount(order.askAmount,order.askAsset)}`;row.append(copy,cancelButton(order,'Cancel order'));root.append(row);}
+ if(owned.length>10){const more=document.createElement('p');more.textContent=`${owned.length-10} more in the Orders tab. `;more.append(button('Show all',async()=>showView('orders')));root.append(more);}
+}
+function cancelButton(order:swap.OpenSwapOrder,title='Cancel'){return button(title,async()=>buildReview(ctx=>swap.cancelOrders(ctx,[order.outPoint]),`Recover order ${swap.orderKey(order)}. A separate plain owner cell pays the fee.`));}
+function renderAvailable(){renderSwapOwnOrders();const root=el('available-orders');root.replaceChildren();text('quote-age',scanFresh?`Orders checked ${new Date(lastScan).toLocaleTimeString()}`:'Live orders need refreshing.');const markets=poolUi.markets();
  text('available-note',orders.length||markets.length?`${markets.length?`${markets.length} pool${markets.length===1?'':'s'} (any amount, price moves with size)${orders.length?' and ':''}`:''}${orders.length?`${orders.length} order-book lot${orders.length===1?'':'s'} (whole lots only, fixed price)`:''}.`:'No live swaps yet. Place an order in the Orders tab.');
  // Pools first: they take any amount, so they set the pair for the form above.
  for(const market of markets){const row=document.createElement('div');row.className='quote-row';const copy=document.createElement('span');
   copy.textContent=`Pool: CKB ⇄ ${market.symbol} · 1 ${market.symbol} ≈ ${unitPrice(market.x,market.y,8,market.decimals)} CKB · reserves ${formatUnits(market.x,8)} CKB / ${formatUnits(market.y,market.decimals)} ${market.symbol}`;
   row.append(copy,button('Trade this pair',async()=>{el<HTMLSelectElement>('quote').value='ckb';el<HTMLSelectElement>('base').value=market.token.hash();el<HTMLInputElement>('swap-output').value='';invalidate();renderBook();updateQuote();el('swap-output').focus();}));root.append(row);}
- for(const order of orders.slice(0,30)){const row=document.createElement('div');row.className='quote-row';const copy=document.createElement('span');copy.textContent=`Order lot: pay ${amount(order.askAmount,order.askAsset)} → receive ${amount(order.offerAmount,order.offerAsset)}`;if(isOwnOrder(order,walletLocks)){copy.textContent+=' · Your order';row.append(copy,button('Manage order',async()=>showView('orders')));root.append(row);continue;}row.append(copy,button('Fill this lot',async()=>{await buildReview(async ctx=>{await assertExternalFill(ctx.signer,[order]);await checkFunding(ctx.signer,order.askAsset,order.askAmount);return swap.fillOrders(ctx,[order.outPoint]);},`You pay: ${amount(order.askAmount,order.askAsset)}\nYou receive: ${amount(order.offerAmount,order.offerAsset)}`);}));root.append(row);}
+ for(const order of orders.slice(0,30)){const row=document.createElement('div');row.className='quote-row';const copy=document.createElement('span');copy.textContent=`Order lot: pay ${amount(order.askAmount,order.askAsset)} → receive ${amount(order.offerAmount,order.offerAsset)}`;if(isOwnOrder(order,walletLocks)){copy.textContent+=' · Your order';row.append(copy,cancelButton(order,'Cancel order'));root.append(row);continue;}row.append(copy,button('Fill this lot',async()=>{await buildReview(async ctx=>{await assertExternalFill(ctx.signer,[order]);await checkFunding(ctx.signer,order.askAsset,order.askAmount);return swap.fillOrders(ctx,[order.outPoint]);},`You pay: ${amount(order.askAmount,order.askAsset)}\nYou receive: ${amount(order.offerAmount,order.offerAsset)}`);}));root.append(row);}
 }
 
 function refreshAssets(){for(const id of ['base','quote']){const select=el<HTMLSelectElement>(id),previous=select.value;select.replaceChildren();for(const [key,item]of assets){const option=document.createElement('option');option.value=key;option.textContent=item.label;select.append(option);}select.value=assets.has(previous)?previous:id==='quote'?[...assets.keys()][1]??'ckb':'ckb';}renderBook();}
@@ -200,7 +215,7 @@ function button(title:string,action:()=>Promise<void>){const b=document.createEl
 function renderOwnOrders(){
  const mine=el('my-orders');mine.replaceChildren();if(!owner){mine.textContent='Connect a wallet to manage your orders.';return;}
  const owned=orders.filter(o=>isOwnOrder(o,walletLocks));if(!owned.length)mine.textContent='No live orders for this wallet.';
- for(const order of owned){const row=document.createElement('p');row.textContent=`Offer ${amount(order.offerAmount,order.offerAsset)} for ${amount(order.askAmount,order.askAsset)} `;row.append(button('Cancel',async()=>buildReview(ctx=>swap.cancelOrders(ctx,[order.outPoint]),`Recover order ${swap.orderKey(order)}. A separate plain owner cell pays the fee.`)));mine.append(row);}
+ for(const order of owned){const row=document.createElement('p');row.textContent=`Offer ${amount(order.offerAmount,order.offerAsset)} for ${amount(order.askAmount,order.askAsset)} `;row.append(cancelButton(order));mine.append(row);}
 }
 function renderBook(){
  renderOwnOrders(); renderAvailable();updateQuote();updateOrderPreview();if(assets.has(value('base'))&&assets.has(value('quote'))){showBalance();text('order-pair',`${label(selected('base'))} / ${label(selected('quote'))}`);const direction=el<HTMLSelectElement>('direction');direction.options[0]!.textContent=`Offer ${label(selected('base'))}, ask ${label(selected('quote'))}`;direction.options[1]!.textContent=`Offer ${label(selected('quote'))}, ask ${label(selected('base'))}`;}
@@ -259,7 +274,7 @@ el('swap').onsubmit=e=>{e.preventDefault();run(async()=>{
  await prepare(prepared.built,`Whole-lot swap\nRequested: ${amount(q.requestedOutput,assetOut)}\nYou receive: ${amount(q.amountOut,assetOut)}\nExtra received: ${amount(q.overfill,assetOut)}\nYou pay: ${amount(q.amountIn,assetIn)}\nLots: ${q.selectedOrders.length}\nQuoted at block: ${q.tipBlock}\nFee and CKB storage funding are additional to input required.`);
 });};
 el('dismiss').onclick=()=>{review=undefined;el<HTMLDialogElement>('review').close();};
-function setBusy(value:boolean){busy=value;for(const button of document.querySelectorAll<HTMLButtonElement>('#create button,#swap button,#refresh,#endpoints button,#connect,#book button,#my-orders button,#dismiss,#sign,#available-orders button,#reverse'))button.disabled=value;}
+function setBusy(value:boolean){busy=value;for(const button of document.querySelectorAll<HTMLButtonElement>('#create button,#swap button,#refresh,#endpoints button,#connect,#book button,#my-orders button,#dismiss,#sign,#available-orders button,#swap-own-orders button,#reverse'))button.disabled=value;}
 el('sign').onclick=()=>run(async()=>{const pending=review;if(!pending||pending.generation!==generation||pending.signer!==signer)throw new Error('Review is stale; prepare again');if(Date.now()-pending.createdAt>60000){invalidate();throw new Error('Review is over one minute old. Refresh and prepare it again.');}setBusy(true);text('status','Preparing wallet signature…');let submittedHash:string|undefined;
  try{await assertActiveAccount(pending.signer,pending.generation);const hash=await swap.submit(pending.built,pending.signer,{beforeBroadcast:hash=>{submittedHash=hash;saveActivity({hash,account:pending.account,network:deployment.genesisHash,summary:pending.summary.slice(0,2000),status:'unknown',createdAt:Date.now()});}});submittedHash=hash;saveActivity({hash,account:pending.account,network:deployment.genesisHash,summary:pending.summary.slice(0,2000),status:'submitted',createdAt:Date.now()});void refreshActivity();review=undefined;el<HTMLDialogElement>('review').close();text('status',`Submitted: ${hash}. Waiting for confirmation…`);await pending.signer.client.waitTransaction(hash,1);text('status',`Committed: ${hash}`);saveActivity({hash,account:pending.account,network:deployment.genesisHash,summary:pending.summary.slice(0,2000),status:'committed',createdAt:Date.now()});void refreshActivity();await scan();}catch(error){if(submittedHash){review=undefined;el<HTMLDialogElement>('review').close();void refreshActivity();throw new Error(`Transaction ${submittedHash} was sent to the node, but its final status is not confirmed here. Check Activity or the explorer before retrying. ${String(error)}`);}throw error;}finally{setBusy(false);}
 });

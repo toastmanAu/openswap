@@ -42,6 +42,13 @@ test('switching wallets clears owned orders and self-fills are excluded',async({
  await page.evaluate(address=>(globalThis as any).OpenSwapBrowserTest.installAddress(address),maker);
  await expect(page.locator('#connected-account')).toContainText(maker);await expect(page.locator('#available-orders')).toContainText('Your order');
  await page.locator('#swap-output').fill('0.0000001');await expect(page.locator('#quote-status')).toContainText('No available swap');
+ // Own lots are never routed; the quote says so, and they can be cancelled from the Swap tab.
+ await expect(page.locator('#quote-status')).toContainText('Skipped 120 of your own lots in this direction');
+ await expect(page.locator('#swap-own-orders h2')).toHaveText('Your orders on this pair (120)');
+ await expect(page.locator('#swap-own-orders').getByRole('button',{name:'Cancel order'})).toHaveCount(10);
+ await expect(page.locator('#swap-own-orders')).toContainText('110 more in the Orders tab.');
+ await page.locator('#view-swap').screenshot({path:'frontend/test-results/swap-own-orders.png'});
+ await expect(page.locator('#available-orders').getByRole('button',{name:'Cancel order'}).first()).toBeVisible();
  await page.locator('#base').selectOption(await page.locator('#quote').inputValue());await page.getByRole('button',{name:'Orders',exact:true}).click();await expect(page.locator('#my-orders button')).toHaveCount(120);
  await page.getByRole('button',{name:'Switch wallet',exact:true}).click();await expect(page.locator('#my-orders')).toHaveText('Connect a wallet to manage your orders.');await expect(page.locator('#connected-account')).toHaveText('');
  expect(await page.evaluate(()=>(globalThis as any).openswapDisconnects)).toBeGreaterThan(0);
