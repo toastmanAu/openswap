@@ -64,7 +64,7 @@ export class BrowserSubmissionJournal implements ArchivableSubmissionJournal {
  }
  /** Archive entry first, then removal; a failure between them leaves the row active. */
  archive(hash:ccc.Hex,resolution:SubmissionResolution):void {
-  this.active();check(resolution==='committed'||resolution==='abandoned','invalid resolution');
+  this.active();check(resolution==='committed'||resolution==='abandoned'||resolution==='released','invalid resolution');
   const row=this.rows.find(row=>row.hash===hash);check(row,'unknown submission');
   const archiveKey=`${this.key}:archive`;
   try{

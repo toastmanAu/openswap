@@ -260,8 +260,16 @@ Rules:
   and UNKNOWN. The tab rechecks every 15 s while rows remain, skipping the check
   while preparing or reviewing; Recheck forces one. Recheck never signs or sends.
 - A row committed at 24 or more confirmations is archived (`archiveCommitted`)
-  and its reservations are released. Abandoning a never-committed row is still an
-  explicit operator step, not a UI action.
+  and its reservations are released.
+- A REJECTED or UNKNOWN row (not pending) has a **Release inputs** button
+  (2026-10-26). It always asks for confirmation first and never signs or sends.
+  If one of the row's inputs is spent elsewhere, it runs `abandonConflicted`.
+  Otherwise it runs `releaseRejected`, which refuses unless the row is at least
+  2 minutes old, the node reports it rejected or unknown before and after the
+  input reads, every input is live, and one input is a pool-validator cell. A
+  later action on that pool then conflicts with the released bytes, so at most
+  one of them can commit. The confirmation says the bytes stay valid. The row is
+  archived as `released`.
 
 ### Order/pool routing (best single venue)
 

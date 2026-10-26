@@ -107,12 +107,17 @@ directories and compares the bytes.
   conflicting spend that justified abandoning it is reorganized away.
 - **Economic risk.** Price impact, MEV, thin liquidity and parameter choice are
   economic risks.
-- **Node-rejected sends stay reserved.** A send that the node rejects outright
-  (for example a script failure) is recorded as `unknown`, because one node's
-  word is not proof. All its inputs are still live, so `abandonConflicted`
-  refuses it, and its funding stays reserved in that journal until an operator
-  resolves it by hand. The builder bug fixed in `a1cfaa9` would have produced
-  exactly this for one-lot splits.
+- **Releasing node-rejected sends trusts one node.** A send that the node
+  rejects outright (for example a script failure) is recorded as `unknown`,
+  because one node's word is not proof. All its inputs are still live, so
+  `abandonConflicted` refuses it. `releaseRejected` (2026-10-26, the Pools tab's
+  confirmed **Release inputs**) frees it only when the row is at least 2 minutes
+  old, the node reports it rejected or unknown before and after the input reads,
+  every input is live, and one input is a pool-validator cell. The signed bytes
+  stay valid: if another node holds them they can still commit. The safeguard is
+  that any later action on the same pool spends that pool cell too, so at most
+  one of them commits. It is archived as `released`. The builder bug fixed in
+  `a1cfaa9` produced exactly this case for one-lot splits.
 - **Split quotes are greedy.** Lots are taken cheapest-first as whole lots. The
   quote is not globally optimal over lot combinations.
 - **Fee cap bounds split size.** At the frontend policy (1,000 shannons/KB, cap

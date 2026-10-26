@@ -223,6 +223,33 @@ test('an ambiguous send stays unknown, is never retried and survives a reload',a
  expect(mock.sent).toHaveLength(1);
 });
 
+test('a refused send can be released by hand, only after confirmation and once it is old enough',async({page})=>{
+ const mock=await mockPools(page);mock.send='abort';await openPools(page);await expect(page.locator('#pool-status')).toContainText('listed pools live');
+ await connect(page);await reviewSwap(page);await page.getByRole('button',{name:'Approve and sign'}).click();
+ await expect(page.locator('#pool-action-status')).toContainText('Status unknown for 0x');
+ const [row]=await records(page);
+ await page.getByRole('button',{name:'Recheck'}).click();
+ const release=page.locator('#pool-submissions').getByRole('button',{name:'Release inputs'});
+ // Dismissing the confirmation does nothing.
+ page.once('dialog',dialog=>{expect(dialog.message()).toContain('The node reports it as unknown');void dialog.dismiss();});
+ await release.click();expect(await records(page)).toHaveLength(1);
+ // Too soon after sending: it may still be propagating.
+ page.once('dialog',dialog=>void dialog.accept());await release.click();
+ await expect(page.locator('#pool-resolve-status')).toContainText('sent too recently');expect(await records(page)).toHaveLength(1);
+ // Age the saved row, as if the send happened ten minutes ago.
+ await page.evaluate(()=>{for(const k of Object.keys(localStorage).filter(k=>k.startsWith('toastdex-pool-journal:')&&!k.endsWith(':archive'))){const v=JSON.parse(localStorage.getItem(k)!);v.records[0].createdAt-=600000;localStorage.setItem(k,JSON.stringify(v));}});
+ await page.reload();await expect(page.locator('#scan-status')).toContainText('supported live orders',{timeout:35000});
+ await connect(page);await page.getByRole('button',{name:'Pools',exact:true}).click();
+ page.once('dialog',dialog=>void dialog.accept());await release.click();
+ await expect(page.locator('#pool-resolve-status')).toContainText(`Released ${row.hash}`);
+ await expect(page.locator('#pool-submissions-status')).toHaveText('No unresolved pool submissions from this browser.');
+ expect(await records(page)).toEqual([]);
+ const archived=await page.evaluate(()=>Object.keys(localStorage).filter(k=>k.startsWith('toastdex-pool-journal:')&&k.endsWith(':archive')).map(k=>localStorage.getItem(k)).join(''));
+ expect(archived).toContain('"resolution":"released"');expect(archived).toContain(row.hash);
+ // Its inputs are free again: a new swap against the same pool state can be reviewed. Nothing was resent.
+ await reviewSwap(page);expect(mock.sent).toHaveLength(1);
+});
+
 test('liquidity screens review deposits with an LP minimum and refuse withdrawals without LP shares',async({page})=>{
  const mock=await mockPools(page);await openPools(page);await expect(page.locator('#pool-status')).toContainText('listed pools live');
  await connect(page);

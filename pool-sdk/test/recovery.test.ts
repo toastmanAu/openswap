@@ -190,3 +190,50 @@ test('abandoning requires acknowledgement, a spent input and no in-flight or com
   s.f.cells.set(point,spent);
  }finally{s.cleanup();}
 });
+
+test('releasing a node-rejected submission requires acknowledgement, age, live inputs, a pool input and a refused status',async()=>{
+ const s=await setup();
+ try{
+  await s.recovery.reconcile(s.client);
+  await s.recovery.submit(s.client,s.review,s.signed,s.funded);
+  const txHash=s.signed.hash(),created=s.journal.list()[0]!.createdAt,later=created+120_000;
+  // A create spends no pool cell; the fixture's token cell stands in for one here.
+  const poolCodeHash=s.f.asset.cellOutput.type!.codeHash,options={poolCodeHash,acknowledgeRebroadcastRisk:true,now:later};
+  await assert.rejects(s.recovery.releaseRejected(s.client,txHash,{poolCodeHash,now:later}),/acknowledgement/);
+  await assert.rejects(s.recovery.releaseRejected(s.client,txHash,{...options,now:created+1000}),/too recently/);
+  await assert.rejects(s.recovery.releaseRejected(s.client,txHash,{...options,poolCodeHash:s.f.deployment.codeHash}),/not a pool transaction/);
+  for(const status of ['pending','proposed','committed']){
+   s.chain.status=status;
+   await assert.rejects(s.recovery.releaseRejected(s.client,txHash,options),new RegExp(`transaction is ${status}`));
+  }
+  // Accepted between the input reads and the final status check.
+  s.chain.status='rejected';const read=s.client.getCellLiveNoCache;
+  s.client.getCellLiveNoCache=async p=>{s.chain.status='pending';return read(p);};
+  await assert.rejects(s.recovery.releaseRejected(s.client,txHash,options),/transaction is pending/);
+  s.client.getCellLiveNoCache=read;
+  // A spent input belongs to abandonConflicted.
+  const point=pointKey(s.f.asset.outPoint),spent=s.f.cells.get(point)!;s.f.cells.delete(point);
+  s.chain.status='rejected';
+  await assert.rejects(s.recovery.releaseRejected(s.client,txHash,options),/abandon it as conflicted/);
+  s.f.cells.set(point,spent);
+  assert.ok(s.reserved());assert.equal(s.journal.list().length,1);
+  const result=await s.recovery.releaseRejected(s.client,txHash,options);
+  assert.equal(result.resolution,'released');assert.equal(result.observedStatus,'rejected');
+  assert.equal(s.journal.list().length,0);assert.ok(!s.reserved());
+  const archived=JSON.parse(readFileSync(join(s.directory,'archive.jsonl'),'utf8'));
+  assert.equal(archived.resolution,'released');assert.equal(archived.record.hash,txHash);
+  assert.equal(s.chain.sent.length,1);
+ }finally{s.cleanup();}
+});
+
+test('a submission the node does not report at all can be released once old enough',async()=>{
+ const s=await setup();
+ try{
+  await s.recovery.reconcile(s.client);
+  s.chain.send=async()=>{throw new Error('TransactionFailedToVerify');};
+  assert.equal((await s.recovery.submit(s.client,s.review,s.signed,s.funded)).outcome,'unknown');
+  const created=s.journal.list()[0]!.createdAt;
+  const result=await s.recovery.releaseRejected(s.client,s.signed.hash(),{poolCodeHash:s.f.asset.cellOutput.type!.codeHash,acknowledgeRebroadcastRisk:true,now:created+120_000});
+  assert.equal(result.observedStatus,'unknown');assert.ok(!s.reserved());
+ }finally{s.cleanup();}
+});

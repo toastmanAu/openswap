@@ -44,6 +44,8 @@ export function createPoolUi(env:PoolEnv){
  let session:Session|undefined,pending:Pending|undefined,generation=0,busy=false;
  /** Latest observed label per journaled hash; hashes whose send succeeded here. */
  const labels=new Map<string,string>(),sentHere=new Set<string>();
+ /** Latest reconcile report per journaled hash, for the release action. */
+ const reported=new Map<string,Reports[number]>();
  /** The connected account's LP shares per pool ID, read from live LP cells. */
  const lpBalances=new Map<string,bigint>();let lpGeneration=0;
  let resolving:Promise<void>|undefined,recheckTimer:ReturnType<typeof setTimeout>|undefined;
@@ -56,7 +58,7 @@ export function createPoolUi(env:PoolEnv){
   const dialog=el<HTMLDialogElement>('pool-review');if(dialog.open)dialog.close();
   text('pool-review-text','');
  }
- function reset(){invalidate();stopRecheck();labels.clear();lpBalances.clear();lpGeneration++;session=undefined;el('pool-submissions').replaceChildren();text('pool-submissions-status','Connect a wallet to see pool submissions from this browser.');}
+ function reset(){invalidate();stopRecheck();labels.clear();reported.clear();lpBalances.clear();lpGeneration++;session=undefined;el('pool-submissions').replaceChildren();text('pool-submissions-status','Connect a wallet to see pool submissions from this browser.');}
 
  function selected():PoolSnapshot {
   const pool=snapshots.find(p=>p.poolId===value('pool-select'));
@@ -210,7 +212,9 @@ export function createPoolUi(env:PoolEnv){
  /** Labels every row from what the node reports and archives committed rows that
   * are deep enough. Read-only: never signs, sends or retries. */
  async function settle(s:Session,reports:Reports){
+  reported.clear();
   for(const r of reports){
+   reported.set(r.hash,r);
    if(r.status==='committed'){
     try{await s.recovery.archiveCommitted(recoveryClient(s.client) as never,r.hash,{minConfirmations:ARCHIVE_CONFIRMATIONS});labels.delete(r.hash);sentHere.delete(r.hash);continue;}
     catch(error){
@@ -245,7 +249,39 @@ export function createPoolUi(env:PoolEnv){
   const root=el('pool-submissions');root.replaceChildren();if(!session)return;
   const rows=session.journal.list();
   text('pool-submissions-status',rows.length?`Signed pool transactions saved in this browser before sending, checked against the node every ${RECHECK_MS/1000} s. Their inputs stay reserved until they are resolved, and nothing is retried automatically.`:'No unresolved pool submissions from this browser.');
-  for(const row of rows){const item=document.createElement('p');item.className='activity-row';item.textContent=`${labels.get(row.hash)??row.status.toUpperCase()} · ${row.hash}`;root.append(item);}
+  for(const row of rows){
+   const item=document.createElement('p');item.className='activity-row';item.textContent=`${labels.get(row.hash)??row.status.toUpperCase()} · ${row.hash}`;
+   const r=reported.get(row.hash);
+   if(r&&(r.status==='rejected'||(r.status==='unknown'&&r.observedStatus!=='pending'&&r.observedStatus!=='proposed'))){
+    const button=document.createElement('button');button.className='subtle';button.textContent='Release inputs';button.disabled=busy;
+    button.onclick=()=>release(r);item.append(' ',button);
+   }
+   root.append(item);
+  }
+ }
+ /** Explicit, confirmed resolution of one refused or missing submission. A spent
+  * input means it can no longer land (abandon); otherwise the node must report it
+  * refused or unknown, and a later action on the same pool will conflict with it. */
+ function release(r:Reports[number]){
+  const conflicted=r.liveInputs<r.totalInputs;
+  const message=conflicted
+   ?`Release the inputs of ${r.hash}?\n\nOne of its inputs was spent by another transaction, so it cannot commit unless that transaction is reorganized away.`
+   :`Release the inputs of ${r.hash}?\n\nThe node reports it as ${r.observedStatus==='rejected'?'rejected':'unknown'}. The signed transaction is still valid while its inputs are live: if some node received it, it could still commit. It spends this pool's state, so any later pool action conflicts with it and at most one of them can commit.\n\nCheck the transaction in an explorer first if you are unsure.`;
+  if(!confirm(message))return;
+  act('Releasing the submission…',async()=>{
+   if(busy)throw new Error('A pool transaction is being prepared, signed or sent. Release it after that finishes.');
+   const s=await ensureSession();
+   await resolving?.catch(()=>{});
+   setBusy(true);
+   try{
+    const client=recoveryClient(s.client);
+    if(conflicted)await s.recovery.abandonConflicted(client,r.hash,{acknowledgeReorgRisk:true});
+    else await s.recovery.releaseRejected(client,r.hash,{poolCodeHash:manifest!.deployment.codeHash,acknowledgeRebroadcastRisk:true});
+    labels.delete(r.hash);sentHere.delete(r.hash);
+   }finally{setBusy(false);}
+   await recheck(s);scheduleRecheck();
+   text('pool-resolve-status',`Released ${r.hash}. Its inputs can be used again; it stays in this browser's archive.`);
+  },'pool-resolve-status');
  }
 
  /** Single-flight: a second preparation must never start (and cancel the first)

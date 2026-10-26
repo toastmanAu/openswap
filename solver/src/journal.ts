@@ -13,7 +13,7 @@ export interface SubmissionJournal {
  list():SubmissionRecord[];
  put(value:SubmissionRecord):void;
 }
-export type SubmissionResolution='committed'|'abandoned';
+export type SubmissionResolution='committed'|'abandoned'|'released';
 /** Explicit operator resolution only. Callers prove the resolution first. */
 export interface ArchivableSubmissionJournal extends SubmissionJournal {
  archive(hash:ccc.Hex,resolution:SubmissionResolution):void;
@@ -77,7 +77,7 @@ export class FileSubmissionJournal {
   * from the active snapshot. A crash between both steps leaves it in both places;
   * re-archiving is safe and the active row keeps its inputs reserved meanwhile. */
  archive(hash:ccc.Hex,resolution:SubmissionResolution):void {
-  this.active();check(resolution==='committed'||resolution==='abandoned','invalid resolution');
+  this.active();check(resolution==='committed'||resolution==='abandoned'||resolution==='released','invalid resolution');
   const row=this.rows.find(row=>row.hash===hash);check(row,'unknown submission');
   const line=JSON.stringify({version:1,scope:this.scope,resolution,archivedAt:Date.now(),record:row})+'\n';
   let fd:number|undefined;

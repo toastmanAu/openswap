@@ -128,4 +128,40 @@ export class PoolSubmissionRecovery {
    this.releaseUnreferenced();return Object.freeze(result);
   });
  }
+
+ /** Operator resolution: release a submission the node refused while all its
+  * inputs are still live. The signed bytes stay valid, so this needs explicit
+  * acknowledgement that they could still be broadcast and commit. It is offered
+  * only for pool transactions: they spend a live pool-validator cell, so any
+  * later action on that pool conflicts with them and at most one can commit.
+  * A transaction with a spent input goes through `abandonConflicted` instead. */
+ async releaseRejected(client:PoolRecoveryClient,hash:ccc.Hex,options:ReadOptions&{poolCodeHash:ccc.Hex;acknowledgeRebroadcastRisk?:boolean;minAgeMs?:number;now?:number}){
+  requireRecovery(this.reconciled,'reconcile before resolving');
+  requireRecovery(options.acknowledgeRebroadcastRisk===true,'releasing requires explicit rebroadcast-risk acknowledgement');
+  const minAgeMs=options.minAgeMs??120_000;
+  requireRecovery(Number.isSafeInteger(minAgeMs)&&minAgeMs>=0,'invalid minimum age');
+  return this.exclusive(options,client,async o=>{
+   const row=this.find(hash),tx=ccc.Transaction.fromBytes(row.transaction);
+   requireRecovery((options.now??Date.now())-row.createdAt>=minAgeMs,'sent too recently; it may still be propagating');
+   const status=async()=>{
+    const observed=(await readBounded(()=>client.getTransactionNoCache(hash),o))?.status??'unknown';
+    requireRecovery(observed==='rejected'||observed==='unknown',`transaction is ${observed}`);
+    return observed;
+   };
+   await status();let poolInput=false;
+   for(const input of tx.inputs){
+    const cell=await readBounded(()=>client.getCellLiveNoCache(input.previousOutput),o);
+    requireRecovery(cell,'an input is spent; abandon it as conflicted instead');
+    requireRecovery(cell.outPoint.eq(input.previousOutput),'input response mismatch');
+    const type=cell.cellOutput.type;
+    if(type&&type.codeHash===options.poolCodeHash&&type.hashType==='data1')poolInput=true;
+   }
+   requireRecovery(poolInput,'not a pool transaction; nothing guarantees a later conflict');
+   // Re-check after the input reads: it must not have been accepted in between.
+   const observed=await status();
+   this.journal.archive(hash,'released');
+   this.releaseUnreferenced();
+   return Object.freeze({hash,resolution:'released' as const,observedStatus:observed,totalInputs:tx.inputs.length});
+  });
+ }
 }
