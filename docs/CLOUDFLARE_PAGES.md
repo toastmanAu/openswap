@@ -94,6 +94,13 @@ transaction exceeds the fee cap (`dd4e9d0`). Files on all origins are
 byte-identical to the reproducible release, and all 23 browser tests pass on
 toastdex.org and the deployment URL.
 
+Follow-up deployment `https://ace4a8ff.toastdex.pages.dev` (source `09ca6f9`,
+2026-10-26): the confirmed **Release inputs** action for node-rejected or
+missing pool submissions (`9c2f186`), and cancelling your own orders from the
+Swap tab, with the quote noting skipped own lots (`09ca6f9`). Files on all
+origins are byte-identical to the reproducible release, and all 24 browser tests
+pass on toastdex.org and the deployment URL.
+
 Rollback: select the previous successful deployment in Pages. Published contract
 code and outstanding order cells remain unchanged by frontend rollbacks.
 
