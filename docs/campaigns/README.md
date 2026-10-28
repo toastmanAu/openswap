@@ -72,6 +72,23 @@ Earlier `split-vm` records in the ledger are kept as found:
   10,000-shannon fee cap. The builder refuses it before signing; this is policy,
   and it now counts as a skip (`dd4e9d0`). Seed 1 at `1febadb` passed.
 
+## Recorded results: all targets rerun (2026-10-29, commit `5e7f61b`, clean tree)
+
+Before freezing the review package, every target was rerun on the commit to be
+frozen with the same seeds and budgets as above, so the frozen commit carries
+its own evidence. Binaries: order lock `060b0b73…`, pool `d3a6520f…`.
+
+| Target | Seeds | Executed | Stops | Notes |
+| --- | --- | --- | --- | --- |
+| `order-parser` | 1–10 | 10,000,000 | 10 budget | 11 s total |
+| `pool-wire` | 1–10 | 10,000,000 | 10 budget | 196 s total |
+| `pool-model-diff` | 1–5 | 1,000,001 vectors | 5 budget | All match Rust; `OVERFLOW` again unreached |
+| `pool-vm` | 1–3 | 450 transitions | 3 budget | 57/57 tampered states rejected. Peak 4.24M cycles, max 2,410 bytes |
+| `split-vm` | 1–3 (200 cases each) | 599 split transactions, 3,103 lots, 1 `FEE` skip | 3 budget | 599/599 tampered copies rejected (150 moved action, 150 redirected payment, 120 swapped payments, 179 underpaid maker). Peak 11.99M cycles, max 9,243 bytes, max 28 lots |
+
+Every count matches the earlier records on `a82d72a` and `dd4e9d0`: the case
+streams are seed-determined and no code on these paths changed.
+
 ## What a pass does and does not show
 
 A pass shows no counterexample in the sampled space for these oracles at the

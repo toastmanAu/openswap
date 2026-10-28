@@ -4,6 +4,28 @@ Saved 2026-10-12 (Australia/Adelaide). Read this first when resuming.
 
 ## Current request and stopping point
 
+### Status check, no code change (2026-10-29)
+
+Tree clean at `5e7f61b`, equal to `origin/main`. Offline check at HEAD: typecheck
+clean; order SDK/solver 81, pool SDK 70, pool model 15 tests pass. Live testnet:
+two open order lots (both owned by one JoyID lock not recorded in this repo) and
+the P6 test pool at state `0x3dbe5e92…1cdd`. Both `toastdex.org` and
+`toastdex.pages.dev` serve the recorded deployment of `09ca6f9`.
+
+Since 2026-10-23 (see [readiness](docs/READINESS.md) and
+[Pages](docs/CLOUDFLARE_PAGES.md)): routed and split swaps deployed and signed
+live; split-vm campaign recorded clean on `dd4e9d0`; review package frozen
+locally at `9f8f520` (three commits behind HEAD); Release-inputs action and own-
+order cancellation from the Swap tab deployed on 2026-10-26.
+
+All plan stages (P1–P7) are done. What remains is a user decision:
+- R1 reviewer engagement (draft inquiry in [candidates](docs/REVIEW_CANDIDATES.md),
+  no outreach yet). Before sending, refresh the readiness index at HEAD, rerun the
+  four `a82d72a` campaigns on the commit to be frozen, then refreeze.
+- CoTA proof service for JoyID subkey sessions (offline only today).
+- R2 mainnet/real funds (blocked on R1 by `TASKS.md`).
+
+
 ### P7 live acceptance passed (2026-10-23)
 
 A JoyID swap, deposit and withdrawal through the local Pools tab

@@ -1,6 +1,6 @@
 # Project readiness and staged evidence
 
-Updated 2026-10-25 at `1febadb`. This is the current readiness index. Older
+Updated 2026-10-29 at `5e7f61b`. This is the current readiness index. Older
 milestone reports keep their historical test counts and deployment evidence.
 Neither green tests nor this checklist is independent review or mainnet approval.
 
@@ -34,12 +34,12 @@ real-funds step (R2), and a CoTA proof service for JoyID subkey sessions.
 | C1 | Browser CI | The hosted browser job runs all browser tests (24 now) with pinned Playwright Chromium and RPC fixtures that reject unhandled requests. It passes on every push through `30c4621` (run 40158642423). |
 | C2 | Pool artifact CI | Hosted CI checks pinned size, SHA256 and Data1 hashes, runs the negative verifier tests, compares two clean builds of both contracts, and runs all pool VM tests, including the split tests and a short `split-vm` campaign. It passes on every push. |
 | S1 | Durable reference solver | Offline complete (2026-10-22). The journal is required for execution, with pre-send persistence and conservative reservations. Operator resolution is via `npm run solver-journal`, a read-only CLI with no signer. See [solver status](../solver/README.md). Live solver contention or crash testing has not been run; pool-side contention is covered in P6. |
-| T1 | Fuzzing/endurance | Seeded campaigns (`npm run campaign`) stop at the budget, the time limit or the first failure, and record provenance. Recorded on clean `a82d72a`: 10M order-parser, 10M pool-wire, 1M TS/Rust differential vectors, and 450 signed VM transitions with 57 tampered-state rejections. **New `split-vm` target (2026-10-25):** random 1–32-lot split routes in CKB-VM, one tampered copy per case. Its runs found the one-lot split builder bug (fixed in `a1cfaa9`) and fee-cap refusals at about 28 token-paid lots, which are policy and now counted as skips (`dd4e9d0`). Recorded on clean `dd4e9d0`: seeds 1–3 × 200 cases, 599 split transactions, 3,103 lots and 599/599 tampered copies rejected, with no failures. Results are in [campaigns](campaigns/README.md). Not coverage-guided. |
-| D1 | Current documentation | This index was refreshed on 2026-10-25. The [review brief](POOL_REVIEW_BRIEF.md) and [package](REVIEW_PACKAGE.md) cover the testnet deployment, split routes and live evidence. Historical records are not rewritten to claim new evidence. |
+| T1 | Fuzzing/endurance | Seeded campaigns (`npm run campaign`) stop at the budget, the time limit or the first failure, and record provenance. Recorded on clean `a82d72a`: 10M order-parser, 10M pool-wire, 1M TS/Rust differential vectors, and 450 signed VM transitions with 57 tampered-state rejections. **New `split-vm` target (2026-10-25):** random 1–32-lot split routes in CKB-VM, one tampered copy per case. Its runs found the one-lot split builder bug (fixed in `a1cfaa9`) and fee-cap refusals at about 28 token-paid lots, which are policy and now counted as skips (`dd4e9d0`). Recorded on clean `dd4e9d0`: seeds 1–3 × 200 cases, 599 split transactions, 3,103 lots and 599/599 tampered copies rejected, with no failures. **Rerun on clean `5e7f61b` (2026-10-29):** all five targets with the same seeds and budgets, every run stopped at its budget with counts identical to the earlier records, so the commit to be frozen carries its own evidence. Results are in [campaigns](campaigns/README.md). Not coverage-guided. |
+| D1 | Current documentation | This index was refreshed on 2026-10-29. The [review brief](POOL_REVIEW_BRIEF.md) and [package](REVIEW_PACKAGE.md) cover the testnet deployment, split routes and live evidence. Historical records are not rewritten to claim new evidence. |
 | R1 | Independent review | Package ready to freeze: [order brief](EXTERNAL_REVIEW.md), [pool brief](POOL_REVIEW_BRIEF.md), [package process](REVIEW_PACKAGE.md) and `scripts/prepare-review-package.sh`. Outstanding: choosing a reviewer, the engagement, findings and acceptance, all user decisions. No outreach has occurred. |
 | R2 | Release/deployment approval | Testnet only. No mainnet deployment, real funds, paid engagement or publication beyond the testnet frontend has been authorized. |
 
-## Current offline check (2026-10-25)
+## Current offline check (2026-10-29, `5e7f61b`)
 
 typecheck clean; order SDK/solver 81, pool SDK 70, pool model 15, browser 24,
 pool VM 29 tests pass; `cargo fmt` and clippy clean. Synthetic proof fixtures do
