@@ -19,9 +19,12 @@ locally at `9f8f520` (three commits behind HEAD); Release-inputs action and own-
 order cancellation from the Swap tab deployed on 2026-10-26.
 
 All plan stages (P1–P7) are done. What remains is a user decision:
-- R1 reviewer engagement (draft inquiry in [candidates](docs/REVIEW_CANDIDATES.md),
-  no outreach yet). Before sending, refresh the readiness index at HEAD, rerun the
-  four `a82d72a` campaigns on the commit to be frozen, then refreeze.
+- R1 reviewer engagement. **Prep done 2026-10-29:** all five campaigns rerun
+  clean on `5e7f61b`, readiness refreshed, package frozen at `e9aa38c`
+  (archive SHA256 `19067488…`, local `release/` only; see
+  [package](docs/REVIEW_PACKAGE.md)). Next is the user's: pick a reviewer
+  ([candidates](docs/REVIEW_CANDIDATES.md)), send the inquiry, share the commit,
+  archive hash and manifest. Local commits are not pushed.
 - CoTA proof service for JoyID subkey sessions (offline only today).
 - R2 mainnet/real funds (blocked on R1 by `TASKS.md`).
 

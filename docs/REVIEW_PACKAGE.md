@@ -38,7 +38,25 @@ ignored `release/` directory:
 Give the reviewer the commit, archive SHA256 and manifest. They should rebuild the
 binaries and recompute the hashes independently, not trust the manifest.
 
-## Latest freeze (2026-10-25, local only)
+## Latest freeze (2026-10-29, local only)
+
+- **Commit:** `e9aa38c3b4c6560a56fb2d571447952925949ff5`
+- **Archive SHA256:** `1906748810441f0dcb331eb8e702d570df74401a69ffed57e4d0ee446feffcfa`
+
+The archive and manifest are in ignored `release/`. Nothing has been shared or
+uploaded. The rebuilt identities match the pins: order lock `060b0b73…`
+(28,592 bytes), pool `d3a6520f…` (42,176 bytes). Toolchain: rustc 1.98.1,
+Node v22.14.0.
+
+All five campaign targets were rerun on `5e7f61b` immediately before this
+freeze ([campaigns](campaigns/README.md)); the manifest records zero
+non-documentation changes between that commit and the frozen one, so the
+frozen commit carries its own evidence. The earlier `a82d72a` and `dd4e9d0`
+records and the three historical `split-vm` failures remain in the ledger.
+
+This supersedes the 2026-10-25 freeze below, which was never shared.
+
+## Previous freeze (2026-10-25, local only, superseded)
 
 - **Commit:** `9f8f520edee42012cd20134a923f789903a226ea`
 - **Archive SHA256:** `61d3a4b45d3a6c77f58f8a8ec1dc5feb650b4a3d7b1ab015b8145601828d84fa`
