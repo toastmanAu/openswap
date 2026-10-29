@@ -4,6 +4,14 @@ Saved 2026-10-12 (Australia/Adelaide). Read this first when resuming.
 
 ## Current request and stopping point
 
+### Rings in the Markets tab (2026-10-30)
+
+Markets recognises solver settlements from the fills (`settlements()`, pool-sdk
+market-stats): a "Solver settlements" panel lists matches and rings with each fill,
+the spread kept and a link to each leg's market; trades from a settlement are
+labelled in the trades list and tooltip. Fixtures now include the live multi-order
+and ring settlements. Not yet deployed to Pages.
+
 ### Three-asset rings (2026-10-29)
 
 `matchRing` settles a cycle of three orders (A->B->C->A) when no direct match

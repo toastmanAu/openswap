@@ -4,8 +4,8 @@
 // set with textContent.
 import {ccc} from '@ckb-ccc/core';
 import {MarketScanner,type MarketScan} from '../../pool-sdk/src/market-scan.js';
-import {print,type MarketSources,type Print} from '../../pool-sdk/src/market.js';
-import {comparePrints,depth,marketStats,priceOf,type BookEntry,type Depth,type MarketStats,type PoolCurve} from '../../pool-sdk/src/market-stats.js';
+import {pairOf,print,type MarketEvent,type MarketSources,type Print,type Trade} from '../../pool-sdk/src/market.js';
+import {comparePrints,depth,marketStats,priceOf,settlements,type BookEntry,type Depth,type MarketStats,type PoolCurve,type Settlement} from '../../pool-sdk/src/market-stats.js';
 import {assetKey,CKB,udt,type AssetId} from '../../sdk/src/types.js';
 
 export interface MarketsEnv {
@@ -38,7 +38,7 @@ function ticks(min:number,max:number,count:number):number[]{
 }
 
 export function createMarkets(env:MarketsEnv){
- let prints:Print[]=[],stats=new Map<string,MarketStats>(),now=0n,selected:string|undefined,range:Range='week',loading:Promise<void>|undefined,loadedAt=0;
+ let prints:Print[]=[],stats=new Map<string,MarketStats>(),settled=new Map<string,Settlement>(),now=0n,selected:string|undefined,range:Range='week',loading:Promise<void>|undefined,loadedAt=0;
  let scanner:MarketScanner|undefined,timer:number|undefined;
  const storageKey=()=>`toastdex-market-history:${env.network()}`;
  /** Saved history is a per-browser convenience: any failure just means a full scan. */
@@ -46,6 +46,13 @@ export function createMarkets(env:MarketsEnv){
  const save=(s:MarketScanner)=>{try{const snap=s.snapshot();if(snap){const json=JSON.stringify(snap);if(json.length<4_000_000)localStorage.setItem(storageKey(),json);}}catch{/* storage full or blocked */}};
  const decimals=(a:AssetId)=>env.decimals(a);
  const pairLabel=(s:MarketStats)=>`${env.label(s.pair.base)} / ${env.label(s.pair.quote)}`;
+ const routeText=(st:Settlement)=>st.route!.map(a=>env.label(a)).join(' → ');
+ /** How a fill was settled, for the trades list and tooltip: alone, or with other orders by a solver. */
+ const settledAs=(t:Trade)=>{const st=settled.get(t.hash);return !st?'':st.kind==='ring'?`ring ${routeText(st)}`:'matched';};
+ function apply(events:readonly MarketEvent[]){
+  const trades=events.filter((e):e is Trade=>e.kind==='trade');
+  prints=trades.map(print);stats=marketStats(prints,decimals,now);settled=settlements(trades);
+ }
 
  async function load(){
   el('markets-status').textContent='Loading deployments…';
@@ -64,7 +71,7 @@ export function createMarkets(env:MarketsEnv){
    // Show saved history at once (it needs only the tip time), then refresh it.
    if(restored){
     now=(await client.getTipHeader()).timestamp;if(scanner!==current)return;
-    prints=current.cached().events.flatMap(e=>e.kind==='trade'?[print(e)]:[]);stats=marketStats(prints,decimals,now);
+    apply(current.cached().events);
     if(!selected||!stats.has(selected))selected=[...stats.values()].sort((a,b)=>b.day.quote-a.day.quote||b.trades-a.trades)[0]?.pair.key;
     el('markets-status').textContent=`${prints.length} trades in ${stats.size} markets from saved history; checking the latest blocks…`;
     render();
@@ -73,8 +80,7 @@ export function createMarkets(env:MarketsEnv){
    if(scanner!==current)return;
    save(current);
    now=tip.timestamp;
-   prints=scan.events.flatMap(e=>e.kind==='trade'?[print(e)]:[]);
-   stats=marketStats(prints,decimals,now);
+   apply(scan.events);
    if(!selected||!stats.has(selected))selected=[...stats.values()].sort((a,b)=>b.day.quote-a.day.quote||b.trades-a.trades)[0]?.pair.key;
    loadedAt=Date.now();
    const skipped=scan.skipped.length?` · ${scan.skipped.length} event${scan.skipped.length===1?'':'s'} not understood and skipped`:'';
@@ -95,7 +101,7 @@ export function createMarkets(env:MarketsEnv){
   return Date.now()-loadedAt>10_000?refresh():Promise.resolve();
  }
 
- function render(){renderList();renderDetail();}
+ function render(){renderList();renderDetail();renderSettlements();}
  function renderList(){
   const root=el('markets-list');root.replaceChildren();
   if(!stats.size){root.append(node('p','No trades yet.'));return;}
@@ -158,7 +164,7 @@ export function createMarkets(env:MarketsEnv){
   const last=points.length-1;
   chart.append(svg('circle',{cx:X(xs[last]!),cy:Y(ys[last]!),r:4,class:'price-dot'}));
   const end=svg('text',{x:Math.min(X(xs[last]!),W-R-4),y:Y(ys[last]!)-10,'text-anchor':'end',class:'direct-label'});end.textContent=num(ys[last]!);chart.append(end);
-  crosshair(chart,root,W,H,L,R,T,B,points.map((p,i)=>({x:X(xs[i]!),y:Y(ys[i]!),rows:[[num(ys[i]!),`${env.label(s.pair.quote)} per ${env.label(s.pair.base)}`],[`${p.side==='buy'?'Buy':'Sell'} ${num(Number(p.base)/10**decimals(p.pair.base))} ${env.label(p.pair.base)}`,p.trade.venue==='pool'?'pool':'order'],[when(p.trade.time),'']] as [string,string][]})),'price-line');
+  crosshair(chart,root,W,H,L,R,T,B,points.map((p,i)=>({x:X(xs[i]!),y:Y(ys[i]!),rows:[[num(ys[i]!),`${env.label(s.pair.quote)} per ${env.label(s.pair.base)}`],[`${p.side==='buy'?'Buy':'Sell'} ${num(Number(p.base)/10**decimals(p.pair.base))} ${env.label(p.pair.base)}`,p.trade.venue==='pool'?'pool':['order',settledAs(p.trade)].filter(Boolean).join(' · ')],[when(p.trade.time),'']] as [string,string][]})),'price-line');
   root.append(chart);
  }
  // Depth: two series (bids, asks) with a legend and direct labels.
@@ -210,14 +216,45 @@ export function createMarkets(env:MarketsEnv){
   table.append(node('thead'));table.tHead!.append(head);const body=node('tbody');table.append(body);
   for(const p of [...points].reverse().slice(0,200)){
    const row=node('tr'),t=p.trade,link=node('a',`${t.hash.slice(0,10)}…`);link.href=env.explorer(t.hash);link.target='_blank';link.rel='noopener noreferrer';
-   const venue=t.venue==='pool'?'Pool':`Order v${t.version}${t.version===2?t.final?' (final)':' (partial)':''}`;
+   const venue=node('td',t.venue==='pool'?'Pool':`Order v${t.version}${t.version===2?t.final?' (final)':' (partial)':''}`),how=settledAs(t);
+   if(how)venue.append(node('span',how,'settled-as'));
    const cell=node('td');cell.append(link);
    row.append(node('td',when(t.time)),node('td',p.side==='buy'?'Buy':'Sell',p.side==='buy'?'up':'down'),node('td',num(priceOf(p,decimals))),
-    node('td',num(Number(p.base)/10**decimals(p.pair.base),8)),node('td',num(Number(p.quote)/10**decimals(p.pair.quote),8)),node('td',venue),cell);
+    node('td',num(Number(p.base)/10**decimals(p.pair.base),8)),node('td',num(Number(p.quote)/10**decimals(p.pair.quote),8)),venue,cell);
    body.append(row);
   }
   root.append(table);
   if(points.length>200)root.append(node('p',`Showing the newest 200 of ${points.length} trades in this range.`));
+ }
+ /** Orders a solver settled against each other: matches within a market and rings across three.
+  * Each leg links to its market, where the fill also appears in the trades list. */
+ function renderSettlements(){
+  const root=el('market-settlements'),panel=el('settlements-panel');root.replaceChildren();
+  const list=[...settled.values()].sort((a,b)=>a.time!==b.time?(a.time>b.time?-1:1):a.block!==b.block?(a.block>b.block?-1:1):b.hash.localeCompare(a.hash));
+  panel.hidden=!list.length;if(!list.length)return;
+  const table=node('table','','market-table settlements'),head=node('tr');
+  for(const h of ['Time (block)','Settlement','Fills','Solver kept','Transaction'])head.append(node('th',h));
+  table.append(node('thead'));table.tHead!.append(head);const body=node('tbody');table.append(body);
+  for(const st of list.slice(0,20)){
+   const row=node('tr'),link=node('a',`${st.hash.slice(0,10)}…`);link.href=env.explorer(st.hash);link.target='_blank';link.rel='noopener noreferrer';
+   const kind=node('td');kind.append(node('strong',st.kind==='ring'?'Ring':'Match'),document.createTextNode(` ${st.kind==='ring'?routeText(st):(()=>{const p=pairOf(st.legs[0]!.got.asset,st.legs[0]!.gave.asset);return `${env.label(p.base)} / ${env.label(p.quote)}`;})()}`));
+   // One line per fill: the order gave up `got` and was paid `gave`; its market opens on click.
+   // A ring's fills follow its route, so they read as the value flowing around it.
+   const fills=node('td','','settlement-legs'),at=(t:Trade)=>st.route?.findIndex(a=>assetKey(a)===assetKey(t.got.asset))??0;
+   for(const t of [...st.legs].sort((x,y)=>at(x)-at(y))){
+    const pair=pairOf(t.got.asset,t.gave.asset),amount=(a:{asset:AssetId;amount:bigint})=>`${num(Number(a.amount)/10**decimals(a.asset),8)} ${env.label(a.asset)}`;
+    const b=node('button',`${amount(t.got)} → ${amount(t.gave)}`,'subtle leg');b.type='button';
+    b.setAttribute('aria-label',`Order sold ${amount(t.got)} for ${amount(t.gave)}; show the ${env.label(pair.base)} / ${env.label(pair.quote)} market`);
+    b.disabled=!stats.has(pair.key);b.onclick=()=>{selected=pair.key;render();el('market-detail').scrollIntoView({block:'start'});};
+    fills.append(b);
+   }
+   const kept=[...st.kept].filter(([,v])=>v!==0n).map(([k,v])=>{const a=[...st.legs.flatMap(t=>[t.got.asset,t.gave.asset])].find(x=>assetKey(x)===k)!;return `${num(Number(v)/10**decimals(a),8)} ${env.label(a)}`;});
+   const cell=node('td');cell.append(link);
+   row.append(node('td',when(st.time)),kind,fills,node('td',kept.join(', ')||'nothing'),cell);
+   body.append(row);
+  }
+  root.append(table);
+  if(list.length>20)root.append(node('p',`Showing the newest 20 of ${list.length} settlements.`));
  }
  function depthTable(d:Depth,s:MarketStats){
   const root=el('depth-table');root.replaceChildren();
@@ -233,5 +270,5 @@ export function createMarkets(env:MarketsEnv){
  for(const b of document.querySelectorAll<HTMLButtonElement>('[data-market-range]'))b.onclick=()=>{range=b.dataset.marketRange as Range;renderDetail();};
  el('markets-refresh').onclick=()=>{void refresh();};
  let resize:number|undefined;window.addEventListener('resize',()=>{clearTimeout(resize);resize=window.setTimeout(()=>{if(!el('view-markets').hidden)renderDetail();},150);});
- return {show,bookChanged:()=>{if(stats.size&&!el('view-markets').hidden)renderDetail();},reset:()=>{prints=[];stats=new Map();selected=undefined;loadedAt=0;scanner=undefined;}};
+ return {show,bookChanged:()=>{if(stats.size&&!el('view-markets').hidden)renderDetail();},reset:()=>{prints=[];stats=new Map();settled=new Map();selected=undefined;loadedAt=0;scanner=undefined;}};
 }

@@ -2,7 +2,7 @@
 // stay exact in Print; prices here are display-unit floats (quote per base), which
 // is all a chart or a stats row needs. Time is block time, never the host clock.
 import {assetKey,type AssetId} from '../../sdk/src/types.js';
-import type {Pair,Print} from './market.js';
+import type {Pair,Print,Trade} from './market.js';
 
 export type Decimals=(asset:AssetId)=>number;
 const units=(n:bigint,d:number)=>Number(n)/10**d;
@@ -92,4 +92,43 @@ export function depth(pair:Pair,book:readonly BookEntry[],pools:readonly PoolCur
  return {mid,
   asks:grid(1).map(p=>({price:p,base:asks.filter(a=>a.price<=p).reduce((s,a)=>s+a.base,0)+poolAsk(p)})),
   bids:grid(-1).map(p=>({price:p,base:bids.filter(b=>b.price>=p).reduce((s,b)=>s+b.base,0)+poolBid(p)}))};
+}
+
+/** Several order fills settled together in one transaction by a solver, inventory-free.
+ * `match`: orders on both sides of one market. `ring`: one cycle through three or more
+ * assets (A->B->C->A), each order paid from what the next delivers. */
+export interface Settlement {
+ kind:'match'|'ring';hash:string;block:bigint;time:bigint;
+ /** The order fills, in input order (each `got` is what the order gave up). */
+ legs:Trade[];
+ /** Ring only: the assets in the order value flows around the cycle, first repeated at the end. */
+ route?:AssetId[];
+ /** Per asset (by assetKey): what the orders gave up minus what they were paid, the settler's
+  * spread. Never negative for a valid settlement; zero entries included. */
+ kept:Map<string,bigint>;
+}
+/** Settlements among `trades`, keyed by transaction hash. A transaction whose order fills all
+ * go one way (a wallet taking orders) is not a settlement; pool swaps are ignored. */
+export function settlements(trades:readonly Trade[]):Map<string,Settlement>{
+ const byHash=new Map<string,Trade[]>();
+ for(const t of trades)if(t.venue==='order')byHash.set(t.hash,[...(byHash.get(t.hash)??[]),t]);
+ const out=new Map<string,Settlement>();
+ for(const [hash,legs] of byHash){
+  if(legs.length<2)continue;
+  const assets=new Map<string,AssetId>(),next=new Map<string,Set<string>>(),kept=new Map<string,bigint>();
+  for(const t of legs){
+   const from=assetKey(t.got.asset),to=assetKey(t.gave.asset);
+   assets.set(from,t.got.asset);assets.set(to,t.gave.asset);
+   next.set(from,(next.get(from)??new Set()).add(to));
+   kept.set(from,(kept.get(from)??0n)+t.got.amount);kept.set(to,(kept.get(to)??0n)-t.gave.amount);
+  }
+  const base={hash,block:legs[0]!.block,time:legs[0]!.time,legs,kept};
+  if(assets.size===2){if(next.size===2)out.set(hash,{kind:'match',...base});continue;}
+  // A ring: every asset offered toward exactly one other, and following them visits all.
+  if(next.size!==assets.size||[...next.values()].some(n=>n.size!==1))continue;
+  const start=assets.has('ckb')?'ckb':[...assets.keys()].sort()[0]!,route=[start];
+  for(let at=start;;){at=[...next.get(at)!][0]!;route.push(at);if(at===start||route.length>assets.size+1)break;}
+  if(route.length===assets.size+1&&route.at(-1)===start&&new Set(route).size===assets.size)out.set(hash,{kind:'ring',...base,route:route.map(k=>assets.get(k)!)});
+ }
+ return out;
 }

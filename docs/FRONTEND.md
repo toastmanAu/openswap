@@ -523,6 +523,21 @@ first visit 7.1–7.6 s (was 9.4–10.9 s); returning visit charts at about 2.1 
 Token decimals and names come from the pool manifest and token catalog; an unknown
 token shows a hash prefix and 0 decimals.
 
+- **Solver settlements (2026-10-30).** `settlements()` (pool-sdk `market-stats.ts`)
+  groups a transaction's order fills and recognises what a solver did from the fills
+  alone: a **match** has fills in both directions of one market; a **ring** has one
+  fill direction per asset forming a single cycle through three or more assets. Fills
+  that all go one way (a wallet taking orders) and pool swaps are not settlements. The
+  spread the settler kept is, per asset, what the orders gave up minus what they were
+  paid. The tab lists the newest 20 settlements (route or market, each fill, the
+  spread, the transaction); each fill opens its market, and in a market's trades list
+  a fill from a settlement is labelled `matched` or `ring CKB → TEST2 → TEST3 → CKB`
+  (also in the price tooltip). `scripts/market-verify.ts` checks on both endpoints
+  that the live ring reads as that route with the recorded 16 CKB spread and its
+  three legs, the recorded matches as matches (480 TEST2 kept by the multi-order
+  run), and no recorded single fill or pool route as a settlement. On testnet history
+  that is 15 matches and the one ring.
+
 ### Network fee policy (2026-10-29)
 
 Order-book transactions (create, fill, cancel, return, order-book swaps) use the

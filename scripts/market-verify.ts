@@ -9,6 +9,8 @@ import {readFile} from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import {MarketScanner} from '../pool-sdk/src/market-scan.js';
 import {print,type MarketEvent,type Trade} from '../pool-sdk/src/market.js';
+import {settlements} from '../pool-sdk/src/market-stats.js';
+import {assetKey} from '../sdk/src/types.js';
 import {ENDPOINTS,GENESIS} from './lib/pool-live.js';
 
 const json=async(path:string)=>JSON.parse(await readFile(new URL(`../${path}`,import.meta.url),'utf8'));
@@ -79,6 +81,24 @@ for(const url of ENDPOINTS){
   assert.deepEqual([buy.got.amount,buy.gave.amount,buy.final],[552n*10n**8n,5520n*10n**8n,false]);
   checked++;
  }
+ // Settlements read from the fills alone: every recorded solver run is a match or the ring,
+ // and no wallet's own fills are mistaken for one.
+ const settled=settlements(scan.events.filter((e):e is Trade=>e.kind==='trade'));
+ assert.equal(settled.get(campaign.solver.settle.hash)?.kind,'match','Campaign solver settlement is a match');
+ if(multi?.settle?.status==='verified'){const m=settled.get(multi.settle.hash);assert.equal(m?.kind,'match');assert.equal([...m!.kept.values()].filter(v=>v!==0n).join(),String(480n*10n**8n));}
+ for(const f of fills)assert(!settled.has(f.hash),`${f.hash}: a single fill read as a settlement`);
+ assert(!settled.has(route.hash),'A pool route read as a settlement');
+ const ring=await json('deployments/lock-v2-ring.json').catch(()=>undefined);
+ if(ring?.settle?.status==='verified'){
+  const r=settled.get(ring.settle.hash);
+  assert.equal(r?.kind,'ring','Live ring read as a ring');
+  const tokens=(await json('deployments/pool-markets.json')).tokens,hash=(sym:string)=>ccc.Script.from(tokens.find((t:{symbol:string})=>t.symbol===sym).token).hash();
+  assert.deepEqual(r!.route!.map(assetKey),['ckb',hash('TEST2'),hash('TEST3'),'ckb'],'Ring route');
+  assert.equal(r!.kept.get('ckb'),units(ring.settle.checks[0].solverSpread.ckb),'Ring spread matches the recorded check');
+  const legs=r!.legs.map(t=>`${t.got.amount}>${t.gave.amount}`).sort();
+  assert.deepEqual(legs,[[400n,4000n],[4000n,1600n],[1600n,384n]].map(([a,b])=>`${a!*10n**8n}>${b!*10n**8n}`).sort(),'Ring legs');
+ }
+ checked++;
  // JoyID two-pool route: TEST2 → CKB in pool 1, CKB → TEST3 in pool 2, hop conserved.
  const hops=trades(route.hash).filter(t=>t.venue==='pool');
  assert.equal(hops.length,2,'Route should be two pool swaps');
@@ -87,7 +107,7 @@ for(const url of ENDPOINTS){
  assert.equal(sell.got.amount,BigInt(route.hop),'Hop out');assert.equal(buy.gave.amount,BigInt(route.hop),'Hop in');checked++;
  const kinds:Record<string,number>={};for(const e of scan.events){const k=e.kind==='trade'?`trade:${e.venue}`:e.kind;kinds[k]=(kinds[k]??0)+1;}
  const markets:Record<string,number>={};for(const e of scan.events)if(e.kind==='trade'){const p=print(e).pair.key;markets[p]=(markets[p]??0)+1;}
- results.push({url,ms,reads:{transactions:scan.refresh.transactionsRead,headers:scan.refresh.headersRead},refresh:{ms:refreshMs,...again.refresh},transactions:scan.transactions,truncated:scan.truncated,events:kinds,markets:Object.keys(markets).length,skipped:scan.skipped,checked});
+ results.push({url,ms,settlements:[...settled.values()].map(x=>`${x.kind}:${x.hash.slice(0,10)}`).sort(),reads:{transactions:scan.refresh.transactionsRead,headers:scan.refresh.headersRead},refresh:{ms:refreshMs,...again.refresh},transactions:scan.transactions,truncated:scan.truncated,events:kinds,markets:Object.keys(markets).length,skipped:scan.skipped,checked});
 }
 const comparable=(r:Record<string,unknown>)=>({...r,url:'',ms:0,refresh:undefined,reads:undefined});
 assert.deepEqual(comparable(results[0]!),comparable(results[1]!),'Endpoints disagree');

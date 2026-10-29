@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {ccc} from '@ckb-ccc/core';
 import {marketEvents,pairOf,print,type MarketSources,type MarketTx,type Trade} from '../src/market.js';
-import {candles,depth,marketStats,priceOf} from '../src/market-stats.js';
+import {candles,depth,marketStats,priceOf,settlements} from '../src/market-stats.js';
+import {assetKey} from '../../sdk/src/types.js';
 import {decodeWitness} from '../src/codec.js';
 import {decodeTerms,parseAmount} from '../../sdk/src/codec.js';
 import {decodeTermsV2} from '../../sdk/src/v2/codec.js';
@@ -154,4 +155,28 @@ test('depth: order steps plus the pool curve, cumulative and monotone',()=>{
  // At p, the pool has sold y - sqrt(xy/(p(1-f))) tokens.
  const p=q.asks.at(-1)!.price;assert(Math.abs(q.asks.at(-1)!.base-(500-Math.sqrt(1000*500/(p*0.997))))<1e-9);
  assert.deepEqual(depth(pair,[],[],dec),{bids:[],asks:[]});
+});
+
+test('solver settlements: matches and rings are recognised from the fills alone, with the spread kept',()=>{
+ const markets=JSON.parse(readFileSync(new URL('../../deployments/pool-markets.json',import.meta.url),'utf8'));
+ const token=(symbol:string)=>udt(ccc.Script.from(markets.tokens.find((t:{symbol:string})=>t.symbol===symbol).token));
+ const [test2,test3]=[token('TEST2'),token('TEST3')],U=10n**8n;
+ // The live ring (scripts/lock-v2-ring.ts): CKB -> TEST2 -> TEST3 -> CKB, the solver kept 16 CKB.
+ const ring=settlements(trades(fixture('solver-ring'))).get(raw.fixtures['solver-ring'].hash)!;
+ assert.equal(ring.kind,'ring');assert.equal(ring.legs.length,3);
+ assert.deepEqual(ring.route!.map(assetKey),[CKB,test2,test3,CKB].map(assetKey));
+ assert.deepEqual(Object.fromEntries(ring.kept),{[assetKey(CKB)]:16n*U,[assetKey(test2)]:0n,[assetKey(test3)]:0n});
+ // The live multi-order match (scripts/lock-v2-multi.ts): four fills in TEST2/CKB, 480 TEST2 kept.
+ const multi=settlements(trades(fixture('solver-multi'))).get(raw.fixtures['solver-multi'].hash)!;
+ assert.equal(multi.kind,'match');assert.equal(multi.route,undefined);assert.equal(multi.legs.length,4);
+ assert.deepEqual(Object.fromEntries(multi.kept),{[assetKey(CKB)]:0n,[assetKey(test2)]:480n*U});
+ // The v2 campaign's solver match, and the v1 reference solver's match of two reciprocal lots.
+ for(const name of ['solver-match','v1-fill-udt-offer'])assert.equal(settlements(trades(fixture(name))).get(raw.fixtures[name].hash)?.kind,'match',name);
+ // A wallet taking orders (one way, even several in one transaction), or a pool route, is not a settlement.
+ for(const name of Object.keys(raw.fixtures).filter(n=>!n.startsWith('solver-')&&n!=='v1-fill-udt-offer'))assert.equal(settlements(trades(fixture(name))).size,0,name);
+ // Three fills over three assets that do not close a cycle are not a ring.
+ const [l0,l1,l2]=trades(fixture('solver-ring'));
+ const as=(t:Trade,got:AssetId,gave:AssetId)=>({...t,got:{...t.got,asset:got},gave:{...t.gave,asset:gave}});
+ assert.equal(settlements([as(l0!,CKB,test2),as(l1!,test2,test3),as(l2!,CKB,test3)]).size,0);
+ assert.equal(settlements([as(l0!,CKB,test2),as(l1!,CKB,test2)]).size,0,'one-way fills');
 });

@@ -3,7 +3,7 @@ import {build} from 'esbuild';
 import {ccc} from '@ckb-ccc/core';
 import {readFileSync} from 'node:fs';
 import {marketEvents,print,type MarketSources,type Print} from '../../pool-sdk/src/market.js';
-import {comparePrints,priceOf} from '../../pool-sdk/src/market-stats.js';
+import {comparePrints,priceOf,settlements} from '../../pool-sdk/src/market-stats.js';
 
 // Real committed testnet transactions with resolved inputs (scripts/market-fixtures.ts).
 const raw=JSON.parse(readFileSync('pool-sdk/test/fixtures/market.json','utf8'));
@@ -15,7 +15,8 @@ const prints:Print[]=Object.values<any>(raw.fixtures).flatMap(f=>marketEvents({h
 const newest=prints.reduce((m,p)=>p.trade.time>m?p.trade.time:m,0n);
 const TIP=newest+3_600_000n;
 const test3=markets.tokens.find((t:{symbol:string})=>t.symbol==='TEST3'),test2=markets.tokens.find((t:{symbol:string})=>t.symbol==='TEST2');
-const pairPrints=(hash:string)=>prints.filter(p=>p.pair.base.kind==='udt'&&p.pair.base.scriptHash===hash).sort(comparePrints).reverse();
+const pairPrints=(hash:string)=>prints.filter(p=>p.pair.base.kind==='udt'&&p.pair.base.scriptHash===hash&&p.pair.quote.kind==='ckb').sort(comparePrints).reverse();
+const settled=settlements(prints.map(p=>p.trade));
 const dec=()=>8;
 
 test('markets: trades, stats, charts and depth from real testnet transactions',async({page})=>{
@@ -73,6 +74,28 @@ test('markets: trades, stats, charts and depth from real testnet transactions',a
  await page.locator('summary',{hasText:'Depth as a table'}).click();
  await expect(page.locator('#depth-table tbody tr').first()).toContainText('Bid');
  await page.locator('#view-markets').screenshot({path:'frontend/test-results/markets.png'});
+
+ // Solver settlements: the live ring (CKB -> TEST2 -> TEST3 -> CKB) and the matches, newest first.
+ const panel=page.locator('#settlements-panel');await expect(panel).toBeVisible();
+ await expect(panel.locator('tbody tr')).toHaveCount(settled.size);
+ const ringRow=panel.locator('tbody tr',{hasText:'Ring'});
+ await expect(ringRow).toHaveCount(1);
+ await expect(ringRow).toContainText('Ring CKB → TEST2 → TEST3 → CKB');
+ await expect(ringRow.locator('td').nth(3)).toHaveText('16 CKB');
+ await expect(ringRow.locator('.leg')).toHaveText(['400 CKB → 4,000 TEST2','4,000 TEST2 → 1,600 TEST3','1,600 TEST3 → 384 CKB']);
+ await expect(ringRow.locator('a')).toHaveAttribute('href',`https://pudge.explorer.nervos.org/transaction/${raw.fixtures['solver-ring'].hash}`);
+ await expect(panel.locator('tbody tr',{hasText:'Match TEST2 / CKB'}).filter({hasText:'480 TEST2'})).toHaveCount(1);
+ // Each fill opens its market, where the trade is labelled as part of the ring; the TEST2/TEST3 leg has its own market (TEST3 quotes: smaller script hash).
+ await expect(page.locator('#markets-list')).toContainText('TEST2 / TEST3');
+ await ringRow.getByRole('button',{name:/sold 1,600 TEST3 for 384 CKB/}).click();
+ await expect(page.locator('#market-title')).toHaveText('TEST3 / CKB');
+ await page.locator('[data-market-range="all"]').click();
+ const ringTrade=page.locator('#market-trades tbody tr',{has:page.locator(`a[href$="${raw.fixtures['solver-ring'].hash}"]`)});
+ await expect(ringTrade).toContainText('ring CKB → TEST2 → TEST3 → CKB');
+ await expect(page.locator('#market-trades tbody tr',{hasText:'matched'}).first()).toBeVisible();
+ await ringRow.getByRole('button',{name:/sold 4,000 TEST2 for 1,600 TEST3/}).click();
+ await expect(page.locator('#market-title')).toHaveText('TEST2 / TEST3');
+ await page.locator('#settlements-panel').screenshot({path:'frontend/test-results/markets-settlements.png'});
 
  // Phone width: no page-level horizontal scroll; wide tables scroll inside their panel.
  await page.setViewportSize({width:390,height:900});

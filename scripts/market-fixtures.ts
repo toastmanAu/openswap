@@ -18,6 +18,7 @@ const wanted=new Map<string,ccc.Hex>();
 for(const e of [...scan.events].reverse())if(!wanted.has(label(e)))wanted.set(label(e),e.hash);
 const route=(await json('deployments/pool-route-joyid.json')).hash,solver=(await json('deployments/lock-v2-campaign.json')).solver.settle.hash;
 wanted.set('pool-route',route);wanted.set('solver-match',solver);
+wanted.set('solver-multi',(await json('deployments/lock-v2-multi.json')).settle.hash);wanted.set('solver-ring',(await json('deployments/lock-v2-ring.json')).settle.hash);
 const fixtures:Record<string,unknown>={};
 for(const [name,hash] of [...wanted.entries()].sort()){
  const r=(await client.getTransaction(hash))!,tx=r.transaction;
