@@ -19,8 +19,8 @@ deployed on testnet (user approved; tx `0xf2d18570…8457`, recorded in
 `deployments/testnet-v2.json`), and a local-key live run of create, partial fill,
 final fill, CKB-offer partial fill, cancel and keeper return passed on both
 endpoints (`deployments/lock-v2-live.json`). Builds now ship the v2 manifest, but
-toastdex.org is unchanged until the next Pages deploy (needs approval). Next: Pages
-deploy, a JoyID partial fill on toastdex.org, campaigns.
+toastdex.org has v2 since Pages deploy `0754cabe` (source `e1f617c`, verified).
+Next: a JoyID partial fill on toastdex.org, campaigns.
 
 ### Multi-hop routing and more pools (2026-10-29)
 

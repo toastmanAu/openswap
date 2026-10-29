@@ -110,6 +110,17 @@ toastdex.org and the deployment URL. The user then signed a TEST2 → TEST3 rout
 with JoyID on toastdex.org (tx `0xf035abad…ec0c`, block 22,896,802), verified
 on both endpoints ([record](../deployments/pool-route-joyid.json)).
 
+Follow-up deployment `https://0754cabe.toastdex.pages.dev` (source `e1f617c`,
+2026-10-29): order lock v2. The build ships `order-v2-manifest.json` (identical
+to [testnet-v2.json](../deployments/testnet-v2.json)), which turns on partial
+fills and expiry: new orders are v2, swaps take v1 lots and v2 orders (partly
+when allowed), and expired orders can be returned to their owner. Rolling back
+to `07268421` returns the app to v1-only; live v2 orders stay fillable, returnable
+and cancellable with the SDK. Files on all origins are byte-identical to the
+reproducible release, all 28 browser tests pass on toastdex.org and the
+deployment URL, and toastdex.org loaded against the real testnet shows the v2
+options without page errors.
+
 Rollback: select the previous successful deployment in Pages. Published contract
 code and outstanding order cells remain unchanged by frontend rollbacks.
 
