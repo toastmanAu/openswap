@@ -4,6 +4,13 @@ Saved 2026-10-12 (Australia/Adelaide). Read this first when resuming.
 
 ## Current request and stopping point
 
+### Multi-order solver matching (2026-10-29)
+
+`matchBook` settles several v2 orders (and whole v1 lots) per side of one market in
+one transaction; verified offline (solver tests) and on the real v2 binary (60
+matcher-built books, up to 8 legs, conservation checked from cells). Not yet run
+live on testnet.
+
 ### Market data (2026-10-29)
 
 New Markets tab: trades, stats, price and depth charts read from the chain (no

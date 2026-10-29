@@ -44,6 +44,42 @@ if (input.pairs) {
   process.stdout.write(JSON.stringify({ pairs }) + '\n', () => process.exit(0));
   await new Promise(() => {});
 }
+// Solver books: several crossing orders per side matched by matchBook, laid out as
+// fillOrdersV2 does (payments at input indexes in leg order, remainders after).
+if (input.books) {
+  const { matchBook } = await import('../../solver/src/matcher-v2.js');
+  const markets = [[udt(a), udt(b)], [CKB, udt(b)], [udt(a), CKB]] as const;
+  const books = [];
+  let nonce = 1;
+  for (let i = 0; books.length < input.books && i < input.books * 30; i++) {
+    const [x, y] = markets[i % 3]!;
+    const amount = (asset: typeof x) => asset.kind === 'ckb' ? (1000n + next(20_000n)) * UNIT : 1000n + next(1n << 40n);
+    // A reference price for the market, then each order within +-20% of it.
+    const refOffer = amount(x), refAsk = amount(y);
+    const make = async (offer: typeof x, ask: typeof x, side: 'left' | 'right') => {
+      const offerAmount = amount(offer), spread = 80n + next(41n);
+      // left offers x for y near refAsk/refOffer; right offers y for x near refOffer/refAsk.
+      const askAmount = (side === 'left' ? offerAmount * refAsk / refOffer : offerAmount * refOffer / refAsk) * spread / 100n || 1n;
+      const n = nonce++ % 250 + 1;
+      const plan = planCreateV2(deployment, { ownerLock: owner, nonce: new Uint8Array(16).fill(n).map((v, k) => k === 0 ? v : (v + k * 7 + nonce) & 255), askAsset: ask, expiry: 0n }, offer, { offerAmount, askAmount, minFill: 1n + next(offerAmount / 8n), partialFills: Number(next(5n)) });
+      return { plan, order: await parseV2(ccc.Cell.from({ ...plan.cell, outPoint: { txHash: `0x${'dd'.repeat(32)}`, index: n } }), deployment, resolver) };
+    };
+    try {
+      const lefts = [], rights = [];
+      for (let k = 0, nl = 1 + Number(next(4n)); k < nl; k++) lefts.push(await make(x, y, 'left'));
+      for (let k = 0, nr = 1 + Number(next(4n)); k < nr; k++) rights.push(await make(y, x, 'right'));
+      const best = (p: typeof lefts) => [...p].sort((u, v) => { const d = u.order.askAmount * v.order.offerAmount - v.order.askAmount * u.order.offerAmount; return d < 0n ? -1 : d > 0n ? 1 : 0; });
+      const L = best(lefts), R = best(rights);
+      const m = matchBook(L.map(o => o.order), R.map(o => o.order), { maxLegs: 8 });
+      if (!m || m.legs.length < 3) continue;
+      const cellOf = new Map([...L, ...R].map(o => [o.order, o.plan.cell]));
+      const plans = m.legs.map(leg => planFillV2(leg.order as OpenSwapOrderV2, leg.take!));
+      books.push({ orders: m.legs.map(leg => enc(cellOf.get(leg.order as OpenSwapOrderV2)!)), payments: plans.map(p => enc(p.payment)), remainders: plans.filter(p => p.remainder).map(p => enc(p.remainder!)), partial: plans.some(p => !p.final), legs: m.legs.length });
+    } catch { continue; }
+  }
+  process.stdout.write(JSON.stringify({ books }) + '\n', () => process.exit(0));
+  await new Promise(() => {});
+}
 const scenarios = [];
 for (let i = 0; i < input.count; i++) {
   const [offerKind, askKind] = shapes[i % 3]!;

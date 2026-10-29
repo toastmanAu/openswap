@@ -142,3 +142,80 @@ fn solver_matched_pairs_verify_on_the_binary() {
     println!("pairs={} partial={partial}", pairs.len());
     assert!(pairs.len() >= 30 && partial >= 10);
 }
+
+/// Matcher-built multi-order settlements (several orders per side, one possibly partial)
+/// verify on the binary, and conserve every asset without the solver adding any: token
+/// amounts and CKB capacity paid out never exceed what the orders held.
+#[test]
+fn solver_matched_books_verify_on_the_binary() {
+    let mut env = Env::new();
+    let code_hash = hex(env.lock(vec![]).code_hash().as_slice());
+    let reply = bridge(&json!({
+        "codeHash": code_hash,
+        "owner": hex(env.owner.as_slice()),
+        "a": hex(env.a.as_slice()),
+        "b": hex(env.b.as_slice()),
+        "seed": "424242",
+        "count": 0,
+        "books": 60,
+    }));
+    let books = reply["books"].as_array().unwrap();
+    let (mut partial, mut legs, mut widest) = (0, 0, 0);
+    let amount = |d: &Bytes| -> u128 { u128::from_le_bytes(d[..16].try_into().unwrap()) };
+    for (i, book) in books.iter().enumerate() {
+        let orders: Vec<_> = book["orders"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(cell_of)
+            .collect();
+        let mut outputs: Vec<_> = book["payments"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(cell_of)
+            .collect();
+        outputs.extend(book["remainders"].as_array().unwrap().iter().map(cell_of));
+        // Conservation, from the cells alone: per type script and for capacity.
+        let total = |cells: &[(CellOutput, Bytes)], t: &Script| -> u128 {
+            cells
+                .iter()
+                .filter(|(o, _)| o.type_().to_opt().as_ref() == Some(t))
+                .map(|(_, d)| amount(d))
+                .sum()
+        };
+        let capacity = |cells: &[(CellOutput, Bytes)]| -> u64 {
+            cells
+                .iter()
+                .map(|(o, _)| Unpack::<u64>::unpack(&o.capacity()))
+                .sum()
+        };
+        for t in [&env.a, &env.b] {
+            assert!(
+                total(&orders, t) >= total(&outputs, t),
+                "book {i}: token paid out exceeds what the orders held"
+            );
+        }
+        assert!(
+            capacity(&orders) >= capacity(&outputs),
+            "book {i}: capacity paid out exceeds what the orders held"
+        );
+        let mut inputs: Vec<_> = orders
+            .into_iter()
+            .map(|(c, d)| env.input(c, d, 0))
+            .collect();
+        let other = env.other.clone();
+        inputs.push(env.input(cell(&other, None, 100_000 * CKB), Bytes::new(), 0));
+        let tx = env.tx(inputs, outputs);
+        env.expect(&tx, 0, &format!("book {i}"));
+        partial += book["partial"].as_bool().unwrap() as usize;
+        let n = book["legs"].as_u64().unwrap() as usize;
+        legs += n;
+        widest = widest.max(n);
+    }
+    println!(
+        "books={} legs={legs} widest={widest} partial={partial}",
+        books.len()
+    );
+    assert!(books.len() >= 30 && partial >= 10 && widest >= 5);
+}

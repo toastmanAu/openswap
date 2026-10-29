@@ -266,14 +266,24 @@ These are optimizations over the same settlement foundation.
 optionally, also whole v1 lots. It reuses the v1 runner's settlement loop
 unchanged: reconcile the journal, reserve inputs, journal before the single send.
 
-- **Matching** (`matchV2`, `matchPair`): reciprocal pairs, best prices first. One
-  order is filled completely; the other only as much as needed, rounded up to
-  its minimum fill. Every v2 leg is re-planned by the SDK and checked against the
-  lock model. The solver keeps any spread. Pairwise only, not an optimal router.
+- **Matching** (`matchV2`, `matchBook`; `matchPair` is the two-order case):
+  several orders per side of one market in one settlement. Both sides are sorted
+  best price first (at most 24 per side); every pair of prefixes up to `maxLegs`
+  orders (default 8) is tried. In each, one side fills whole and only the last
+  order on the other side may fill partly, by as little as its rules allow. A
+  plan is kept only if no asset goes negative (inventory-free), and the one that
+  delivers the most wins, preferring fewer legs on ties. A marginal order that does
+  not cross on its own can still fill when the batch balances; every maker is
+  paid at least its own price either way. Every v2 leg is re-planned by the SDK
+  and checked against the lock model. The solver keeps any spread. Not an optimal
+  router: one market per settlement, no rings across three assets.
 - **Expiry policy:** time is the chain tip's timestamp, never the host clock.
   Orders within 300 s of expiry are not filled (median time lags the tip).
 - **Keeper** (`returnExpired`): returns up to 16 expired orders per transaction to
   their owners, unchanged, and pays the fee. It waits until 900 s after expiry
   by tip time, so the median time used by `since` has passed.
-- Evidence: solver unit tests; `lock-v2-tests` replays matcher-built pairs (60,
-  50 with a partial leg) and SDK-planned chains on the real v2 binary.
+- Evidence: solver unit tests (multi-order books, leg cap, v1 lots, a four-order
+  runner settlement); `lock-v2-tests` replays matcher-built pairs (60, 50 with a
+  partial leg), matcher-built books (60 settlements, 253 legs, up to 8 per
+  settlement, 54 with a partial leg; token amounts and capacity conserved, checked
+  from the cells) and SDK-planned chains on the real v2 binary.

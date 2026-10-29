@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ccc } from '@ckb-ccc/core';
 import * as sdk from '@openswap/sdk';
-import { matchPair, matchV2, ReferenceSolverV2 } from '../src/index.js';
+import { matchBook, matchPair, matchV2, ReferenceSolverV2, type BookMatch } from '../src/index.js';
 import type { SubmissionRecord } from '../src/journal.js';
 import { setup, a, b, owner, deployment, hex } from '../../sdk/test/fixture.js';
 
@@ -96,4 +96,91 @@ test('keeper returns orders only after expiry plus delay, by chain time, with si
   assert(tx.outputs[i]!.lock.eq(owner)); assert.equal(tx.outputsData[i], late.outputData);
   // The fill side never touches expired orders.
   assert.equal(await new ReferenceSolverV2(ctx(f), undefined, { journal: journal() }).tick(), undefined);
+});
+
+// Multi-order matching ------------------------------------------------------------------
+/** Per-asset conservation, recomputed from the legs: makers are paid no more than other makers deliver. */
+function balanced(m: BookMatch) {
+  const flow = new Map<string, bigint>();
+  for (const l of m.legs) {
+    const offer = sdk.assetKey(l.order.offerAsset), ask = sdk.assetKey(l.order.askAsset);
+    flow.set(offer, (flow.get(offer) ?? 0n) + l.delivered); flow.set(ask, (flow.get(ask) ?? 0n) - l.paid);
+  }
+  for (const [k, v] of flow) { assert.ok(v >= 0n, `${k} short by ${-v}`); assert.equal(m.surplus.get(k), v); }
+}
+
+test('several small sellers fill one large buyer in one settlement, best prices first', async () => {
+  const f = market();
+  // Sellers of A (asking B) at 0.10, 0.11, 0.12, and one at 5 B per A that no buyer here can pay.
+  const sellers = await Promise.all([[1000n, 100n], [1000n, 110n], [1000n, 120n], [1000n, 5000n]].map(([offer, ask]) =>
+    parsed(f, place(f, sdk.udt(a), sdk.udt(b), { offerAmount: offer!, askAmount: ask!, minFill: 100n, partialFills: 2 }))));
+  // One buyer offers 1,000 B for 5,000 A (0.2 B per A), partly fillable.
+  const buyer = await parsed(f, place(f, sdk.udt(b), sdk.udt(a), { offerAmount: 1000n, askAmount: 5000n, minFill: 50n, partialFills: 4 }));
+  const m = matchV2([...sellers, buyer], { nowSeconds: NOW })!;
+  assert.ok(m);
+  // matchV2 puts whichever side's market key sorts first on the left; pick legs by asset.
+  const sold = m.legs.filter(l => sdk.assetKey(l.order.offerAsset) === sdk.assetKey(sdk.udt(a)));
+  assert.deepEqual(sold.map(l => sdk.orderKey(l.order)), sellers.slice(0, 3).map(sdk.orderKey), 'the three cheapest sellers, cheapest first');
+  assert.equal(m.legs.length, 4, 'the 5 B per A seller cannot be paid');
+  assert.ok(sold.every(l => l.take === 1000n), 'sellers fill whole');
+  const bought = m.legs.find(l => l.order === buyer)!; assert.ok(bought.take! < 1000n, 'the buyer fills only what is needed');
+  balanced(m);
+});
+
+test('both sides can have several orders; the plan delivering most volume wins', async () => {
+  const f = market();
+  const left = await Promise.all([[600n, 60n], [800n, 90n]].map(([o, k]) => parsed(f, place(f, sdk.udt(a), sdk.udt(b), { offerAmount: o!, askAmount: k!, minFill: 100n, partialFills: 2 }))));
+  const right = await Promise.all([[50n, 400n], [40n, 300n], [100n, 500n]].map(([o, k]) => parsed(f, place(f, sdk.udt(b), sdk.udt(a), { offerAmount: o!, askAmount: k!, minFill: 10n, partialFills: 2 }))));
+  const m = matchBook(left, right)!;
+  assert.ok(m);
+  balanced(m);
+  assert.ok(m.legs.length >= 4, `expected several orders per side, got ${m.legs.length}`);
+  // No single pair delivers as much A to buyers.
+  const pairBest = Math.max(...left.flatMap(l => right.map(r => Number(matchPair(l, r)?.legs[1].paid ?? 0n))));
+  const delivered = m.legs.filter(l => sdk.assetKey(l.order.offerAsset) === sdk.assetKey(sdk.udt(b))).reduce((s, l) => s + l.paid, 0n);
+  assert.ok(Number(delivered) > pairBest);
+});
+
+test('a marginal order that does not cross alone can still fill when the batch balances, each maker at its own price', async () => {
+  const f = market();
+  // Sellers at 0.10, 0.11, 0.12 and 0.30 B per A; one buyer at 0.20 B per A for up to 5,000 A.
+  const sellers = await Promise.all([[1000n, 100n], [1000n, 110n], [1000n, 120n], [1000n, 300n]].map(([o, k]) => parsed(f, place(f, sdk.udt(a), sdk.udt(b), { offerAmount: o!, askAmount: k!, minFill: 100n, partialFills: 2 }))));
+  const buyer = await parsed(f, place(f, sdk.udt(b), sdk.udt(a), { offerAmount: 1000n, askAmount: 5000n, minFill: 50n, partialFills: 4 }));
+  const m = matchBook(sellers, [buyer])!;
+  balanced(m);
+  for (const l of m.legs) assert.ok(l.paid * l.order.offerAmount >= (l.take ?? l.delivered) * l.order.askAmount, 'each maker is paid at least its price');
+  // All four sellers fill: the buyer receives 3,150 A at its 0.2 price rather than 1,650 A without the fourth.
+  assert.equal(m.legs.length, 5); assert.equal(m.legs[4]!.paid, 3150n);
+});
+
+test('the leg cap bounds a settlement, and v1 lots join whole', async () => {
+  const f = market();
+  const sellers = await Promise.all(Array.from({ length: 10 }, (_, i) => parsed(f, place(f, sdk.udt(a), sdk.udt(b), { offerAmount: 100n, askAmount: 10n + BigInt(i), minFill: 100n, partialFills: 0 }))));
+  const v1 = await sdk.parse(f.order(sdk.udt(b), sdk.udt(a), 50n, 400n), deployment, sdk.defaultResolver(f.client));
+  const buyer = await parsed(f, place(f, sdk.udt(b), sdk.udt(a), { offerAmount: 10_000n, askAmount: 50_000n, minFill: 1n, partialFills: 8 }));
+  const capped = matchV2([...sellers, buyer], { nowSeconds: NOW, maxLegs: 4 })!;
+  assert.equal(capped.legs.length, 4); balanced(capped);
+  const withLot = matchBook(sellers, [v1])!;
+  assert.ok(withLot); balanced(withLot);
+  const lot = withLot.legs.find(l => !sdk.isV2(l.order))!;
+  assert.equal(lot.take, undefined); assert.equal(lot.delivered, 50n);
+  assert.throws(() => matchBook(sellers, [v1], { maxLegs: 1 }), /maxLegs/);
+});
+
+test('v2 runner settles a multi-order match in one pinned transaction', async () => {
+  const f = market();
+  for (const ask of [100n, 105n, 110n]) place(f, sdk.udt(a), sdk.udt(b), { offerAmount: 1000n, askAmount: ask, minFill: 100n, partialFills: 2 });
+  place(f, sdk.udt(b), sdk.udt(a), { offerAmount: 1000n, askAmount: 5000n, minFill: 50n, partialFills: 4 });
+  let sends = 0; const events: [string, any][] = [];
+  f.client.sendTransaction = async tx => { sends++; return ccc.Transaction.from(tx).hash(); };
+  f.client.getTransactionNoCache = async () => ({ status: 'pending' }) as ccc.ClientTransactionResponse;
+  const solver = new ReferenceSolverV2(ctx(f), (e, d) => events.push([e, d]), { journal: journal() });
+  const tx = (await solver.tick(true))!;
+  assert.equal(sends, 1);
+  const orderInputs = (await Promise.all(tx.inputs.map(i => i.getCell(f.client)))).filter(c => c.cellOutput.lock.codeHash === v2.codeHash);
+  assert.equal(orderInputs.length, 4, 'four orders in one transaction');
+  for (let i = 0; i < 4; i++) assert(tx.outputs[i]!.lock.eq(owner), `payment ${i} at its order index`);
+  assert.equal(tx.outputs.filter(o => o.lock.codeHash === v2.codeHash).length, 1, 'only the partly filled buyer remains');
+  assert.equal(events.find(([e]) => e === 'candidate_pair')![1].orders.length, 4);
+  assert.equal(await solver.tick(true), undefined, 'all four stay reserved while pending');
 });
