@@ -20,7 +20,10 @@ deployed on testnet (user approved; tx `0xf2d18570…8457`, recorded in
 final fill, CKB-offer partial fill, cancel and keeper return passed on both
 endpoints (`deployments/lock-v2-live.json`). Builds now ship the v2 manifest, but
 toastdex.org has v2 since Pages deploy `0754cabe` (source `e1f617c`, verified).
-Next: a JoyID partial fill on toastdex.org, campaigns.
+The user's JoyID partial fill on toastdex.org (tx `0xddf59ef8…5979`, 350 of 2,000
+TEST3 at 2 CKB) is verified (`deployments/lock-v2-joyid.json`); 1,650 TEST3 of
+that order stays live until about 2026-10-30 06:59 UTC. Next: campaigns against the
+live v2 deployment.
 
 ### Multi-hop routing and more pools (2026-10-29)
 

@@ -120,6 +120,9 @@ and cancellable with the SDK. Files on all origins are byte-identical to the
 reproducible release, all 28 browser tests pass on toastdex.org and the
 deployment URL, and toastdex.org loaded against the real testnet shows the v2
 options without page errors.
+The user then partly filled a v2 order with JoyID on toastdex.org (350 of 2,000
+TEST3 at 2 CKB each; tx `0xddf59ef8…5979`, block 22,899,288), verified on both
+endpoints ([record](../deployments/lock-v2-joyid.json)).
 
 Rollback: select the previous successful deployment in Pages. Published contract
 code and outstanding order cells remain unchanged by frontend rollbacks.

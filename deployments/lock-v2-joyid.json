@@ -1,0 +1,50 @@
+{
+  "network": "testnet",
+  "tx": "0xddf59ef8d639b2821ca2cf8d36bb96d50776b2b5e6f5d1948c90e518bf925979",
+  "order": "0x7798b8a5ef5701bc374bd83bec3cb56ae6073a400db4f53ee14319ddeb7d6384",
+  "site": "https://toastdex.org",
+  "signer": "JoyID (main key)",
+  "results": [
+    {
+      "url": "https://testnet.ckb.dev",
+      "blockNumber": "22899288",
+      "orderIndex": 0,
+      "taken": "350",
+      "paid": "700",
+      "pricePerTest3": "2.00000000",
+      "remainder": {
+        "index": 1,
+        "test3": "1650",
+        "identicalArgs": true,
+        "live": true
+      },
+      "makerPaymentCapacity": "700",
+      "taker": "ckt1qrfrwcdnvssswdwpn3s9v8fp87emat306ctjwsm3nmlkjg8qyza2cqgqq9qha8uqganyw9aavyyqeltvrlg59lp4svl02uvq",
+      "received": "350",
+      "fee": "0.00074351",
+      "bytes": 1581,
+      "feeRateShannonsPerKB": "46909"
+    },
+    {
+      "url": "https://testnet.ckbapp.dev",
+      "blockNumber": "22899288",
+      "orderIndex": 0,
+      "taken": "350",
+      "paid": "700",
+      "pricePerTest3": "2.00000000",
+      "remainder": {
+        "index": 1,
+        "test3": "1650",
+        "identicalArgs": true,
+        "live": true
+      },
+      "makerPaymentCapacity": "700",
+      "taker": "ckt1qrfrwcdnvssswdwpn3s9v8fp87emat306ctjwsm3nmlkjg8qyza2cqgqq9qha8uqganyw9aavyyqeltvrlg59lp4svl02uvq",
+      "received": "350",
+      "fee": "0.00074351",
+      "bytes": 1581,
+      "feeRateShannonsPerKB": "46909"
+    }
+  ],
+  "verifiedAt": "2026-10-29T08:15:18.197Z"
+}

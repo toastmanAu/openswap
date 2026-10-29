@@ -195,7 +195,7 @@ Example (UDT → CKB): sell 10,000 TEST for 1,000 CKB, min fill 1,000 TEST.
 | 3. SDK | Done (offline). `sdk/src/v2/`: create sizing (`planCreateV2`), decode/parse, fill planning (`planFillV2`, `partialRange`; every plan is checked against the model, and cells are built at exact capacity because CCC silently raises too-small capacities), builders for create, fill (partial v2 plus whole v1 lots in one transaction), expiry return (`since` = expiry) and cancel, `scanV2`, and `quoteMixed` over v1 and v2 with expiry margin. 8 builder/planner tests; VM replay of SDK-planned chains (`npm run campaign -- lock-v2-sdk`; 1,200 chains, 2,658 transactions, 1,458 partial fills verified at seed 29) |
 | 4. Solver | Done (offline). `matchV2`/`matchPair` (pairwise, partial legs, expiry margin by chain time), `ReferenceSolverV2` on the shared journaled settlement loop, keeper `returnExpired` (900 s after expiry by tip time). 6 solver tests; 60 matcher-built pairs replayed on the binary |
 | 5. Frontend | Done (offline). Gated on a served v2 manifest; create form (partial fills, min fill, good until), mixed quotes and partial fills, rows with remaining/minimum/expiry, Return to owner, v2 cancel. 3 browser tests (28 total) |
-| 6. Testnet | In progress. Deployed (user approved) 2026-10-29: tx `0xf2d18570…8457`, block 22,898,419, code cell under the always-fail lock, 30,041 tCKB from the split-maker test key; verified on both endpoints (`deployments/testnet-v2.json`, `scripts/lock-v2-deploy.ts`). Local-key live run (`scripts/lock-v2-live.ts`, `deployments/lock-v2-live.json`), every step model-checked on both endpoints: see below. Pages deploy `0754cabe` (source `e1f617c`) ships the v2 manifest; served files match the release on toastdex.org, toastdex.pages.dev and the deployment URL; 28 browser tests pass on both. Next: JoyID partial fill on toastdex.org, campaigns |
+| 6. Testnet | In progress. Deployed (user approved) 2026-10-29: tx `0xf2d18570…8457`, block 22,898,419, code cell under the always-fail lock, 30,041 tCKB from the split-maker test key; verified on both endpoints (`deployments/testnet-v2.json`, `scripts/lock-v2-deploy.ts`). Local-key live run (`scripts/lock-v2-live.ts`, `deployments/lock-v2-live.json`), every step model-checked on both endpoints: see below. Pages deploy `0754cabe` (source `e1f617c`) ships the v2 manifest; served files match the release on toastdex.org, toastdex.pages.dev and the deployment URL; 28 browser tests pass on both. JoyID partial fill on toastdex.org verified (below). Next: campaigns |
 
 ### Live run with local keys (2026-10-29)
 
@@ -216,6 +216,20 @@ The planner refused a first `fillC1` take of 150 CKB before signing: a CKB-offer
 remainder must keep the order cell's own storage (~287 CKB here), so a 400 CKB
 order can only take 100–113 CKB partially. The create review now shows this range
 or warns that an order is too small to fill partly (`plannedPartialRange`).
+
+### JoyID partial fill on toastdex.org (2026-10-29)
+
+Order `0x7798b8a5…6384` (block 22,898,735, split-maker key): 2,000 TEST3 for
+4,000 CKB, partial from 250 TEST3, 24 h expiry, priced under the CKB / TEST3 pool
+(about 2.12). toastdex.org quoted 500 TEST3 for 1,000 CKB from it against 1,340
+from the pool. The user then swapped on toastdex.org with JoyID (main key): tx
+`0xddf59ef8…5979`, block 22,899,288. `scripts/lock-v2-joyid-verify.ts` checked
+on both endpoints that the reference model accepts the committed fill; that the
+maker got 700 CKB at the order index for 350 TEST3 (exactly 2 CKB per TEST3);
+that 1,650 TEST3 stays live under identical args; that every other input and output
+is the user's JoyID wallet; and that the wallet received exactly 350 TEST3. Fee
+0.00074351 CKB for 1,581 bytes, from the node's fee-rate estimate under the app's 1
+CKB cap ([record](../../deployments/lock-v2-joyid.json)).
 
 Commands: `make lock-v2-test`; `npx tsx --test sdk/test/v2.test.ts`.
 
