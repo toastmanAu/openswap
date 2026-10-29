@@ -8,7 +8,7 @@ Saved 2026-10-12 (Australia/Adelaide). Read this first when resuming.
 
 Order-book transactions now use the node's fee estimate bounded to 1,000–5,000
 shannons/KB, max 0.01 CKB per transaction, with the review stating the rate and any
-capping (`frontend/src/fees.ts`). Not yet on Pages.
+capping (`frontend/src/fees.ts`). Live since Pages deploy `5c7cc88e`.
 
 ### Multi-order solver matching (2026-10-29)
 

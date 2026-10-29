@@ -146,6 +146,14 @@ deployment URL. On toastdex.org against the real testnet, with Markets opened at
 navigation, a first visit showed charts at 7.4 s and a returning visit at 1.1 s
 (refreshed at 2.4 s), without page errors.
 
+Follow-up deployment `https://5c7cc88e.toastdex.pages.dev` (source `bbc8725`,
+2026-10-29): order-book network fees capped at 1,000–5,000 shannons/KB and 0.01 CKB
+per transaction, with the review stating the rate. Files on all origins are
+byte-identical to the reproducible release and all 31 browser tests pass on
+toastdex.org and the deployment URL. On toastdex.org against the real testnet the
+app read a node estimate of 33,222 shannons/KB (capped to 5,000), without page
+errors.
+
 Rollback: select the previous successful deployment in Pages. Published contract
 code and outstanding order cells remain unchanged by frontend rollbacks.
 
