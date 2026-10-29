@@ -3,7 +3,7 @@
 // expired v2 orders to their owners. Time comes from the chain tip, not the host
 // clock. Journaling, reservation and single-send rules are the v1 runner's.
 import { ccc } from '@ckb-ccc/core';
-import { defaultResolver, fillOrdersV2, isExpired, isV2, orderKey, returnExpiredV2, scan, scanV2, type AnyOrder, type BuildContext, type Deployment } from '@openswap/sdk';
+import { assetKey, defaultResolver, fillOrdersV2, isExpired, isV2, orderKey, returnExpiredV2, scan, scanV2, type AnyOrder, type BuildContext, type Deployment } from '@openswap/sdk';
 import type { SubmissionJournal } from './journal.js';
 import { matchV2 } from './matcher-v2.js';
 import { ReferenceSolver, type Settlement } from './runner.js';
@@ -43,7 +43,11 @@ export class ReferenceSolverV2 extends ReferenceSolver {
     const m = matchV2(await this.book(reserved), { nowSeconds: now, expiryMarginSeconds: margin });
     if (!m) return;
     const orders = m.legs.map(l => orderKey(l.order));
-    this.emit('candidate_pair', { orders, takes: m.legs.map(l => l.take?.toString() ?? 'whole') });
+    const takes = m.legs.map(l => l.take?.toString() ?? 'whole');
+    // Named by what was found: two reciprocal orders, several in one market, or a ring
+    // (with its route: each order's offer asset in turn, as assetKeys, first repeated).
+    if ('ring' in m) this.emit('candidate_ring', { orders, takes, route: [...m.legs, m.legs[0]!].map(l => assetKey(l.order.offerAsset)) });
+    else this.emit(m.legs.length === 2 ? 'candidate_pair' : 'candidate_book', { orders, takes });
     const built = await fillOrdersV2(this.context, m.legs.map(l => ({ outPoint: l.order.outPoint, take: isV2(l.order) ? l.take : undefined })), { v1: this.v2.v1, nowSeconds: now + margin });
     return { built, orders };
   }

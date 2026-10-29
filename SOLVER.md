@@ -233,7 +233,9 @@ Suggested structured events:
 ```text
 order_discovered
 order_removed
-candidate_pair
+candidate_pair     (v2: two reciprocal orders)
+candidate_book     (v2: several orders in one market)
+candidate_ring     (v2: a cycle of three assets; details include the route)
 candidate_bundle
 bundle_rejected
 settlement_built
@@ -314,3 +316,5 @@ unchanged: reconcile the journal, reserve inputs, journal before the single send
   whole, the TEST2 order sold 4,000 for 1,600 TEST3 and the TEST3 order sold 1,600
   for 384 CKB, both remainders live. Checked on both endpoints as above; the solver
   kept 16 CKB and added no tokens or capacity of its own.
+  The recorded solver events predate the event rename (2026-10-30), so the journal
+  logs this ring as `candidate_pair`; the runner now emits `candidate_ring` with the route.

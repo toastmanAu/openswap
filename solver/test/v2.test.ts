@@ -181,7 +181,8 @@ test('v2 runner settles a multi-order match in one pinned transaction', async ()
   assert.equal(orderInputs.length, 4, 'four orders in one transaction');
   for (let i = 0; i < 4; i++) assert(tx.outputs[i]!.lock.eq(owner), `payment ${i} at its order index`);
   assert.equal(tx.outputs.filter(o => o.lock.codeHash === v2.codeHash).length, 1, 'only the partly filled buyer remains');
-  assert.equal(events.find(([e]) => e === 'candidate_pair')![1].orders.length, 4);
+  assert.equal(events.find(([e]) => e === 'candidate_book')![1].orders.length, 4);
+  assert(!events.some(([e]) => e === 'candidate_pair' || e === 'candidate_ring'));
   assert.equal(await solver.tick(true), undefined, 'all four stay reserved while pending');
 });
 
@@ -234,5 +235,15 @@ test('v2 runner settles a ring in one pinned transaction', async () => {
   const orderInputs = (await Promise.all(tx.inputs.map(i => i.getCell(f.client)))).filter(x => x.cellOutput.lock.codeHash === v2.codeHash);
   assert.equal(orderInputs.length, 3);
   for (let i = 0; i < 3; i++) assert(tx.outputs[i]!.lock.eq(owner), `payment ${i} at its order index`);
-  assert.equal(events.find(([e]) => e === 'candidate_pair')![1].orders.length, 3);
+  const found = events.find(([e]) => e === 'candidate_ring')![1];
+  assert.equal(found.orders.length, 3);
+  assert(!events.some(([e]) => e === 'candidate_pair' || e === 'candidate_book'));
+  // The route follows the orders: each one offers the asset after the one before it asks for.
+  const route: string[] = found.route, keys = [sdk.udt(a), sdk.udt(b), sdk.CKB].map(sdk.assetKey);
+  assert.equal(route.length, 4); assert.equal(route[0], route[3]); assert.deepEqual(new Set(route), new Set(keys));
+  const placed = new Map(orderInputs.map(c => [sdk.orderKey(c), c]));
+  found.orders.forEach((key: string, k: number) => {
+    const terms = sdk.decodeTermsV2(placed.get(key)!.cellOutput.lock.args);
+    assert.equal(sdk.assetKey(terms.askAsset), route[k + 1], `order ${k} asks for the next asset on the route`);
+  });
 });
