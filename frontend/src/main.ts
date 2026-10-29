@@ -11,6 +11,7 @@ import {createPoolUi,type PoolRoute,type SplitRoute,type MultiHopRoute} from './
 import {loadPoolManifest,type PoolManifest} from './pools/manifest.js';
 import {XUDT_CODE_HASH} from '../../pool-sdk/src/codec.js';
 import {createMarkets} from './markets.js';
+import {ORDER_FEE_POLICY,orderFeeQuote,feeLine,type FeeQuote} from './fees.js';
 const deployment=deploymentJson as swap.Deployment;
 const el=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id)! as T;
 const value=(id:string)=>(el<HTMLInputElement>(id)).value;
@@ -28,6 +29,8 @@ let generation=0,busy=false,orders:swap.AnyOrder[]=[],scanAbort:AbortController|
 let v2:swap.Deployment|undefined;
 /** Chain tip time in seconds, read at each scan; expiry is judged by chain time. */
 let chainNow=0n;
+/** Order-book fee rate, refreshed with each order scan (see fees.ts). */
+let feeQuote:FeeQuote={rate:ORDER_FEE_POLICY.minRate};
 /** Returns wait this long after expiry so the median time used by `since` has passed. */
 const RETURN_DELAY=900n;
 const bookPages=new Map<string,number>();
@@ -297,7 +300,7 @@ async function configure(rpc:string,indexer:string){
 el('endpoints').onsubmit=e=>{e.preventDefault();if(busy)return;run(async()=>{await configure(value('rpc'),value('indexer'));await scan();});};
 el('add-token').onsubmit=e=>{e.preventDefault();run(async()=>{const script=ccc.Script.from(JSON.parse(value('token-script')));const result=await assetResolver(client).identify(script);if(!result.supported)throw new Error(result.reason??'This token needs an AssetResolver');addAsset(value('token-label'),script);saveAssets();});};
 for(const id of ['base','quote'])el(id).onchange=()=>{invalidate();renderBook();};
-async function scan(){scanFresh=false;scanAbort?.abort();const abort=new AbortController();scanAbort=abort;const current=client;const found:swap.AnyOrder[]=[];let malformed=0;text('scan-status','Scanning live cells…');
+async function scan(){scanFresh=false;scanAbort?.abort();const abort=new AbortController();scanAbort=abort;const current=client;void orderFeeQuote(current).then(q=>{if(client===current)feeQuote=q;});const found:swap.AnyOrder[]=[];let malformed=0;text('scan-status','Scanning live cells…');
  try{for await(const order of swap.scan(current,deployment,assetResolver(current),{maxCells:10000,signal:abort.signal,onMalformed:()=>malformed++}))found.push(order);
  if(v2){for await(const order of swap.scanV2(current,v2,assetResolver(current),{maxCells:10000,signal:abort.signal,onMalformed:()=>malformed++}))found.push(order);chainNow=(await current.getTipHeader()).timestamp/1000n;}
  if(abort.signal.aborted||client!==current)throw new Error('Order scan replaced; refresh and try again');scanFresh=true;lastScan=Date.now();orders=found;for(const o of found)for(const a of [o.offerAsset,o.askAsset])if(a.kind==='udt'&&!assets.has(swap.assetKey(a)))addAsset(`Token ${a.scriptHash.slice(0,8)}…`,a.script);text('scan-status',`${found.length} supported live orders · ${malformed} malformed cells skipped · scan cap 10,000 cells`);renderBook();}catch(error){if(!abort.signal.aborted){text('scan-status','Scan failed. Previously loaded orders may be stale.');throw error;}throw error;}
@@ -324,7 +327,7 @@ function renderBook(){
  }
 
 }
-function context():swap.BuildContext{if(!signer)throw new Error('Connect a wallet first');if(busy)throw new Error('Wait for the current transaction');if(!owner)throw new Error('Wait for the connected account to load');return{signer,deployment,resolver:assetResolver(client)};}
+function context():swap.BuildContext{if(!signer)throw new Error('Connect a wallet first');if(busy)throw new Error('Wait for the current transaction');if(!owner)throw new Error('Wait for the connected account to load');return{signer,deployment,resolver:assetResolver(client),feeRate:feeQuote.rate,maxFee:ORDER_FEE_POLICY.maxFee};}
 
 el('create').onsubmit=e=>{e.preventDefault();run(async()=>{
  const ctx=context(),start=generation;await assertActiveAccount(ctx.signer,start);const base=selected('base'),quote=selected('quote');const offer=value('direction')==='sell'?base:quote,ask=value('direction')==='sell'?quote:base;
@@ -341,7 +344,7 @@ el('create').onsubmit=e=>{e.preventDefault();run(async()=>{
  await prepare(built,`Create ${plan.count} independent lots.\nOffer: ${amount(offered,offer)}\nTotal ask: ${amount(plan.totalAsk,ask)}\nRounding premium: ${amount(plan.roundingPremium,ask)}\nOrder capacity: ${ccc.fixedPointToString(built.tx.outputs.slice(0,plan.count).reduce((n,o)=>n+o.capacity,0n))} CKB`);
  });};
 async function buildReview(build:(ctx:swap.BuildContext)=>Promise<swap.BuiltTransaction>,summary:string){const ctx=context(),start=generation;await assertActiveAccount(ctx.signer,start);const built=await build(ctx);if(start!==generation||ctx.signer!==signer)throw new Error('Wallet changed; prepare again');await prepare(built,summary);}
-async function prepare(built:swap.BuiltTransaction,summary:string){if(!signer)throw new Error('Wallet disconnected');built.assertLayout();const selected=signer,start=generation;const fee=await built.tx.getFee(selected.client);const addresses=await selected.getAddressObjs();const costs=await capacityReview(built.tx,selected.client,addresses.map(a=>a.script),v2?[deployment,v2]:[deployment]);await assertActiveAccount(selected,start);if(start!==generation||signer!==selected)throw new Error('Wallet changed; prepare again');review={built,signer:selected,generation:start,summary,account:accountKey(addresses.map(a=>a.script)),createdAt:Date.now()};text('review-text',`${summary}\n\nNetwork fee: ${ccc.fixedPointToString(fee)} CKB\nProtocol fee: 0 CKB\nWallet CKB change: ${formatUnits(costs.walletChange,8)} CKB (negative means leaving wallet; includes network fee)\nCKB locked in new orders: ${formatUnits(costs.orderLocked,8)}\nCKB released from your orders: ${formatUnits(costs.orderReleased,8)}\nChange in token-cell storage reserve: ${formatUnits(costs.tokenReserveChange,8)} CKB (recoverable capacity, not a fee)\nInputs: ${built.tx.inputs.length} · Outputs: ${built.tx.outputs.length}\nNetwork: CKB TESTNET\nConnected account: ${ccc.Address.fromScript(owner!,selected.client).toString()}`);text('review-raw',ccc.stringify(built.tx));el<HTMLDialogElement>('review').showModal();}
+async function prepare(built:swap.BuiltTransaction,summary:string){if(!signer)throw new Error('Wallet disconnected');built.assertLayout();const selected=signer,start=generation;const fee=await built.tx.getFee(selected.client);const addresses=await selected.getAddressObjs();const costs=await capacityReview(built.tx,selected.client,addresses.map(a=>a.script),v2?[deployment,v2]:[deployment]);await assertActiveAccount(selected,start);if(start!==generation||signer!==selected)throw new Error('Wallet changed; prepare again');review={built,signer:selected,generation:start,summary,account:accountKey(addresses.map(a=>a.script)),createdAt:Date.now()};text('review-text',`${summary}\n\n${feeLine(fee,built.tx.toBytes().length+4,feeQuote,ccc.fixedPointToString)}\nProtocol fee: 0 CKB\nWallet CKB change: ${formatUnits(costs.walletChange,8)} CKB (negative means leaving wallet; includes network fee)\nCKB locked in new orders: ${formatUnits(costs.orderLocked,8)}\nCKB released from your orders: ${formatUnits(costs.orderReleased,8)}\nChange in token-cell storage reserve: ${formatUnits(costs.tokenReserveChange,8)} CKB (recoverable capacity, not a fee)\nInputs: ${built.tx.inputs.length} · Outputs: ${built.tx.outputs.length}\nNetwork: CKB TESTNET\nConnected account: ${ccc.Address.fromScript(owner!,selected.client).toString()}`);text('review-raw',ccc.stringify(built.tx));el<HTMLDialogElement>('review').showModal();}
 el('swap').onsubmit=e=>{e.preventDefault();run(async()=>{
  const ctx=context(),start=generation;await assertActiveAccount(ctx.signer,start);const base=selected('base'),quote=selected('quote');
  const assetOut=value('swap-direction')==='buy'?base:quote,assetIn=value('swap-direction')==='buy'?quote:base;

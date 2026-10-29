@@ -97,10 +97,10 @@ function matches(c:ccc.Cell,search:any){
  if(f.script){const t=c.cellOutput.type;if(!t||t.codeHash!==f.script.code_hash||t.hashType!==f.script.hash_type||t.args!==f.script.args)return false;}
  return true;
 }
-interface Mock {sent:string[];journalAtSend:string[];send:'ok'|'abort';committedAt?:bigint;tip:bigint;tipTime:bigint}
+interface Mock {sent:string[];journalAtSend:string[];send:'ok'|'abort';committedAt?:bigint;tip:bigint;tipTime:bigint;/** Node fee-rate median, shannons/KB. */feeMedian:bigint}
 async function mockPools(page:Page,options:{manifest?:boolean;token?:TokenMeta;lots?:ccc.Cell[];twoPools?:boolean;v2Orders?:ccc.Cell[]}={}):Promise<Mock>{
  const {cells,manifest,parents}=chain(options.token,options.lots,options.twoPools,options.v2Orders),live=new Map(cells.map(c=>[`${c.outPoint.txHash}:${c.outPoint.index}`,c]));
- const mock:Mock={sent:[],journalAtSend:[],send:'ok',tip:100n,tipTime:TIP_TIME},pool=new Map<string,unknown>();
+ const mock:Mock={sent:[],journalAtSend:[],send:'ok',tip:100n,tipTime:TIP_TIME,feeMedian:1000n},pool=new Map<string,unknown>();
  if(options.v2Orders)await page.route('**/order-v2-manifest.json',route=>route.fulfill({json:v2Deployment}));
  if(options.manifest!==false)await page.route('**/pool-manifest.json',route=>route.fulfill({json:manifest}));
  await page.route('https://testnet.ckb.dev/**',async route=>{
@@ -123,7 +123,7 @@ async function mockPools(page:Page,options:{manifest?:boolean;token?:TokenMeta;l
     else return route.fallback();
     break;}
    // Order-book builders ask the node for a fee rate; pool builders use a fixed one.
-   case 'get_fee_rate_statistics':result={mean:'0x3e8',median:'0x3e8'};break;
+   case 'get_fee_rate_statistics':result={mean:ccc.numToHex(mock.feeMedian),median:ccc.numToHex(mock.feeMedian)};break;
    case 'get_tip_header':
     result={compact_target:'0x1d08a2a4',dao:`0x${'00'.repeat(32)}`,epoch:'0x0',extra_hash:hash(42),hash:hash(43),nonce:'0x0',number:ccc.numToHex(mock.tip),parent_hash:hash(44),proposals_hash:hash(45),timestamp:ccc.numToHex(mock.tipTime*1000n),transactions_root:hash(46),version:'0x0'};break;
    default:return route.fallback();
@@ -457,6 +457,37 @@ test('v2: part of an order is quoted, reviewed and sent once, leaving the rest l
  expect(sent.outputs[1]!.lock.eq(order!.cellOutput.lock)).toBe(true);
  expect(sent.outputsData[1]).toBe(ccc.hexFrom(writeLE(9_500n*UNIT,16)));
  expect(sent.cellDeps.some(d=>d.outPoint.txHash===hash(78))).toBe(true);
+});
+
+test('order-book fees use the node rate within the policy cap, and the review says so',async({page})=>{
+ const [order]=v2Orders([{offerAmount:10_000n*UNIT,askAmount:1000n*UNIT,minFill:100n*UNIT,partialFills:4}]);
+ const mock=await mockPools(page,{v2Orders:[order!]});
+ // A node suggesting 47,000 shannons/KB (seen on testnet) is capped at 5,000.
+ mock.feeMedian=47_000n;
+ await page.goto('/');await expect(page.locator('#scan-status')).toContainText('1 supported live orders',{timeout:35000});
+ await page.getByRole('button',{name:'Trade this pair'}).click();
+ await connect(page);await page.evaluate(()=>{(globalThis as any).orderFunding=true;});
+ await page.locator('#swap-output').fill('500');await page.getByRole('button',{name:'Review swap'}).click();
+ await expect(page.locator('#review')).toBeVisible({timeout:30000});
+ await expect(page.locator('#review-text')).toContainText('node suggested 47000, capped at 5000');
+ // The review's rate is the reviewed transaction's fee over its size (the bytes that are signed and sent).
+ const rate=Number(/about (\d+) shannons\/KB/.exec(await page.locator('#review-text').innerText())![1]);
+ expect(rate).toBeLessThanOrEqual(5000);expect(rate).toBeGreaterThanOrEqual(4000);
+ await page.getByRole('button',{name:'Sign and submit'}).click();
+ await expect(page.locator('#status')).toContainText('Submitted');expect(mock.sent).toHaveLength(1);
+});
+
+test('a node fee estimate below the minimum relay rate is raised to it',async({page})=>{
+ const [order]=v2Orders([{offerAmount:10_000n*UNIT,askAmount:1000n*UNIT,minFill:100n*UNIT,partialFills:4}]);
+ const mock=await mockPools(page,{v2Orders:[order!]});mock.feeMedian=10n;
+ await page.goto('/');await expect(page.locator('#scan-status')).toContainText('1 supported live orders',{timeout:35000});
+ await page.getByRole('button',{name:'Trade this pair'}).click();
+ await connect(page);await page.evaluate(()=>{(globalThis as any).orderFunding=true;});
+ await page.locator('#swap-output').fill('500');await page.getByRole('button',{name:'Review swap'}).click();
+ await expect(page.locator('#review')).toBeVisible({timeout:30000});
+ await expect(page.locator('#review-text')).toContainText('node suggested 10)');
+ const rate=Number(/about (\d+) shannons\/KB/.exec(await page.locator('#review-text').innerText())![1]);
+ expect(rate).toBeGreaterThanOrEqual(1000);expect(rate).toBeLessThan(1300);
 });
 
 test('v2: expired orders are not routed, and anyone can return one to its owner',async({page})=>{

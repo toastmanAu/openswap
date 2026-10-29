@@ -4,6 +4,12 @@ Saved 2026-10-12 (Australia/Adelaide). Read this first when resuming.
 
 ## Current request and stopping point
 
+### Fee rate cap (2026-10-29)
+
+Order-book transactions now use the node's fee estimate bounded to 1,000–5,000
+shannons/KB, max 0.01 CKB per transaction, with the review stating the rate and any
+capping (`frontend/src/fees.ts`). Not yet on Pages.
+
 ### Multi-order solver matching (2026-10-29)
 
 `matchBook` settles several v2 orders (and whole v1 lots) per side of one market in

@@ -522,3 +522,25 @@ first visit 7.1–7.6 s (was 9.4–10.9 s); returning visit charts at about 2.1 
 
 Token decimals and names come from the pool manifest and token catalog; an unknown
 token shows a hash prefix and 0 decimals.
+
+### Network fee policy (2026-10-29)
+
+Order-book transactions (create, fill, cancel, return, order-book swaps) use the
+node's median fee rate bounded to **1,000–5,000 shannons/KB**, with at most
+**0.01 CKB** per transaction (`frontend/src/fees.ts`, `ORDER_FEE_POLICY`). Before
+this the app took the node's median unbounded (CCC's own ceiling is 0.1 CKB per KB,
+and the SDK's backstop 1 CKB per transaction); testnet nodes suggested 33,222–46,909
+shannons/KB on 2026-10-29, so a dishonest or odd endpoint could have priced every
+order transaction up to that ceiling. 1,000 is the minimum relay rate; a node that
+does not answer gets it, which only risks a slower confirmation. The estimate is
+refreshed with each order scan.
+
+The review says what the transaction pays and why, for example
+`Network fee: 0.00008 CKB (about 5000 shannons/KB; node suggested 47000, capped at 5000)`.
+
+Pool transactions keep the pool manifest's fixed policy (1,000 shannons/KB, at most
+0.0001 CKB). The solver and live scripts use 1,000.
+
+Tests: `sdk/test/frontend-fees.test.ts` (bounds, failing node, review line);
+browser tests with the mock node suggesting 47,000 (review shows the cap and a
+rate of 4,000–5,000) and 10 (raised to the minimum).

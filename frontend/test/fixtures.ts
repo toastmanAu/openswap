@@ -20,6 +20,8 @@ export const test=base.extend({page:async({page,baseURL},use)=>{
     case 'get_header_by_number':case 'get_tip_header':result=header;break;
     case 'get_indexer_tip':result={block_number:'0x0',block_hash:deployment.genesisHash};break;
     case 'get_cells':case 'get_transactions':result={objects:[],last_cursor:'0x'};break;
+    // Order scans read the node's fee estimate (frontend/src/fees.ts); answer with the minimum rate.
+    case 'get_fee_rate_statistics':result={mean:'0x3e8',median:'0x3e8'};break;
     // Real CKB nodes (checked on both testnet endpoints, 2026-10-22) answer an unknown hash this way, not with null.
     case 'get_transaction':result={transaction:null,tx_status:{status:'unknown',block_hash:null,block_number:null,tx_index:null,reason:null},cycles:null,fee:null,min_replace_fee:null,time_added_to_pool:null};break;
     default:unexpected.push(`${url.origin}: ${body.method}`);return route.abort();
