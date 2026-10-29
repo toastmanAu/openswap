@@ -195,7 +195,7 @@ Example (UDT → CKB): sell 10,000 TEST for 1,000 CKB, min fill 1,000 TEST.
 | 3. SDK | Done (offline). `sdk/src/v2/`: create sizing (`planCreateV2`), decode/parse, fill planning (`planFillV2`, `partialRange`; every plan is checked against the model, and cells are built at exact capacity because CCC silently raises too-small capacities), builders for create, fill (partial v2 plus whole v1 lots in one transaction), expiry return (`since` = expiry) and cancel, `scanV2`, and `quoteMixed` over v1 and v2 with expiry margin. 8 builder/planner tests; VM replay of SDK-planned chains (`npm run campaign -- lock-v2-sdk`; 1,200 chains, 2,658 transactions, 1,458 partial fills verified at seed 29) |
 | 4. Solver | Done (offline). `matchV2`/`matchPair` (pairwise, partial legs, expiry margin by chain time), `ReferenceSolverV2` on the shared journaled settlement loop, keeper `returnExpired` (900 s after expiry by tip time). 6 solver tests; 60 matcher-built pairs replayed on the binary |
 | 5. Frontend | Done (offline). Gated on a served v2 manifest; create form (partial fills, min fill, good until), mixed quotes and partial fills, rows with remaining/minimum/expiry, Return to owner, v2 cancel. 3 browser tests (28 total) |
-| 6. Testnet | In progress. Deployed (user approved) 2026-10-29: tx `0xf2d18570…8457`, block 22,898,419, code cell under the always-fail lock, 30,041 tCKB from the split-maker test key; verified on both endpoints (`deployments/testnet-v2.json`, `scripts/lock-v2-deploy.ts`). Local-key live run (`scripts/lock-v2-live.ts`, `deployments/lock-v2-live.json`), every step model-checked on both endpoints: see below. Pages deploy `0754cabe` (source `e1f617c`) ships the v2 manifest; served files match the release on toastdex.org, toastdex.pages.dev and the deployment URL; 28 browser tests pass on both. JoyID partial fill on toastdex.org verified (below). Next: campaigns |
+| 6. Testnet | In progress. Deployed (user approved) 2026-10-29: tx `0xf2d18570…8457`, block 22,898,419, code cell under the always-fail lock, 30,041 tCKB from the split-maker test key; verified on both endpoints (`deployments/testnet-v2.json`, `scripts/lock-v2-deploy.ts`). Local-key live run (`scripts/lock-v2-live.ts`, `deployments/lock-v2-live.json`), every step model-checked on both endpoints: see below. Pages deploy `0754cabe` (source `e1f617c`) ships the v2 manifest; served files match the release on toastdex.org, toastdex.pages.dev and the deployment URL; 28 browser tests pass on both. JoyID partial fill on toastdex.org verified, and the live campaign passed (below). Step 6 done |
 
 ### Live run with local keys (2026-10-29)
 
@@ -241,3 +241,39 @@ Commands: `make lock-v2-test`; `npx tsx --test sdk/test/v2.test.ts`.
 3. No keeper tip for now?
 4. Should the app create only v2 orders after deployment, while still filling
    and cancelling v1?
+
+## Live campaign (2026-10-29)
+
+`scripts/lock-v2-campaign.ts --execute --rounds=6` (seed 61; resumable journal
+[lock-v2-campaign.json](../../deployments/lock-v2-campaign.json)). Maker: split-maker
+key. Takers: A (contention key) and B (solver key), funded by the maker with 2,000
+CKB and 20,000 TEST2 each. 27 transactions, blocks 22,899,517–22,899,678, every
+one committed and checked on both endpoints (fills against the reference model,
+returns byte for byte with `since` = expiry). Total fees 0.00028031 CKB (fee rate
+1,000 shannons/KB).
+
+- **Races (6 rounds, alternately selling 3,000 TEST2 for 285 CKB and offering
+  600 CKB for 7,000 TEST2).** Both takers built random partial fills of the same
+  order cell and sent them at once to different endpoints. Both nodes accepted
+  their transaction every time, and exactly one committed every time (A won 2, B
+  won 4; 14–25 s to commit). The loser's transaction never appeared on either
+  endpoint. The loser then rebuilt on the remainder and the order was filled to
+  completion: 14 fills, 8 of them partial, all accepted by the model.
+- **Solver.** Two crossing v2 orders from different owners (maker sells 1,000
+  TEST3 at 2.0 CKB; taker A offers 1,000 CKB for 450 TEST3). `ReferenceSolverV2`
+  run by taker B matched them, filling A's order completely and the maker's
+  partly (450 TEST3, remainder 550 TEST3 live), in one journaled transaction
+  `0x643a1655…68c9`. The solver kept the 100 CKB spread.
+- **Soft expiry.** Three orders expiring 3 minutes after creation. After expiry,
+  taker A filled one at the maker's price with `allowExpired` (`0xdceb4fa9…7d5b`),
+  as the design allows until an order is returned. 900 s after expiry by tip time,
+  taker B returned the other two to the maker in one transaction
+  (`0x0a684a2a…bafe`), each input carrying `since` = expiry.
+
+Harness issues found and fixed during the run (no lock or SDK change): CCC's
+client cache keeps the outputs of transactions it sent, so after a lost race the
+loser's change, and across the two endpoint clients a spent remainder, looked
+live. The campaign clears both caches after each race and fill, and confirms
+order cells with `getCellLiveNoCache`. In each case `submit` or `fillOrdersV2`
+refused before signing. The SDK's liveness checks did their job; apps that use
+two clients for one wallet should do the same.

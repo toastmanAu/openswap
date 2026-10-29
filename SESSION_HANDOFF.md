@@ -22,8 +22,12 @@ endpoints (`deployments/lock-v2-live.json`). Builds now ship the v2 manifest, bu
 toastdex.org has v2 since Pages deploy `0754cabe` (source `e1f617c`, verified).
 The user's JoyID partial fill on toastdex.org (tx `0xddf59ef8…5979`, 350 of 2,000
 TEST3 at 2 CKB) is verified (`deployments/lock-v2-joyid.json`); 1,650 TEST3 of
-that order stays live until about 2026-10-30 06:59 UTC. Next: campaigns against the
-live v2 deployment.
+that order stays live until about 2026-10-30 06:59 UTC. The live campaign
+(`scripts/lock-v2-campaign.ts`, `deployments/lock-v2-campaign.json`) passed: 27
+transactions, 6 two-taker races each with exactly one commit, 14 fills (8
+partial), a solver match with a partial leg, a fill after expiry and a two-order
+keeper return. Step 6 is done. Live leftovers: 1,650 TEST3 (JoyID test order) and
+550 TEST3 (solver match) remain on the book until they expire.
 
 ### Multi-hop routing and more pools (2026-10-29)
 

@@ -109,10 +109,12 @@ switch(step){
   const solverJournal=new FileSubmissionJournal(dir.pathname,{genesisHash:GENESIS,accountLockHash:takerLock.hash()});
   const keeper=new ReferenceSolverV2(context(taker),(event,details)=>console.log(event,ccc.stringify(details)),{journal:solverJournal,acceptOrder:o=>orderKey(o)===orderKey({outPoint:order.outPoint})});
   const preview=await keeper.returnExpired(false);
+  if(!preview)solverJournal.close();
   assert(preview,'Keeper found nothing to return');
+  if(!execute)solverJournal.close();
   summary={order:orderKey({outPoint:order.outPoint}),capacity:show(order.cellOutput.capacity)};
   built={tx:preview} as BuiltTransaction;
-  send=async()=>{const tx=await keeper.returnExpired(true);assert(tx,'Keeper did not send');return tx.hash();};
+  send=async()=>{try{const tx=await keeper.returnExpired(true);assert(tx,'Keeper did not send');return tx.hash();}finally{solverJournal.close();}};
   break;
  }
 }
