@@ -3,7 +3,7 @@ import {setup,b,owner} from './fixture.js';import {createOrder,CKB,udt} from '..
 import {capacityReview} from '../../frontend/src/review.js';import {explainError} from '../../frontend/src/errors.js';
 test('review separates order capacity from fee and wallet debit',async()=>{
  const f=setup();f.fund();const built=await createOrder(f.context,{offerAsset:CKB,askAsset:udt(b),lots:[{offerAmount:100000000n,askAmount:10n}]});
- const result=await capacityReview(built.tx,f.client,[owner],f.context.deployment);
+ const result=await capacityReview(built.tx,f.client,[owner],[f.context.deployment]);
  assert.equal(result.orderLocked,built.tx.outputs[0]!.capacity);assert.equal(result.orderReleased,0n);assert.equal(result.tokenReserveChange,0n);
  assert.equal(result.walletChange,-result.orderLocked-await built.tx.getFee(f.client));
 });

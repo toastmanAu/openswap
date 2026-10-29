@@ -425,3 +425,26 @@ needs no special handling. Network failures still throw.
 Tests: `frontend/test/pools.spec.ts`, offline cases. They build a real SDK
 genesis, serve it from a mocked node, and sign with a fixed-placeholder mock JoyID
 signer. No signature is cryptographically valid and nothing touches a network.
+
+### Order lock v2 in the app (2026-10-29, offline)
+
+Enabled only when the build ships `order-v2-manifest.json`, copied from a recorded
+`deployments/testnet-v2.json`. Without it (today, and on toastdex.org) the app is
+unchanged and v1-only. With it:
+
+- **Placing orders** creates v2 orders. "Partial fills and expiry" sets up to N
+  partial fills, an optional minimum fill (default 10% of each order) and "Good
+  until" (about 1 hour to 30 days). The review spells out what each means,
+  including that expiry lets anyone return the order and that it can still be
+  filled at the maker's price until then. For CKB offers it notes the CKB kept
+  as payment-cell storage per partial fill.
+- **Swaps** quote v1 lots and v2 orders together (`quoteMixed`, and the v1
+  whole-lot search, whichever is cheaper) and build with `fillOrdersV2`. The
+  builder re-plans every leg from live cells; the app refuses if that differs
+  from the quote. Split routes with a pool still use v1 lots only.
+- **Rows** show what is left of each order, its partial-fill minimum and expiry.
+  Expired orders are not routed; 15 minutes after expiry (by chain time) anyone
+  can press **Return to owner**, paying only the network fee.
+- Browser tests: partial fill quoted, reviewed and sent once with the remainder
+  checked; expired order skipped and returned with `since` set; v2 order
+  created with partial fills and expiry, its args decoded.

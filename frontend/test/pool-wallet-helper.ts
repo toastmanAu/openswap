@@ -2,7 +2,8 @@
 // no WebAuthn, and its "signature" is a fixed placeholder no node would accept.
 import {ccc} from '@ckb-ccc/core';
 type Mode='ok'|'refuse'|'hang';
-const state=globalThis as unknown as {poolSignMode:Mode;poolSignCalls:number;poolHangRelease?:()=>void};
+/** orderFunding: let order-book builders fund from the mocked node (off by default). */
+const state=globalThis as unknown as {poolSignMode:Mode;poolSignCalls:number;poolHangRelease?:()=>void;orderFunding?:boolean};
 export function installJoyId(lockJson:string,publicKey:string){
  const connector=document.querySelector('ccc-connector') as HTMLElement&{client:ccc.Client};
  const lock=ccc.Script.from(JSON.parse(lockJson));
@@ -16,7 +17,10 @@ export function installJoyId(lockJson:string,publicKey:string){
   async getAddressObjs(){return [ccc.Address.fromScript(lock,connector.client)];}
   async getInternalAddress(){return ccc.Address.fromScript(lock,connector.client).toString();}
   async getBalance(){return 0n;}
-  async *findCells(){/* Order-tab balances are not part of the pool fixture. */}
+  async *findCells(...args:Parameters<ccc.Signer['findCells']>){
+   // Order-tab balances are not part of the pool fixture unless a test opts in.
+   if(state.orderFunding)yield* super.findCells(...args);
+  }
   // This bundle has its own CCC copy; rebuilding via its Transaction.from would
   // alter the app's input caches, so operate on the app's own instance.
   async prepareTransaction(input:ccc.TransactionLike){return (input as ccc.Transaction).clone();}
@@ -26,6 +30,7 @@ export function installJoyId(lockJson:string,publicKey:string){
    if(state.poolSignMode==='hang')await new Promise<void>(resolve=>{state.poolHangRelease=resolve;});
    const tx=(input as ccc.Transaction).clone();
    const index=tx.witnesses.findIndex(w=>{try{return ccc.bytesFrom(ccc.WitnessArgs.fromBytes(w).lock??'0x').length===1000;}catch{return false;}});
+   if(index<0)return tx; // order-book builders reserve no JoyID placeholder in this mock
    const args=ccc.WitnessArgs.fromBytes(tx.witnesses[index]!);args.lock=ccc.hexFrom(new Uint8Array(100).fill(9));
    tx.witnesses[index]=ccc.hexFrom(args.toBytes());return tx;
   }

@@ -7,6 +7,7 @@ import {writeLE} from '../../sdk/src/codec.js';
 import {estimateCapacity} from '../../sdk/src/capacity.js';
 import {CKB,udt} from '../../sdk/src/types.js';
 import {buildCreate,XUDT_CODE_HASH} from '../../pool-sdk/src/index.js';
+import {planCreateV2,expiryAt,decodeTermsV2,type CreateLotV2} from '../../sdk/src/v2/index.js';
 
 // Offline fixture only: a real SDK-built genesis served by a mocked node, and a
 // mock JoyID signer. Nothing here is a live deployment, OutPoint or credential.
@@ -34,7 +35,15 @@ function orderLots(sizes:[bigint,bigint][]){
  return sizes.map(([offer,ask],i)=>{const c=estimateCapacity(d,{ownerLock:creator,nonce:new Uint8Array(16).fill(i+1),askAsset:CKB,askAmount:ask},udt(token),offer).cell;
   return ccc.Cell.from({outPoint:{txHash:hash(60+i),index:0n},cellOutput:c.cellOutput,outputData:c.outputData});});
 }
-function chain(tokenMeta:TokenMeta='match',lots:ccc.Cell[]=[],twoPools=false){
+/** Order lock v2 test deployment: no binary is served; the app never runs the lock. */
+const v2Deployment={network:'testnet' as const,genesisHash,codeHash:'0x71027f76a5667e2b7c3294164e3171e582f4ffb17eea445a534b257bba5b3ede' as ccc.Hex,hashType:'data1' as const,cellDep:{outPoint:{txHash:hash(78),index:'0x0'},depType:'code' as const}};
+const UNIT=100_000_000n,TIP_TIME=1_800_000_000n;
+/** v2 orders offering TEST for CKB, owned by the pool creator. */
+function v2Orders(specs:(CreateLotV2&{expiry?:bigint})[]){
+ return specs.map((spec,i)=>{const c=planCreateV2(v2Deployment,{ownerLock:creator,nonce:new Uint8Array(16).fill(i+1),askAsset:CKB,expiry:spec.expiry??0n},udt(token),spec).cell;
+  return ccc.Cell.from({outPoint:{txHash:hash(90+i),index:0n},cellOutput:c.cellOutput,outputData:c.outputData});});
+}
+function chain(tokenMeta:TokenMeta='match',lots:ccc.Cell[]=[],twoPools=false,v2Cells:ccc.Cell[]=[]){
  const cell=(point:{txHash:ccc.Hex;index:bigint},lock:ccc.Script,capacity:bigint,data:ccc.Hex='0x',type?:ccc.Script)=>ccc.Cell.from({outPoint:point,cellOutput:{capacity,lock,type},outputData:data});
  const request={parameters:{feeBps:30n,lockedShares:1000n,backing:{state:34_000_000_000n,ckb:8_000_000_000n,token:16_000_000_000n}},x:10n**12n,y:4n*10n**12n,minShares:1n,tokenOwner:hash(7)};
  const creatorFunding=[cell({txHash:hash(20),index:0n},creator,20_000_000_000n,ccc.hexFrom(writeLE(request.y,16)),token),cell({txHash:hash(21),index:0n},creator,2n*10n**12n)];
@@ -56,7 +65,7 @@ function chain(tokenMeta:TokenMeta='match',lots:ccc.Cell[]=[],twoPools=false){
   cell({txHash:hash(32),index:0n},otherJoyLock,10n**13n),
   // The trader also holds 1,000,000 LP shares of this pool.
   cell({txHash:hash(33),index:0n},joyLock,20_000_000_000n,ccc.hexFrom(writeLE(1_000_000n,16)),lp),
-  ...lots,
+  ...lots,...v2Cells,
   ...(lots.length?[cell({txHash:orderDeployment.cellDep.outPoint.txHash,index:BigInt(orderDeployment.cellDep.outPoint.index)},creator,10n**12n,ccc.hexFrom(readFileSync(orderBinary)))]:[]),
  ];
  const manifest={version:1,network:'testnet',
@@ -88,10 +97,11 @@ function matches(c:ccc.Cell,search:any){
  if(f.script){const t=c.cellOutput.type;if(!t||t.codeHash!==f.script.code_hash||t.hashType!==f.script.hash_type||t.args!==f.script.args)return false;}
  return true;
 }
-interface Mock {sent:string[];journalAtSend:string[];send:'ok'|'abort';committedAt?:bigint;tip:bigint}
-async function mockPools(page:Page,options:{manifest?:boolean;token?:TokenMeta;lots?:ccc.Cell[];twoPools?:boolean}={}):Promise<Mock>{
- const {cells,manifest,parents}=chain(options.token,options.lots,options.twoPools),live=new Map(cells.map(c=>[`${c.outPoint.txHash}:${c.outPoint.index}`,c]));
- const mock:Mock={sent:[],journalAtSend:[],send:'ok',tip:100n},pool=new Map<string,unknown>();
+interface Mock {sent:string[];journalAtSend:string[];send:'ok'|'abort';committedAt?:bigint;tip:bigint;tipTime:bigint}
+async function mockPools(page:Page,options:{manifest?:boolean;token?:TokenMeta;lots?:ccc.Cell[];twoPools?:boolean;v2Orders?:ccc.Cell[]}={}):Promise<Mock>{
+ const {cells,manifest,parents}=chain(options.token,options.lots,options.twoPools,options.v2Orders),live=new Map(cells.map(c=>[`${c.outPoint.txHash}:${c.outPoint.index}`,c]));
+ const mock:Mock={sent:[],journalAtSend:[],send:'ok',tip:100n,tipTime:TIP_TIME},pool=new Map<string,unknown>();
+ if(options.v2Orders)await page.route('**/order-v2-manifest.json',route=>route.fulfill({json:v2Deployment}));
  if(options.manifest!==false)await page.route('**/pool-manifest.json',route=>route.fulfill({json:manifest}));
  await page.route('https://testnet.ckb.dev/**',async route=>{
   const body=route.request().postDataJSON();let result:unknown;
@@ -112,8 +122,10 @@ async function mockPools(page:Page,options:{manifest?:boolean;token?:TokenMeta;l
     else if(parent)result={transaction:JsonRpcTransformers.transactionFrom(parent),tx_status:{status:'committed',block_hash:hash(40),block_number:'0x1',reason:null},cycles:null,time_added_to_pool:null,fee:null,min_replace_fee:null};
     else return route.fallback();
     break;}
+   // Order-book builders ask the node for a fee rate; pool builders use a fixed one.
+   case 'get_fee_rate_statistics':result={mean:'0x3e8',median:'0x3e8'};break;
    case 'get_tip_header':
-    result={compact_target:'0x1d08a2a4',dao:`0x${'00'.repeat(32)}`,epoch:'0x0',extra_hash:hash(42),hash:hash(43),nonce:'0x0',number:ccc.numToHex(mock.tip),parent_hash:hash(44),proposals_hash:hash(45),timestamp:'0x0',transactions_root:hash(46),version:'0x0'};break;
+    result={compact_target:'0x1d08a2a4',dao:`0x${'00'.repeat(32)}`,epoch:'0x0',extra_hash:hash(42),hash:hash(43),nonce:'0x0',number:ccc.numToHex(mock.tip),parent_hash:hash(44),proposals_hash:hash(45),timestamp:ccc.numToHex(mock.tipTime*1000n),transactions_root:hash(46),version:'0x0'};break;
    default:return route.fallback();
   }
   await route.fulfill({json:{jsonrpc:'2.0',id:body.id,result}});
@@ -416,4 +428,79 @@ test('the browser journal refuses to continue after another tab writes it',async
  await page.evaluate(()=>{for(const k of Object.keys(localStorage).filter(k=>k.startsWith('toastdex-pool-journal:')&&!k.endsWith(':archive'))){const v=JSON.parse(localStorage.getItem(k)!);v.revision++;localStorage.setItem(k,JSON.stringify(v));}});
  await page.getByRole('button',{name:'Recheck'}).click();
  await expect(page.locator('#status')).toContainText('changed in another tab');
+});
+
+test('v2: part of an order is quoted, reviewed and sent once, leaving the rest listed',async({page})=>{
+ // 10,000 TEST for 1,000 CKB (0.1 CKB each, cheaper than the pool), partial from 100 TEST.
+ const [order]=v2Orders([{offerAmount:10_000n*UNIT,askAmount:1000n*UNIT,minFill:100n*UNIT,partialFills:4}]);
+ const mock=await mockPools(page,{v2Orders:[order!]});
+ await page.goto('/');await expect(page.locator('#scan-status')).toContainText('1 supported live orders',{timeout:35000});
+ await expect(page.locator('#available-orders')).toContainText('Order: pay 1000 CKB → receive 10000 TEST · partial from 100 TEST');
+ await page.getByRole('button',{name:'Trade this pair'}).click();
+ await page.locator('#swap-output').fill('500');
+ const status=page.locator('#quote-status');
+ await expect(status).toContainText('Best route: order book, taking part of an order. Receive 500 TEST for 50 CKB');
+ await expect(status).toContainText('(1 order, 1 partly filled)');
+ await expect(page.locator('#available-note')).toContainText('1 order-book order (fixed price, some can fill partly)');
+ await page.locator('#view-swap').screenshot({path:'frontend/test-results/v2-partial-quote.png'});
+ await connect(page);await page.evaluate(()=>{(globalThis as any).orderFunding=true;});
+ await page.locator('#swap-output').fill('500');await page.getByRole('button',{name:'Review swap'}).click();
+ await expect(page.locator('#review')).toBeVisible({timeout:30000});
+ for(const line of ['Order-book swap','You receive: 500 TEST','You pay: 50 CKB','Partly filled: 1. The rest of that order stays listed at the maker\'s price.'])await expect(page.locator('#review-text')).toContainText(line);
+ expect(mock.sent).toEqual([]);
+ await page.getByRole('button',{name:'Sign and submit'}).click();
+ await expect(page.locator('#status')).toContainText('Submitted');expect(mock.sent).toHaveLength(1);
+ const sent=ccc.Transaction.fromBytes(mock.sent[0]!);
+ expect(sent.inputs[0]!.previousOutput.eq(order!.outPoint)).toBe(true);
+ // The maker is paid 50 CKB at the order's index; the remainder keeps the identical lock.
+ expect(sent.outputs[0]!.lock.eq(creator)).toBe(true);expect(sent.outputs[0]!.capacity).toBe(50n*UNIT);
+ expect(sent.outputs[1]!.lock.eq(order!.cellOutput.lock)).toBe(true);
+ expect(sent.outputsData[1]).toBe(ccc.hexFrom(writeLE(9_500n*UNIT,16)));
+ expect(sent.cellDeps.some(d=>d.outPoint.txHash===hash(78))).toBe(true);
+});
+
+test('v2: expired orders are not routed, and anyone can return one to its owner',async({page})=>{
+ const expiry=expiryAt(TIP_TIME-2000n);
+ const [order]=v2Orders([{offerAmount:10_000n*UNIT,askAmount:1000n*UNIT,minFill:100n*UNIT,partialFills:4,expiry}]);
+ const mock=await mockPools(page,{v2Orders:[order!]});
+ await page.goto('/');await expect(page.locator('#scan-status')).toContainText('1 supported live orders',{timeout:35000});
+ await expect(page.locator('#available-orders')).toContainText('· expired');
+ await page.getByRole('button',{name:'Trade this pair'}).click();await page.locator('#swap-output').fill('500');
+ await expect(page.locator('#quote-status')).toContainText('Best route: pool');
+ await expect(page.locator('#quote-status')).toContainText('Order book: Not enough liquidity for this amount');
+ await connect(page);await page.evaluate(()=>{(globalThis as any).orderFunding=true;});
+ await page.getByRole('button',{name:'Return to owner'}).click();
+ await expect(page.locator('#review')).toBeVisible({timeout:30000});
+ await expect(page.locator('#review-text')).toContainText('Return expired order');
+ await expect(page.locator('#review-text')).toContainText('You pay only the network fee');
+ await page.getByRole('button',{name:'Sign and submit'}).click();
+ await expect(page.locator('#status')).toContainText('Submitted');expect(mock.sent).toHaveLength(1);
+ const sent=ccc.Transaction.fromBytes(mock.sent[0]!);
+ expect(sent.inputs[0]!.since).toBe(expiry);
+ expect(sent.outputs[0]!.lock.eq(creator)).toBe(true);expect(sent.outputsData[0]).toBe(order!.outputData);
+ expect(sent.outputs[0]!.capacity).toBe(order!.cellOutput.capacity);
+});
+
+test('v2: placing an order with partial fills and expiry discloses both and creates a v2 cell',async({page})=>{
+ const mock=await mockPools(page,{v2Orders:[]});
+ await page.goto('/');await expect(page.locator('#scan-status')).toContainText('supported live orders',{timeout:35000});
+ await page.getByRole('button',{name:'Trade this pair'}).click();
+ await connect(page);await page.evaluate(()=>{(globalThis as any).orderFunding=true;});
+ await page.getByRole('button',{name:'Orders',exact:true}).click();
+ await page.locator('#offer').fill('1000');await page.locator('#ask').fill('100');
+ await page.locator('summary',{hasText:'Partial fills and expiry'}).click();
+ await page.locator('#partial-fills').selectOption('4');await page.locator('#min-fill').fill('100');await page.locator('#order-expiry').selectOption('86400');
+ await expect(page.locator('#order-estimate')).toContainText('It includes storage for up to 4 partial-fill payment cells');
+ await page.locator('#view-orders').screenshot({path:'frontend/test-results/v2-order-form.png'});
+ await page.getByRole('button',{name:'Review order'}).click();
+ await expect(page.locator('#review')).toBeVisible({timeout:30000});
+ const review=page.locator('#review-text');
+ for(const line of ['Create 1 order (order lock v2).','Offer: 1000 TEST','Total ask: 100 CKB','Partial fills: up to 4 per order, each at least 100 TEST','Good until: about','anyone can return the order to you unchanged','it can still be filled at your price'])await expect(review).toContainText(line);
+ await page.getByRole('button',{name:'Sign and submit'}).click();
+ await expect(page.locator('#status')).toContainText('Submitted');expect(mock.sent).toHaveLength(1);
+ const out=ccc.Transaction.fromBytes(mock.sent[0]!).outputs[0]!;
+ expect(out.lock.codeHash).toBe(v2Deployment.codeHash);expect(out.type?.hash()).toBe(token.hash());
+ const terms=decodeTermsV2(out.lock.args);
+ expect(terms.minFill).toBe(100n*UNIT);expect(terms.offerAmount).toBe(1000n*UNIT);expect(terms.askAmount).toBe(100n*UNIT);
+ expect(terms.expiry>>56n).toBe(0x40n);expect(terms.ownerLock.eq(joyLock)).toBe(true);
 });

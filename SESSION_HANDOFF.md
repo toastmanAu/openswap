@@ -13,8 +13,10 @@ Steps 1–2 (spec, TS model, vectors, contract, VM tests) are done offline and
 pushed. The v1 binary still matches the deployment. Step 3 (SDK) is done offline:
 planners, builders, discovery, mixed v1/v2 quotes, and a VM replay campaign of
 SDK-planned chains (`lock-v2-sdk`). Step 4 (solver) is done offline:
-`ReferenceSolverV2` with partial pair matching and an expiry keeper. Next: step 5
-(frontend), then step 6 (testnet, needs approval).
+`ReferenceSolverV2` with partial pair matching and an expiry keeper. Step 5
+(frontend) is done offline, gated on `deployments/testnet-v2.json`, which does not
+exist yet, so toastdex.org stays v1-only. Next: step 6, testnet deployment of the
+v2 lock (needs user approval), then live runs and a Pages deploy.
 Testnet deployment of v2 needs user approval.
 
 ### Multi-hop routing and more pools (2026-10-29)
