@@ -179,9 +179,12 @@ function v2Lots(offer:swap.AssetId,plan:{offers:bigint[];asks:bigint[]}){
  const wanted=minFillText?parseUnits(minFillText,decimals(offer)):0n;
  return plan.offers.map((offerAmount,i)=>{const fallback=offerAmount/10n||1n;const minFill=partialFills===0?offerAmount:wanted>0n?(wanted<offerAmount?wanted:offerAmount):fallback;return{offerAmount,askAmount:plan.asks[i]!,minFill,partialFills};});
 }
-function v2Disclosure(offer:swap.AssetId,ask:swap.AssetId,lots:{minFill:bigint;partialFills:number;offerAmount:bigint}[],expiry:bigint){
+function v2Disclosure(offer:swap.AssetId,ask:swap.AssetId,lots:{minFill:bigint;partialFills:number;offerAmount:bigint}[],expiry:bigint,planned:ReturnType<typeof swap.planCreateV2>[]){
  const lines:string[]=[];const lot=lots[0]!;
  lines.push(lot.partialFills===0?'Partial fills: no, each order fills completely':`Partial fills: up to ${lot.partialFills} per order, each at least ${amount(lot.minFill,offer)} and never leaving less than that. Each fill pays you at your price.`);
+ if(lot.partialFills>0){const ranges=planned.map(p=>swap.plannedPartialRange(v2!,p,offer));const first=ranges[0];
+  if(ranges.some(r=>!r))lines.push(`Too small to fill partly: ${ranges.every(r=>!r)?'these orders':'some of these orders'} can only fill completely, because each remainder must keep enough ${offer.kind==='ckb'?'CKB to store the order itself':'capacity for its payment cells'}. Offer more per order, use fewer orders, or lower the minimum fill.`);
+  else if(first)lines.push(`A partial fill of the first order can take ${amount(first.min,offer)} to ${amount(first.max,offer)}.`);}
  if(lot.partialFills>0&&offer.kind==='ckb')lines.push(`Each partial fill keeps about ${formatUnits(swap.paymentMinimum({ownerLock:owner!,askAsset:ask}),8)} CKB of your offer as storage for the ${label(ask)} it pays you. That CKB stays yours, so slightly less CKB is sold in total.`);
  const at=swap.expirySeconds(expiry);
  lines.push(at===undefined?'Good until: filled or cancelled':`Good until: about ${aboutTime(at)}. After that, anyone can return the order to you unchanged. Until someone does, it can still be filled at your price.`);
@@ -310,7 +313,7 @@ el('create').onsubmit=e=>{e.preventDefault();run(async()=>{
   const {expiry}=v2Options(),lots=v2Lots(offer,plan);
   const built=await swap.createOrdersV2(v2Context(),{offerAsset:offer,askAsset:ask,expiry,lots});
   if(start!==generation)throw new Error('Wallet or market changed; prepare again');
-  await prepare(built,`Create ${plan.count} order${plan.count===1?'':'s'} (order lock v2).\nOffer: ${amount(offered,offer)}\nTotal ask: ${amount(plan.totalAsk,ask)}\nRounding premium: ${amount(plan.roundingPremium,ask)}\n${v2Disclosure(offer,ask,lots,expiry)}\nOrder capacity: ${ccc.fixedPointToString(built.tx.outputs.slice(0,plan.count).reduce((n,o)=>n+o.capacity,0n))} CKB`);
+  await prepare(built,`Create ${plan.count} order${plan.count===1?'':'s'} (order lock v2).\nOffer: ${amount(offered,offer)}\nTotal ask: ${amount(plan.totalAsk,ask)}\nRounding premium: ${amount(plan.roundingPremium,ask)}\n${v2Disclosure(offer,ask,lots,expiry,built.lots)}\nOrder capacity: ${ccc.fixedPointToString(built.tx.outputs.slice(0,plan.count).reduce((n,o)=>n+o.capacity,0n))} CKB`);
   return;
  }
  const built=await swap.createOrder(ctx,{offerAsset:offer,askAsset:ask,lots:plan.offers.map((offerAmount,i)=>({offerAmount,askAmount:plan.asks[i]!}))});

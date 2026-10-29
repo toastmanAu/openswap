@@ -9,6 +9,9 @@ export const test=base.extend({page:async({page,baseURL},use)=>{
  const unexpected:string[]=[],app=baseURL?new URL(baseURL).origin:undefined;
  await page.route('**/*',async route=>{
   const request=route.request(),url=new URL(request.url());
+  // Order lock v2 is opt-in per test (pools.spec.ts serves its own manifest), so the
+  // existing v1 scenarios behave the same whether or not the build ships one.
+  if(url.pathname.endsWith('/order-v2-manifest.json'))return route.fulfill({status:404,body:''});
   // The app under test: the local server, or a deployment named by TOASTDEX_BASE_URL.
   if(url.hostname==='127.0.0.1'||url.hostname==='localhost'||url.origin===app)return route.continue();
   if(url.hostname==='testnet.ckb.dev'&&request.method()==='POST'){

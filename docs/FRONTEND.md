@@ -437,7 +437,11 @@ unchanged and v1-only. With it:
   until" (about 1 hour to 30 days). The review spells out what each means,
   including that expiry lets anyone return the order and that it can still be
   filled at the maker's price until then. For CKB offers it notes the CKB kept
-  as payment-cell storage per partial fill.
+  as payment-cell storage per partial fill. It shows the range a partial fill of
+  the first order can take (`plannedPartialRange`), or warns that the orders are
+  too small to fill partly. A CKB offer's remainder must keep the order cell's own
+  storage (about 287 CKB with a secp256k1 owner and a TEST ask), so small CKB
+  orders can only fill completely.
 - **Swaps** quote v1 lots and v2 orders together (`quoteMixed`, and the v1
   whole-lot search, whichever is cheaper) and build with `fillOrdersV2`. The
   builder re-plans every leg from live cells; the app refuses if that differs
@@ -447,4 +451,6 @@ unchanged and v1-only. With it:
   can press **Return to owner**, paying only the network fee.
 - Browser tests: partial fill quoted, reviewed and sent once with the remainder
   checked; expired order skipped and returned with `since` set; v2 order
-  created with partial fills and expiry, its args decoded.
+  created with partial fills and expiry, its args decoded. The shared fixture
+  answers `order-v2-manifest.json` with 404, so every other scenario stays v1-only
+  whether or not the build ships a manifest.

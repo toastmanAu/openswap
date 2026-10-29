@@ -153,6 +153,15 @@ export function partialRange(order: OpenSwapOrderV2): { min: bigint; max: bigint
   return { min, max };
 }
 
+/** Partial-take range a newly planned order (from planCreateV2) will have once live,
+ * or undefined if it can only fill completely. */
+export function plannedPartialRange(deployment: Deployment, created: ReturnType<typeof planCreateV2>, offerAsset: AssetId): { min: bigint; max: bigint } | undefined {
+  if (created.terms.minFill === created.terms.offerAmount) return undefined;
+  const cell = ccc.Cell.from({ outPoint: { txHash: `0x${'00'.repeat(32)}`, index: 0 }, cellOutput: created.cell.cellOutput, outputData: created.cell.outputData });
+  const available = offerAsset.kind === 'ckb' ? created.capacity - created.terms.capacityRefund : created.terms.offerAmount;
+  return partialRange({ ...created.terms, version: 2, outPoint: cell.outPoint, lock: cell.cellOutput.lock, cell, offerAsset, available, supported: true, genesisHash: deployment.genesisHash });
+}
+
 /** Payment and remainder for taking `take` offer units (`take == available` is the final fill). */
 export function planFillV2(order: OpenSwapOrderV2, take: bigint): PlannedFill {
   if (!order.supported) throw new Error(order.supportReason ?? 'Unsupported order');

@@ -14,10 +14,13 @@ pushed. The v1 binary still matches the deployment. Step 3 (SDK) is done offline
 planners, builders, discovery, mixed v1/v2 quotes, and a VM replay campaign of
 SDK-planned chains (`lock-v2-sdk`). Step 4 (solver) is done offline:
 `ReferenceSolverV2` with partial pair matching and an expiry keeper. Step 5
-(frontend) is done offline, gated on `deployments/testnet-v2.json`, which does not
-exist yet, so toastdex.org stays v1-only. Next: step 6, testnet deployment of the
-v2 lock (needs user approval), then live runs and a Pages deploy.
-Testnet deployment of v2 needs user approval.
+(frontend) is done, gated on a served v2 manifest. Step 6: the v2 lock is
+deployed on testnet (user approved; tx `0xf2d18570…8457`, recorded in
+`deployments/testnet-v2.json`), and a local-key live run of create, partial fill,
+final fill, CKB-offer partial fill, cancel and keeper return passed on both
+endpoints (`deployments/lock-v2-live.json`). Builds now ship the v2 manifest, but
+toastdex.org is unchanged until the next Pages deploy (needs approval). Next: Pages
+deploy, a JoyID partial fill on toastdex.org, campaigns.
 
 ### Multi-hop routing and more pools (2026-10-29)
 

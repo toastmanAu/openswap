@@ -127,3 +127,22 @@ test('quote takes the cheapest orders, splits the last v2 order and skips near-e
   assert.equal(small.legs[0]!.take, 100n); assert.equal(small.overfill, 90n);
   assert.throws(() => sdk.quoteMixed([dear], { assetIn: sdk.udt(b), assetOut: sdk.udt(a), amountOut: 900n, maxAmountIn: 10n, genesisHash: deployment.genesisHash, nowSeconds: NOW }), /budget/);
 });
+
+test('plannedPartialRange matches the live order and flags orders too small to fill partly', async () => {
+  const f = setup();
+  for (const [offer, ask, lot] of [
+    [sdk.CKB, sdk.udt(b), { offerAmount: 400n * CKB, askAmount: 1000n, minFill: 100n * CKB, partialFills: 2 }],
+    [sdk.udt(a), sdk.CKB, { offerAmount: 1000n, askAmount: 300n * CKB, minFill: 250n, partialFills: 2 }],
+    [sdk.udt(a), sdk.udt(b), { offerAmount: 1000n, askAmount: 500n, minFill: 100n, partialFills: 3 }],
+  ] as const) {
+    const planned = sdk.planCreateV2(v2, base(ask), offer, lot);
+    const live = sdk.partialRange(await parsed(f, f.add(planned.cell)));
+    assert.deepEqual(sdk.plannedPartialRange(v2, planned, offer), live);
+    assert.ok(live, 'these shapes can fill partly');
+  }
+  // The CKB remainder must keep the order cell's own storage, so the range is narrow.
+  const narrow = sdk.plannedPartialRange(v2, sdk.planCreateV2(v2, base(sdk.udt(b)), sdk.CKB, { offerAmount: 400n * CKB, askAmount: 1000n, minFill: 100n * CKB, partialFills: 2 }), sdk.CKB)!;
+  assert.ok(narrow.max < 150n * CKB);
+  assert.equal(sdk.plannedPartialRange(v2, sdk.planCreateV2(v2, base(sdk.udt(b)), sdk.CKB, { offerAmount: 300n * CKB, askAmount: 1000n, minFill: 100n * CKB, partialFills: 2 }), sdk.CKB), undefined);
+  assert.equal(sdk.plannedPartialRange(v2, sdk.planCreateV2(v2, base(sdk.CKB), sdk.udt(a), { offerAmount: 1000n, askAmount: 5n * CKB, minFill: 1n, partialFills: 0 }), sdk.udt(a)), undefined);
+});

@@ -1,7 +1,7 @@
 # Order lock v2: partial fills and expiry (DRAFT for review, 2026-10-29)
 
-Status (2026-10-29): design approved by the user with the defaults below. Build
-steps 1 and 2 are done offline; nothing is deployed. It reopens two frozen v0.1
+Status (2026-10-29): design approved by the user with the defaults below. Steps
+1–5 are done; the lock is deployed on testnet and passed a local-key live run. It reopens two frozen v0.1
 decisions in [DECISIONS.md](../../DECISIONS.md) ("full-fill lots only", "no
 expiry v0.1") for v2 only. v1 is unchanged and remains deployed.
 
@@ -195,7 +195,27 @@ Example (UDT → CKB): sell 10,000 TEST for 1,000 CKB, min fill 1,000 TEST.
 | 3. SDK | Done (offline). `sdk/src/v2/`: create sizing (`planCreateV2`), decode/parse, fill planning (`planFillV2`, `partialRange`; every plan is checked against the model, and cells are built at exact capacity because CCC silently raises too-small capacities), builders for create, fill (partial v2 plus whole v1 lots in one transaction), expiry return (`since` = expiry) and cancel, `scanV2`, and `quoteMixed` over v1 and v2 with expiry margin. 8 builder/planner tests; VM replay of SDK-planned chains (`npm run campaign -- lock-v2-sdk`; 1,200 chains, 2,658 transactions, 1,458 partial fills verified at seed 29) |
 | 4. Solver | Done (offline). `matchV2`/`matchPair` (pairwise, partial legs, expiry margin by chain time), `ReferenceSolverV2` on the shared journaled settlement loop, keeper `returnExpired` (900 s after expiry by tip time). 6 solver tests; 60 matcher-built pairs replayed on the binary |
 | 5. Frontend | Done (offline). Gated on a served v2 manifest; create form (partial fills, min fill, good until), mixed quotes and partial fills, rows with remaining/minimum/expiry, Return to owner, v2 cancel. 3 browser tests (28 total) |
-| 6. Testnet | Not started; needs approval |
+| 6. Testnet | In progress. Deployed (user approved) 2026-10-29: tx `0xf2d18570…8457`, block 22,898,419, code cell under the always-fail lock, 30,041 tCKB from the split-maker test key; verified on both endpoints (`deployments/testnet-v2.json`, `scripts/lock-v2-deploy.ts`). Local-key live run (`scripts/lock-v2-live.ts`, `deployments/lock-v2-live.json`), every step model-checked on both endpoints: see below. Next: JoyID partial fill on the app, campaigns, Pages deploy |
+
+### Live run with local keys (2026-10-29)
+
+Maker: split-maker test key. Taker and keeper: contention test key.
+
+| Step | Transaction | Block | Result |
+|---|---|---:|---|
+| createB | `0xd0fedac0…1a0f` | 22,898,443 | 100 TEST3 for 50 CKB, whole only, expiry about 2 min |
+| createA | `0x480fde09…0e6f` | 22,898,448 | 1,000 TEST2 for 300 CKB, min fill 250, up to 2 partial fills |
+| createC | `0x8cc2a431…f452` | 22,898,452 | 400 CKB for 1,000 TEST2, min fill 100 CKB |
+| fillA1 | `0xceec5c80…6f0e` | 22,898,456 | partial: took 400 TEST2, maker paid 120 CKB, remainder 600 TEST2 under identical args |
+| fillA2 | `0x07dba1cd…17df` | 22,898,463 | final: took 600 TEST2, maker paid 180 CKB plus the order capacity |
+| fillC1 | `0x4c4953c7…3a6e` | 22,898,469 | partial CKB offer: took 100 CKB, maker paid 250 TEST2 in a capacity_refund cell, remainder 300 CKB |
+| cancelC | `0xdb012842…3f74` | 22,898,473 | owner cancel of the partly filled remainder |
+| returnB | `0x1b4ebdd5…f0f0` | 22,898,564 | `ReferenceSolverV2.returnExpired` (journaled) returned B unchanged, input `since` = expiry |
+
+The planner refused a first `fillC1` take of 150 CKB before signing: a CKB-offer
+remainder must keep the order cell's own storage (~287 CKB here), so a 400 CKB
+order can only take 100–113 CKB partially. The create review now shows this range
+or warns that an order is too small to fill partly (`plannedPartialRange`).
 
 Commands: `make lock-v2-test`; `npx tsx --test sdk/test/v2.test.ts`.
 
