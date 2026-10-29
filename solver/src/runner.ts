@@ -1,14 +1,30 @@
 import { ccc } from '@ckb-ccc/core';
-import { defaultResolver, scan, fillOrders, submit, orderKey, type OpenSwapOrder, type BuildContext } from '@openswap/sdk';
+import { defaultResolver, scan, fillOrders, submit, orderKey, type OpenSwapOrder, type BuildContext, type BuiltTransaction } from '@openswap/sdk';
 import { match } from './matcher.js';
 import { recoverConflictedTransaction } from './recovery.js';
 import type {SubmissionJournal,SubmissionRecord} from './journal.js';
+/** A settlement chosen by a solver strategy: its built transaction and the order keys it consumes. */
+export interface Settlement { built: BuiltTransaction; orders: string[] }
 export class ReferenceSolver {
   private readonly pending = new Map<ccc.Hex, {orders:string[];tx:ccc.Transaction}>();
   private running = false;
-  constructor(private readonly context: BuildContext, private readonly emit: (event: string, details: unknown) => void = () => {}, private readonly options: { acceptOrder?: (order: OpenSwapOrder) => boolean; journal?:SubmissionJournal } = {}) {}
+  constructor(protected readonly context: BuildContext, protected readonly emit: (event: string, details: unknown) => void = () => {}, protected readonly options: { acceptOrder?: (order: OpenSwapOrder) => boolean; journal?:SubmissionJournal } = {}) {}
   /** One scan/build attempt. State is local and recoverable from live chain cells. */
   async tick(execute = false): Promise<ccc.Transaction | undefined> {
+    return this.settle(execute, reserved => this.plan(reserved));
+  }
+  /** v1 strategy: bounded reciprocal whole-lot bundles. */
+  protected async plan(reserved: Set<string>): Promise<Settlement | undefined> {
+    const client = this.context.signer.client;
+    const book = [];
+    for await (const order of scan(client, this.context.deployment, this.context.resolver ?? defaultResolver(client), {maxCells:10000})) if (!reserved.has(orderKey(order)) && (this.options.acceptOrder?.(order) ?? true)) book.push(order);
+    const bundle = match(book);
+    if (!bundle) return;
+    this.emit('candidate_bundle', { orders: bundle.orders.map(orderKey) });
+    return { built: await fillOrders(this.context, bundle.orders.map(o=>o.outPoint)), orders: bundle.orders.map(orderKey) };
+  }
+  /** Reconcile journaled submissions, plan one settlement, then (if executing) journal and send it once. */
+  protected async settle(execute: boolean, plan: (reserved: Set<string>) => Promise<Settlement | undefined>): Promise<ccc.Transaction | undefined> {
     if (this.running) throw new Error('Solver tick already running');
     this.running = true;
     try {
@@ -45,12 +61,9 @@ export class ReferenceSolver {
         this.emit(tx?.status === 'committed' ? 'settlement_committed' : 'settlement_conflict', { txHash: hash });
       }
       const reserved = new Set([...this.pending.values()].flatMap(p=>p.orders));
-      const book = [];
-      for await (const order of scan(client, this.context.deployment, this.context.resolver ?? defaultResolver(client), {maxCells:10000})) if (!reserved.has(orderKey(order)) && (this.options.acceptOrder?.(order) ?? true)) book.push(order);
-      const bundle = match(book);
-      if (!bundle) return;
-      this.emit('candidate_bundle', { orders: bundle.orders.map(orderKey) });
-      const built = await fillOrders(this.context, bundle.orders.map(o=>o.outPoint));
+      const settlement = await plan(reserved);
+      if (!settlement) return;
+      const {built} = settlement;
       built.assertLayout();
       const reservedInputs=new Set([...this.pending.values()].flatMap(p=>p.tx.inputs.map(i=>`${i.previousOutput.txHash}:${i.previousOutput.index}`)));
       if(built.tx.inputs.some(i=>reservedInputs.has(`${i.previousOutput.txHash}:${i.previousOutput.index}`)))throw new Error('Solver funding overlaps an unresolved submission');
@@ -59,7 +72,7 @@ export class ReferenceSolver {
         const hash = await submit(built, this.context.signer, {
           // Reserve before sending: a lost RPC reply does not mean rejection.
           beforeBroadcast: (hash,transaction) => {
-            const row:SubmissionRecord={hash,transaction,orders:bundle.orders.map(orderKey),status:'unknown',createdAt:Date.now()};
+            const row:SubmissionRecord={hash,transaction,orders:settlement.orders,status:'unknown',createdAt:Date.now()};
             journal!.put(row); // failure prevents send and later scans fail closed
             this.pending.set(hash,{orders:row.orders,tx:ccc.Transaction.fromBytes(transaction)});
           },

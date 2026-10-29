@@ -12,7 +12,9 @@ creation after deploy. Design and status: [ORDER_LOCK_V2](docs/research/ORDER_LO
 Steps 1–2 (spec, TS model, vectors, contract, VM tests) are done offline and
 pushed. The v1 binary still matches the deployment. Step 3 (SDK) is done offline:
 planners, builders, discovery, mixed v1/v2 quotes, and a VM replay campaign of
-SDK-planned chains (`lock-v2-sdk`). Next: step 4 (solver), then step 5 (frontend).
+SDK-planned chains (`lock-v2-sdk`). Step 4 (solver) is done offline:
+`ReferenceSolverV2` with partial pair matching and an expiry keeper. Next: step 5
+(frontend), then step 6 (testnet, needs approval).
 Testnet deployment of v2 needs user approval.
 
 ### Multi-hop routing and more pools (2026-10-29)

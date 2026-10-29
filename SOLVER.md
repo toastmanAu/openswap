@@ -257,3 +257,23 @@ Later:
 - Fiber adapters.
 
 These are optimizations over the same settlement foundation.
+
+---
+
+## v2 orders: partial fills and expiry (offline, 2026-10-29)
+
+`ReferenceSolverV2` (`solver/src/runner-v2.ts`) runs on the v2 lock deployment and,
+optionally, also whole v1 lots. It reuses the v1 runner's settlement loop
+unchanged: reconcile the journal, reserve inputs, journal before the single send.
+
+- **Matching** (`matchV2`, `matchPair`): reciprocal pairs, best prices first. One
+  order is filled completely; the other only as much as needed, rounded up to
+  its minimum fill. Every v2 leg is re-planned by the SDK and checked against the
+  lock model. The solver keeps any spread. Pairwise only, not an optimal router.
+- **Expiry policy:** time is the chain tip's timestamp, never the host clock.
+  Orders within 300 s of expiry are not filled (median time lags the tip).
+- **Keeper** (`returnExpired`): returns up to 16 expired orders per transaction to
+  their owners, unchanged, and pays the fee. It waits until 900 s after expiry
+  by tip time, so the median time used by `since` has passed.
+- Evidence: solver unit tests; `lock-v2-tests` replays matcher-built pairs (60,
+  50 with a partial leg) and SDK-planned chains on the real v2 binary.

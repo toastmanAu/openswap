@@ -16,6 +16,34 @@ const next = (n: bigint) => { s ^= (s << 13n) & 0xffff_ffff_ffff_ffffn; s ^= s >
 const enc = (c: ccc.CellAny) => ({ output: ccc.hexFrom(c.cellOutput.toBytes()), data: c.outputData });
 const UNIT = 100_000_000n;
 const shapes = [['a', 'ckb'], ['a', 'b'], ['ckb', 'b']] as const;
+// Solver pairs: random crossing orders matched by the reference matcher, laid out
+// as fillOrdersV2 does (payments at input indexes, remainders after).
+if (input.pairs) {
+  const { matchPair } = await import('../../solver/src/matcher-v2.js');
+  const markets = [[udt(a), udt(b)], [CKB, udt(b)], [udt(a), CKB]] as const;
+  const pairs = [];
+  for (let i = 0; pairs.length < input.pairs && i < input.pairs * 20; i++) {
+    const [x, y] = markets[i % 3]!;
+    const amount = (asset: typeof x) => asset.kind === 'ckb' ? (1000n + next(50_000n)) * UNIT : 1000n + next(1n << 50n);
+    const make = async (offer: typeof x, ask: typeof x, n: number, crossBy: bigint) => {
+      const offerAmount = amount(offer), base = amount(ask);
+      // Price relative to the other side; crossBy < 100 makes this side cheaper.
+      const askAmount = base * crossBy / 100n || 1n;
+      const plan = planCreateV2(deployment, { ownerLock: owner, nonce: new Uint8Array(16).fill(n), askAsset: ask, expiry: 0n }, offer, { offerAmount, askAmount, minFill: 1n + next(offerAmount / 8n), partialFills: Number(next(4n)) });
+      return { plan, order: await parseV2(ccc.Cell.from({ ...plan.cell, outPoint: { txHash: `0x${'cc'.repeat(32)}`, index: n } }), deployment, resolver) };
+    };
+    try {
+      const l = await make(x, y, 1, 100n), r = await make(y, x, 2, 1n + next(100n));
+      const m = matchPair(l.order, r.order);
+      if (!m) continue;
+      const plans = m.legs.map(leg => planFillV2(leg.order as OpenSwapOrderV2, leg.take!));
+      pairs.push({ orders: [enc(l.plan.cell), enc(r.plan.cell)], payments: plans.map(p => enc(p.payment)), remainders: plans.filter(p => p.remainder).map(p => enc(p.remainder!)), partial: plans.some(p => !p.final) });
+    } catch { continue; }
+  }
+  // Exit only after the pipe has flushed; exiting directly truncates at 64 KiB.
+  process.stdout.write(JSON.stringify({ pairs }) + '\n', () => process.exit(0));
+  await new Promise(() => {});
+}
 const scenarios = [];
 for (let i = 0; i < input.count; i++) {
   const [offerKind, askKind] = shapes[i % 3]!;

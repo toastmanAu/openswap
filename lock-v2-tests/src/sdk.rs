@@ -104,3 +104,41 @@ fn sdk_planned_order_chains_verify_on_the_binary() {
     );
     assert!(total.1 > 20, "campaign must exercise partial fills");
 }
+
+#[test]
+fn solver_matched_pairs_verify_on_the_binary() {
+    let mut env = Env::new();
+    let code_hash = hex(env.lock(vec![]).code_hash().as_slice());
+    let reply = bridge(&json!({
+        "codeHash": code_hash,
+        "owner": hex(env.owner.as_slice()),
+        "a": hex(env.a.as_slice()),
+        "b": hex(env.b.as_slice()),
+        "seed": "12345",
+        "count": 0,
+        "pairs": 60,
+    }));
+    let pairs = reply["pairs"].as_array().unwrap();
+    let mut partial = 0;
+    for (i, pair) in pairs.iter().enumerate() {
+        let mut inputs = vec![];
+        for order in pair["orders"].as_array().unwrap() {
+            let (c, d) = cell_of(order);
+            inputs.push(env.input(c, d, 0));
+        }
+        let other = env.other.clone();
+        inputs.push(env.input(cell(&other, None, 100_000 * CKB), Bytes::new(), 0));
+        let mut outputs: Vec<_> = pair["payments"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(cell_of)
+            .collect();
+        outputs.extend(pair["remainders"].as_array().unwrap().iter().map(cell_of));
+        let tx = env.tx(inputs, outputs);
+        env.expect(&tx, 0, &format!("pair {i}"));
+        partial += pair["partial"].as_bool().unwrap() as usize;
+    }
+    println!("pairs={} partial={partial}", pairs.len());
+    assert!(pairs.len() >= 30 && partial >= 10);
+}
