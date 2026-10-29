@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ccc } from '@ckb-ccc/core';
 import * as sdk from '@openswap/sdk';
-import { matchBook, matchPair, matchV2, ReferenceSolverV2, type BookMatch } from '../src/index.js';
+import { matchBook, matchPair, matchRing, matchV2, ReferenceSolverV2, type BookMatch } from '../src/index.js';
 import type { SubmissionRecord } from '../src/journal.js';
 import { setup, a, b, owner, deployment, hex } from '../../sdk/test/fixture.js';
 
@@ -183,4 +183,56 @@ test('v2 runner settles a multi-order match in one pinned transaction', async ()
   assert.equal(tx.outputs.filter(o => o.lock.codeHash === v2.codeHash).length, 1, 'only the partly filled buyer remains');
   assert.equal(events.find(([e]) => e === 'candidate_pair')![1].orders.length, 4);
   assert.equal(await solver.tick(true), undefined, 'all four stay reserved while pending');
+});
+
+// Three-asset rings ------------------------------------------------------------------------
+async function ringBook(f: F, prices: [bigint, bigint, bigint]) {
+  // 1,000 A for p1 B; 1,000 B for p2 C; 1,000 C for p3 A. Profitable when p1*p2*p3 < 1000^3.
+  const [p1, p2, p3] = prices;
+  const o1 = await parsed(f, place(f, sdk.udt(a), sdk.udt(b), { offerAmount: 1000n, askAmount: p1, minFill: 100n, partialFills: 2 }));
+  const o2 = await parsed(f, place(f, sdk.udt(b), sdk.CKB, { offerAmount: 1000n, askAmount: p2 * CKB, minFill: 100n, partialFills: 2 }));
+  const o3 = await parsed(f, place(f, sdk.CKB, sdk.udt(a), { offerAmount: 2000n * CKB, askAmount: p3 * 2n, minFill: 100n * CKB, partialFills: 2 }));
+  return [o1, o2, o3] as const;
+}
+test('a profitable three-asset ring settles inventory-free, each maker at its price', async () => {
+  const f = market();
+  // A->B at 0.5 B per A, B->CKB at 1 CKB per B, CKB->A at 0.5 A per CKB: product 0.25.
+  const [o1, o2, o3] = await ringBook(f, [500n, 1000n, 500n]);
+  const m = matchRing(o1, o2, o3)!;
+  assert.ok(m && m.ring);
+  balanced(m);
+  for (const l of m.legs) assert.ok(l.paid * l.order.offerAmount >= (l.take ?? l.delivered) * l.order.askAmount, 'each maker at least at its price');
+  assert.ok(m.legs.some(l => sdk.isV2(l.order) && l.take! < l.order.available), 'one leg fills partly');
+  assert.equal(matchRing(o2, o3, o1)!.legs.length, 3, 'any rotation of the cycle matches');
+});
+test('an unprofitable ring, or three orders that are not a cycle, do not match', async () => {
+  const f = market();
+  const [o1, o2, o3] = await ringBook(f, [1100n, 1000n, 1000n]);
+  assert.equal(matchRing(o1, o2, o3), undefined, 'product 1.1 > 1');
+  assert.equal(matchRing(o1, o3, o2), undefined, 'wrong orientation');
+  assert.equal(matchV2([o1, o2, o3], { nowSeconds: NOW }), undefined);
+});
+test('matchV2 prefers a direct match and otherwise finds a ring', async () => {
+  const f = market();
+  const [o1, o2, o3] = await ringBook(f, [500n, 1000n, 500n]);
+  const ring = matchV2([o1, o2, o3], { nowSeconds: NOW })!;
+  assert.equal(ring.legs.length, 3); assert.equal((ring as { ring?: boolean }).ring, true);
+  assert.equal(matchV2([o1, o2, o3], { nowSeconds: NOW, rings: false }), undefined);
+  const direct = await parsed(f, place(f, sdk.udt(b), sdk.udt(a), { offerAmount: 1000n, askAmount: 1000n, minFill: 100n, partialFills: 2 }));
+  const m = matchV2([o1, o2, o3, direct], { nowSeconds: NOW })!;
+  assert.equal((m as { ring?: boolean }).ring, undefined, 'the direct A/B match is taken first');
+});
+test('v2 runner settles a ring in one pinned transaction', async () => {
+  const f = market();
+  await ringBook(f, [500n, 1000n, 500n]);
+  let sends = 0; const events: [string, any][] = [];
+  f.client.sendTransaction = async tx => { sends++; return ccc.Transaction.from(tx).hash(); };
+  f.client.getTransactionNoCache = async () => ({ status: 'pending' }) as ccc.ClientTransactionResponse;
+  const solver = new ReferenceSolverV2(ctx(f), (e, d) => events.push([e, d]), { journal: journal() });
+  const tx = (await solver.tick(true))!;
+  assert.equal(sends, 1);
+  const orderInputs = (await Promise.all(tx.inputs.map(i => i.getCell(f.client)))).filter(x => x.cellOutput.lock.codeHash === v2.codeHash);
+  assert.equal(orderInputs.length, 3);
+  for (let i = 0; i < 3; i++) assert(tx.outputs[i]!.lock.eq(owner), `payment ${i} at its order index`);
+  assert.equal(events.find(([e]) => e === 'candidate_pair')![1].orders.length, 3);
 });

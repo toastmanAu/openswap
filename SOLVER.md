@@ -275,8 +275,15 @@ unchanged: reconcile the journal, reserve inputs, journal before the single send
   delivers the most wins, preferring fewer legs on ties. A marginal order that does
   not cross on its own can still fill when the batch balances; every maker is
   paid at least its own price either way. Every v2 leg is re-planned by the SDK
-  and checked against the lock model. The solver keeps any spread. Not an optimal
-  router: one market per settlement, no rings across three assets.
+  and checked against the lock model. The solver keeps any spread.
+- **Rings** (`matchRing`, 2026-10-29): when no direct match exists, `matchV2`
+  looks for three books forming a cycle of assets (A->B, B->C, C->A), trying the
+  best 4 orders per book. One order fills whole and each next order takes just
+  enough to pay the one before it; the ring closes when the first order delivers
+  enough to pay the last. Every order is tried as the whole one; the plan with
+  the most orders filled whole, then the most paid, is kept. A ring settles only
+  when the product of its prices is at most 1, inventory-free, each maker at its
+  price. Not an optimal router: one order per edge of a ring, three assets.
 - **Expiry policy:** time is the chain tip's timestamp, never the host clock.
   Orders within 300 s of expiry are not filled (median time lags the tip).
 - **Keeper** (`returnExpired`): returns up to 16 expired orders per transaction to
@@ -286,7 +293,9 @@ unchanged: reconcile the journal, reserve inputs, journal before the single send
   runner settlement); `lock-v2-tests` replays matcher-built pairs (60, 50 with a
   partial leg), matcher-built books (60 settlements, 253 legs, up to 8 per
   settlement, 54 with a partial leg; token amounts and capacity conserved, checked
-  from the cells) and SDK-planned chains on the real v2 binary.
+  from the cells), matcher-built rings (60, both cycle orientations over two
+  tokens and CKB, conservation checked from the cells) and SDK-planned chains on
+  the real v2 binary.
 - **Live (2026-10-29, `scripts/lock-v2-multi.ts`, `deployments/lock-v2-multi.json`):**
   the maker placed three TEST2-for-CKB orders (0.090, 0.092, 0.094 CKB each,
   2,000 TEST2 apiece) and test wallet A offered 1,200 CKB for TEST2 at 0.10.

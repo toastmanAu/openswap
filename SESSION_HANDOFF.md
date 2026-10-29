@@ -4,6 +4,12 @@ Saved 2026-10-12 (Australia/Adelaide). Read this first when resuming.
 
 ## Current request and stopping point
 
+### Three-asset rings (2026-10-29)
+
+`matchRing` settles a cycle of three orders (A->B->C->A) when no direct match
+exists; verified offline and on the real v2 binary (60 rings, both orientations).
+Not yet run live on testnet.
+
 ### Fee rate cap (2026-10-29)
 
 Order-book transactions now use the node's fee estimate bounded to 1,000–5,000

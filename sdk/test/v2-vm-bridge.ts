@@ -80,6 +80,36 @@ if (input.books) {
   process.stdout.write(JSON.stringify({ books }) + '\n', () => process.exit(0));
   await new Promise(() => {});
 }
+// Solver rings: three orders forming a cycle of assets (both orientations over a, b and
+// CKB), matched by matchRing and laid out as fillOrdersV2 does.
+if (input.rings) {
+  const { matchRing } = await import('../../solver/src/matcher-v2.js');
+  const cycles = [[udt(a), udt(b), CKB], [udt(a), CKB, udt(b)]] as const;
+  const rings = [];
+  let nonce = 1;
+  for (let i = 0; rings.length < input.rings && i < input.rings * 40; i++) {
+    const cycle = cycles[i % 2]!;
+    const amount = (asset: (typeof cycle)[number]) => asset.kind === 'ckb' ? (1000n + next(20_000n)) * UNIT : 1000n + next(1n << 40n);
+    // Reference values per asset; each order asks within 80-104% of the fair rate, so most rings profit.
+    const ref = cycle.map(amount);
+    try {
+      const orders = [];
+      for (let k = 0; k < 3; k++) {
+        const offer = cycle[k]!, ask = cycle[(k + 1) % 3]!, offerAmount = amount(offer);
+        const askAmount = offerAmount * ref[(k + 1) % 3]! / ref[k]! * (80n + next(25n)) / 100n || 1n;
+        const n = nonce++;
+        const plan = planCreateV2(deployment, { ownerLock: owner, nonce: new Uint8Array(16).map((_, j) => (n * 31 + j * 7 + 3) & 255), askAsset: ask, expiry: 0n }, offer, { offerAmount, askAmount, minFill: 1n + next(offerAmount / 8n), partialFills: Number(next(5n)) });
+        orders.push({ plan, order: await parseV2(ccc.Cell.from({ ...plan.cell, outPoint: { txHash: `0x${'ee'.repeat(32)}`, index: n } }), deployment, resolver) });
+      }
+      const m = matchRing(orders[0]!.order, orders[1]!.order, orders[2]!.order);
+      if (!m) continue;
+      const plans = m.legs.map(leg => planFillV2(leg.order as OpenSwapOrderV2, leg.take!));
+      rings.push({ orders: orders.map(o => enc(o.plan.cell)), payments: plans.map(p => enc(p.payment)), remainders: plans.filter(p => p.remainder).map(p => enc(p.remainder!)), partial: plans.some(p => !p.final), ckbFirst: cycle[1]!.kind === 'ckb' });
+    } catch { continue; }
+  }
+  process.stdout.write(JSON.stringify({ rings }) + '\n', () => process.exit(0));
+  await new Promise(() => {});
+}
 const scenarios = [];
 for (let i = 0; i < input.count; i++) {
   const [offerKind, askKind] = shapes[i % 3]!;

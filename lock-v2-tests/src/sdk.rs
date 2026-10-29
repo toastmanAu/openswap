@@ -219,3 +219,76 @@ fn solver_matched_books_verify_on_the_binary() {
     );
     assert!(books.len() >= 30 && partial >= 10 && widest >= 5);
 }
+
+/// Matcher-built three-asset rings (a -> b -> CKB -> a and the reverse cycle) verify on the
+/// binary and conserve every asset without the solver adding any, checked from the cells.
+#[test]
+fn solver_matched_rings_verify_on_the_binary() {
+    let mut env = Env::new();
+    let code_hash = hex(env.lock(vec![]).code_hash().as_slice());
+    let reply = bridge(&json!({
+        "codeHash": code_hash,
+        "owner": hex(env.owner.as_slice()),
+        "a": hex(env.a.as_slice()),
+        "b": hex(env.b.as_slice()),
+        "seed": "31337",
+        "count": 0,
+        "rings": 60,
+    }));
+    let rings = reply["rings"].as_array().unwrap();
+    let (mut partial, mut orientations) = (0, [0usize; 2]);
+    let amount = |d: &Bytes| -> u128 { u128::from_le_bytes(d[..16].try_into().unwrap()) };
+    for (i, ring) in rings.iter().enumerate() {
+        let orders: Vec<_> = ring["orders"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(cell_of)
+            .collect();
+        let mut outputs: Vec<_> = ring["payments"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(cell_of)
+            .collect();
+        outputs.extend(ring["remainders"].as_array().unwrap().iter().map(cell_of));
+        let total = |cells: &[(CellOutput, Bytes)], t: &Script| -> u128 {
+            cells
+                .iter()
+                .filter(|(o, _)| o.type_().to_opt().as_ref() == Some(t))
+                .map(|(_, d)| amount(d))
+                .sum()
+        };
+        let capacity = |cells: &[(CellOutput, Bytes)]| -> u64 {
+            cells
+                .iter()
+                .map(|(o, _)| Unpack::<u64>::unpack(&o.capacity()))
+                .sum()
+        };
+        for t in [&env.a, &env.b] {
+            assert!(
+                total(&orders, t) >= total(&outputs, t),
+                "ring {i}: token paid out exceeds what the orders held"
+            );
+        }
+        assert!(
+            capacity(&orders) >= capacity(&outputs),
+            "ring {i}: capacity paid out exceeds what the orders held"
+        );
+        let mut inputs: Vec<_> = orders
+            .into_iter()
+            .map(|(c, d)| env.input(c, d, 0))
+            .collect();
+        let other = env.other.clone();
+        inputs.push(env.input(cell(&other, None, 100_000 * CKB), Bytes::new(), 0));
+        let tx = env.tx(inputs, outputs);
+        env.expect(&tx, 0, &format!("ring {i}"));
+        partial += ring["partial"].as_bool().unwrap() as usize;
+        orientations[ring["ckbFirst"].as_bool().unwrap() as usize] += 1;
+    }
+    println!(
+        "rings={} partial={partial} orientations={orientations:?}",
+        rings.len()
+    );
+    assert!(rings.len() >= 30 && partial >= 10 && orientations.iter().all(|&n| n >= 10));
+}
