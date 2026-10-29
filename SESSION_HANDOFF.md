@@ -9,8 +9,8 @@ Saved 2026-10-12 (Australia/Adelaide). Read this first when resuming.
 New Markets tab: trades, stats, price and depth charts read from the chain (no
 server). Extraction (`pool-sdk/src/market*.ts`) is verified against every recorded
 live fill/route on both endpoints (`scripts/market-verify.ts`). Live on
-toastdex.org since Pages deploy `cc8fc43f` (verified). Next ideas: resolve only relevant inputs for faster refresh; incremental
-refresh by block.
+toastdex.org since Pages deploy `cc8fc43f` (verified). Faster refresh done (relevant inputs only, incremental refresh, saved history;
+first visit ~5.3 s, returning ~1.8 s), not yet on Pages.
 
 ### Order lock v2: partial fills and expiry (2026-10-29)
 

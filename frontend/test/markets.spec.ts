@@ -30,6 +30,14 @@ test('markets: trades, stats, charts and depth from real testnet transactions',a
 
  const pairs=new Set(prints.map(p=>p.pair.key)).size;
  await expect(page.locator('#markets-status')).toContainText(`${prints.length} trades in ${pairs} markets from the newest ${Object.keys(raw.fixtures).length} OpenSwap transactions`);
+ await expect(page.locator('#markets-status')).toContainText('Read in full');
+ const fullReads=await page.evaluate(()=>(globalThis as any).marketReads as number);
+ // A returning visit restores the settled history saved in this browser and re-reads only recent blocks.
+ expect(await page.evaluate(()=>Object.keys(localStorage).some(k=>k.startsWith('toastdex-market-history:')))).toBe(true);
+ await page.evaluate(([fixtures,options])=>{(globalThis as any).marketReads=0;return (globalThis as any).MarketsHarness.install(fixtures,options);},[raw,{tip:String(TIP),labels,book,pools}] as const);
+ await expect(page.locator('#markets-status')).toContainText('Saved history in this browser');
+ await expect(page.locator('#markets-status')).toContainText(`${prints.length} trades in ${pairs} markets`);
+ expect(await page.evaluate(()=>(globalThis as any).marketReads as number)).toBeLessThan(fullReads);
  await expect(page.locator('#markets-list')).toContainText('TEST3 / CKB');await expect(page.locator('#markets-list')).toContainText('TEST2 / CKB');
 
  // TEST3: the solver match (two order fills) and the JoyID route's second hop.

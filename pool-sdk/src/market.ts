@@ -17,7 +17,10 @@ export interface MarketSources {
 }
 export interface MarketTx {
  hash:ccc.Hex;block:bigint;/** Block timestamp, ms since the epoch. */time:bigint;
- tx:ccc.Transaction;/** Input cells, in input order. */inputs:ccc.Cell[];
+ tx:ccc.Transaction;
+ /** Input cells, in input order. Unresolved entries (undefined) are inputs that are neither
+  * an order nor a pool cell, such as wallet funding; they never affect market events. */
+ inputs:(ccc.Cell|undefined)[];
 }
 /** One side of an exchange: the taker (or pool trader) received `got` and gave `gave`. */
 export interface Trade {
@@ -75,10 +78,10 @@ function poolEvents(m:MarketTx,pools:PoolDeployment,skipped:Skipped[]):(Trade|Li
    const outState=outputCell(k);
    const outMeta=decodeStateIndexes(outState);
    const now=parsePool(pools,outState,outputCell(outMeta.rx),outputCell(outMeta.ry));
-   const i=m.inputs.findIndex(c=>c.cellOutput.type?.eq(o.type!));
+   const i=m.inputs.findIndex(c=>c?.cellOutput.type?.eq(o.type!));
    if(i<0){events.push({kind:'create',hash:m.hash,block:m.block,time:m.time,source:poolId,token:now.token,ckb:now.accounting.x,tokenAmount:now.accounting.y});continue;}
    const inState=m.inputs[i]!,inMeta=decodeStateIndexes(inState);
-   const sibling=(index:number)=>m.inputs.find(c=>c.outPoint.eq({txHash:inState.outPoint.txHash,index}));
+   const sibling=(index:number)=>m.inputs.find(c=>c?.outPoint.eq({txHash:inState.outPoint.txHash,index}));
    const ckbIn=sibling(inMeta.rx),tokenIn=sibling(inMeta.ry);
    if(!ckbIn||!tokenIn)throw new Error('Pool reserves not spent with the state');
    const before=parsePool(pools,inState,ckbIn,tokenIn);
@@ -103,9 +106,10 @@ function decodeStateIndexes(state:ccc.Cell):{rx:number;ry:number}{
 
 /** Every market event in one committed transaction. */
 export function marketEvents(m:MarketTx,sources:MarketSources):{events:MarketEvent[];skipped:Skipped[]}{
- if(m.inputs.length!==m.tx.inputs.length)throw new Error('Resolve every input cell first');
+ if(m.inputs.length!==m.tx.inputs.length)throw new Error('Inputs must align with the transaction (undefined where unresolved)');
  const events:MarketEvent[]=[],skipped:Skipped[]=[];
  for(const [i,cell] of m.inputs.entries()){
+  if(!cell)continue;
   const lock=cell.cellOutput.lock;
   const source=lock.hashType==='data1'?sources.orders.find(o=>o.codeHash===lock.codeHash):undefined;
   if(!source)continue;

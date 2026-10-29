@@ -21,13 +21,16 @@ export function install(raw:{sources:MarketSources;fixtures:Record<string,Fixtur
  const touches=(entry:{tx:ccc.Transaction;inputs:ccc.Cell[]},codeHash:string,kind:'lock'|'type')=>
   [...entry.inputs.map(c=>c.cellOutput),...entry.tx.outputs].some(o=>kind==='lock'?o.lock.codeHash===codeHash:o.type?.codeHash===codeHash);
  const client={
-  async findTransactionsPaged(key:{script:ccc.ScriptLike;scriptType:'lock'|'type'}){
-   const codeHash=ccc.hexFrom(key.script.codeHash);
-   const transactions=[...txs.entries()].filter(([,e])=>touches(e,codeHash,key.scriptType)).sort((a,b)=>a[1].block>b[1].block?-1:1)
-    .map(([txHash,e])=>({txHash,blockNumber:e.block,txIndex:0n,cells:[]}));
+  async findTransactionsPaged(key:{script:ccc.ScriptLike;scriptType:'lock'|'type';filter?:{blockRange?:[ccc.NumLike,ccc.NumLike]}}){
+   const codeHash=ccc.hexFrom(key.script.codeHash),from=key.filter?.blockRange?ccc.numFrom(key.filter.blockRange[0]):0n;
+   // Like the indexer: report which inputs and outputs matched the searched script.
+   const hit=(o:ccc.CellOutput)=>key.scriptType==='lock'?o.lock.codeHash===codeHash:o.type?.codeHash===codeHash;
+   const transactions=[...txs.entries()].filter(([,e])=>e.block>=from&&touches(e,codeHash,key.scriptType)).sort((a,b)=>a[1].block>b[1].block?-1:1)
+    .map(([txHash,e])=>({txHash,blockNumber:e.block,txIndex:0n,cells:[...e.inputs.flatMap((c,i)=>hit(c.cellOutput)?[{isInput:true,cellIndex:BigInt(i)}]:[]),...e.tx.outputs.flatMap((o,i)=>hit(o)?[{isInput:false,cellIndex:BigInt(i)}]:[])]}));
    return {transactions,lastCursor:'0x'};
   },
   async getTransaction(hash:ccc.Hex){
+   (globalThis as any).marketReads=((globalThis as any).marketReads??0)+1;
    const e=txs.get(hash);if(e)return {transaction:e.tx,status:'committed',blockNumber:e.block};
    const p=parents.get(hash);if(p)return {transaction:p,status:'committed',blockNumber:1n};
    return undefined;
@@ -40,7 +43,7 @@ export function install(raw:{sources:MarketSources;fixtures:Record<string,Fixtur
  for(const {tx,inputs} of txs.values())for(const o of [...tx.outputs,...inputs.map(c=>c.cellOutput)])if(o.type)scripts.set(o.type.hash(),o.type);
  for(const p of options.pools){const s=ccc.Script.from(p.token);scripts.set(s.hash(),s);}
  const view=createMarkets({
-  ready:async()=>{},client:()=>client,sources:()=>raw.sources,
+  ready:async()=>{},client:()=>client,network:()=>'0xtest',sources:()=>raw.sources,
   book:()=>options.book.map(b=>({offer:asset(b.offer,scripts),ask:asset(b.ask,scripts),available:BigInt(b.available),askAmount:BigInt(b.askAmount),offerAmount:BigInt(b.offerAmount)})),
   pools:()=>options.pools.map(p=>({token:ccc.Script.from(p.token),x:BigInt(p.x),y:BigInt(p.y),feeBps:BigInt(p.feeBps)})),
   label:a=>a.kind==='ckb'?'CKB':options.labels[assetKey(a)]??`${assetKey(a).slice(0,8)}…`,

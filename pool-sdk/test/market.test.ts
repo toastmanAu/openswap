@@ -12,12 +12,13 @@ import {CKB,udt,type AssetId} from '../../sdk/src/types.js';
 // Real committed testnet transactions (scripts/market-fixtures.ts), with resolved inputs.
 const raw=JSON.parse(readFileSync(new URL('./fixtures/market.json',import.meta.url),'utf8'));
 const sources=raw.sources as MarketSources;
-const fixture=(name:string):MarketTx=>{
+/** Fixtures resolve every input, as a full resolution would. */
+const fixture=(name:string):Omit<MarketTx,'inputs'>&{inputs:ccc.Cell[]}=>{
  const f=raw.fixtures[name];assert(f,`missing fixture ${name}`);
  return {hash:f.hash,block:BigInt(f.block),time:BigInt(f.time),tx:ccc.Transaction.fromBytes(f.tx),inputs:f.inputs.map((c:ccc.CellLike)=>ccc.Cell.from(c))};
 };
 const trades=(m:MarketTx)=>{const r=marketEvents(m,sources);assert.deepEqual(r.skipped,[]);return r.events.filter((e):e is Trade=>e.kind==='trade');};
-const orderInputs=(m:MarketTx,version:1|2)=>m.inputs.flatMap((c,i)=>c.cellOutput.lock.codeHash===sources.orders.find(o=>o.version===version)!.codeHash?[i]:[]);
+const orderInputs=(m:MarketTx,version:1|2)=>m.inputs.flatMap((c,i)=>c?.cellOutput.lock.codeHash===sources.orders.find(o=>o.version===version)!.codeHash?[i]:[]);
 
 test('every fixture extracts the recorded event kinds with nothing skipped',()=>{
  for(const name of Object.keys(raw.fixtures)){
@@ -68,6 +69,16 @@ test('a solver match is two order fills whose amounts net, leaving the spread',(
  assert(ckbOut>=ckbIn,'the solver never pays out more CKB than it receives');
 });
 
+test('extraction needs only order and pool inputs: funding inputs may stay unresolved',()=>{
+ for(const name of Object.keys(raw.fixtures)){
+  const m=fixture(name),full=marketEvents(m,sources);
+  const relevant=(c:ccc.Cell)=>sources.orders.some(o=>o.codeHash===c.cellOutput.lock.codeHash)||
+   (!!sources.pools&&[c.cellOutput.lock.codeHash,c.cellOutput.type?.codeHash].includes(sources.pools.codeHash));
+  const sparse=marketEvents({...m,inputs:m.inputs.map(c=>relevant(c)?c:undefined)},sources);
+  assert.deepEqual(ccc.stringify(sparse),ccc.stringify(full),name);
+ }
+});
+
 test('tampered transactions are skipped with a reason, never misread',()=>{
  const m=fixture('v2-partial-udt-offer'),i=orderInputs(m,2)[0]!;
  const moved=m.tx.clone();moved.outputs[i]=ccc.CellOutput.from({...moved.outputs[i]!,lock:ccc.Script.from({codeHash:`0x${'11'.repeat(32)}`,hashType:'type',args:'0x'})});
@@ -80,7 +91,7 @@ test('tampered transactions are skipped with a reason, never misread',()=>{
  const swap=fixture('pool-swap'),s=swap.inputs.findIndex(c=>c.outputData.length===2+380);
  r=marketEvents({...swap,inputs:swap.inputs.map((c,k)=>k===s?c:ccc.Cell.from({...c,outPoint:{txHash:`0x${'22'.repeat(32)}`,index:k}}))},sources);
  assert.equal(r.events.length,0);assert.match(r.skipped[0]!.reason,/reserves/);
- assert.throws(()=>marketEvents({...m,inputs:m.inputs.slice(1)},sources),/Resolve every input/);
+ assert.throws(()=>marketEvents({...m,inputs:m.inputs.slice(1)},sources),/Inputs must align/);
 });
 
 // Aggregation -------------------------------------------------------------------------------

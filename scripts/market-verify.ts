@@ -7,7 +7,7 @@
 import {ccc} from '@ckb-ccc/core';
 import {readFile} from 'node:fs/promises';
 import assert from 'node:assert/strict';
-import {scanMarket} from '../pool-sdk/src/market-scan.js';
+import {MarketScanner} from '../pool-sdk/src/market-scan.js';
 import {print,type MarketEvent,type Trade} from '../pool-sdk/src/market.js';
 import {ENDPOINTS,GENESIS} from './lib/pool-live.js';
 
@@ -35,13 +35,18 @@ const joyid=await json('deployments/lock-v2-joyid.json');
 fills.push({hash:joyid.tx,taken:units(joyid.results[0].taken),paid:units(joyid.results[0].paid),final:false});
 const route=(await json('deployments/pool-route-joyid.json'));
 
-const results=[];
+const results:Record<string,unknown>[]=[];
 for(const url of ENDPOINTS){
  const client=new ccc.ClientPublicTestnet({url});
  assert.equal((await client.getHeaderByNumber(0))?.hash,GENESIS,`${url} is not CKB testnet`);
  const t0=Date.now();
- const scan=await scanMarket(client,sources,{maxTransactions:2000});
+ const scanner=new MarketScanner(client,sources);
+ const scan=await scanner.scan({maxTransactions:2000});
  const ms=Date.now()-t0;
+ // A refresh with the same scanner reads only the last REORG_MARGIN blocks and must agree.
+ const t1=Date.now(),again=await scanner.scan({maxTransactions:2000}),refreshMs=Date.now()-t1;
+ assert.equal(again.refresh.mode,'incremental');
+ assert.equal(ccc.stringify(again.events.map(e=>[e.hash,e.kind]).sort()),ccc.stringify(scan.events.map(e=>[e.hash,e.kind]).sort()),'Incremental refresh changed the events');
  const byHash=new Map<string,MarketEvent[]>();for(const e of scan.events)byHash.set(e.hash,[...(byHash.get(e.hash)??[]),e]);
  const trades=(h:string)=>(byHash.get(h)??[]).filter((e):e is Trade=>e.kind==='trade');
  let checked=0;
@@ -71,10 +76,11 @@ for(const url of ENDPOINTS){
  assert.equal(sell.got.amount,BigInt(route.hop),'Hop out');assert.equal(buy.gave.amount,BigInt(route.hop),'Hop in');checked++;
  const kinds:Record<string,number>={};for(const e of scan.events){const k=e.kind==='trade'?`trade:${e.venue}`:e.kind;kinds[k]=(kinds[k]??0)+1;}
  const markets:Record<string,number>={};for(const e of scan.events)if(e.kind==='trade'){const p=print(e).pair.key;markets[p]=(markets[p]??0)+1;}
- results.push({url,ms,transactions:scan.transactions,truncated:scan.truncated,events:kinds,markets:Object.keys(markets).length,skipped:scan.skipped,checked});
+ results.push({url,ms,reads:{transactions:scan.refresh.transactionsRead,headers:scan.refresh.headersRead},refresh:{ms:refreshMs,...again.refresh},transactions:scan.transactions,truncated:scan.truncated,events:kinds,markets:Object.keys(markets).length,skipped:scan.skipped,checked});
 }
-assert.deepEqual({...results[0],url:'',ms:0},{...results[1],url:'',ms:0},'Endpoints disagree');
+const comparable=(r:Record<string,unknown>)=>({...r,url:'',ms:0,refresh:undefined,reads:undefined});
+assert.deepEqual(comparable(results[0]!),comparable(results[1]!),'Endpoints disagree');
 console.log(ccc.stringify(results));
-assert.equal(results[0]!.skipped.length,0,'Some events could not be interpreted');
+assert.equal((results[0]!.skipped as unknown[]).length,0,'Some events could not be interpreted');
 console.log('Market extraction agrees with every recorded fill, close, solver match and route on both endpoints.');
 process.exit(0);

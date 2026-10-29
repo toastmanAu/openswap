@@ -490,7 +490,24 @@ the ask in the args, v2 meets the maker price, pool swaps match the signed actio
 route hop CKB conserved) and tampered copies. `frontend/test/markets.spec.ts` runs
 the view on the same fixtures.
 
-Limits: a full refresh reads every input's parent transaction (7–11 s for the
-current ~120 transactions); resolving only order and pool inputs would cut that.
+Refresh cost (2026-10-29, ~120 transactions, measured in the browser after startup):
+
+- **Only relevant inputs are resolved.** The indexer reports which inputs matched
+  (order cells, pool state cells); only their parent transactions are fetched, and
+  pool reserves come from the state cell's parent already in hand. Wallet funding
+  inputs are never fetched. On testnet today every such parent is itself an
+  OpenSwap transaction, so a full scan is one read per transaction plus one header
+  per block, at 16 in parallel.
+- **Incremental refresh.** `MarketScanner` keeps its caches and re-reads only blocks
+  after the newest seen minus a reorg margin of 24 blocks; anything that vanished in
+  that window is dropped. While the tab is open it refreshes every 30 s.
+- **Saved history.** Settled history (24+ blocks deep) is stored in this browser's
+  `localStorage` per network; a returning visit restores it (validated, and refused
+  whole if malformed or for other sources) and reads only recent blocks. Storage
+  failures just mean a full scan.
+
+First visit: about 5.3 s (was 8–10 s). Returning visit: about 1.8 s. Each 30 s
+refresh: indexer queries only, under 1 s.
+
 Token decimals and names come from the pool manifest and token catalog; an unknown
 token shows a hash prefix and 0 decimals.

@@ -3,7 +3,7 @@
 // trades list or the table view. Labels come from chain data, so text is only ever
 // set with textContent.
 import {ccc} from '@ckb-ccc/core';
-import {scanMarket} from '../../pool-sdk/src/market-scan.js';
+import {MarketScanner,type MarketScan} from '../../pool-sdk/src/market-scan.js';
 import {print,type MarketSources,type Print} from '../../pool-sdk/src/market.js';
 import {comparePrints,depth,marketStats,priceOf,type BookEntry,type Depth,type MarketStats,type PoolCurve} from '../../pool-sdk/src/market-stats.js';
 import {assetKey,CKB,udt,type AssetId} from '../../sdk/src/types.js';
@@ -12,6 +12,8 @@ export interface MarketsEnv {
  /** Resolves once the deployments (pools, order lock v2) the sources depend on are loaded. */
  ready():Promise<void>;
  client():ccc.Client;
+ /** Genesis hash; saved history is kept per network. */
+ network():string;
  sources():MarketSources|undefined;
  /** Open, fillable orders (expired ones excluded by the caller). */
  book():BookEntry[];
@@ -37,6 +39,11 @@ function ticks(min:number,max:number,count:number):number[]{
 
 export function createMarkets(env:MarketsEnv){
  let prints:Print[]=[],stats=new Map<string,MarketStats>(),now=0n,selected:string|undefined,range:Range='week',loading:Promise<void>|undefined,loadedAt=0;
+ let scanner:MarketScanner|undefined,timer:number|undefined;
+ const storageKey=()=>`toastdex-market-history:${env.network()}`;
+ /** Saved history is a per-browser convenience: any failure just means a full scan. */
+ const restore=(s:MarketScanner)=>{try{const raw=localStorage.getItem(storageKey());return raw?s.restore(JSON.parse(raw)):false;}catch{return false;}};
+ const save=(s:MarketScanner)=>{try{const snap=s.snapshot();if(snap){const json=JSON.stringify(snap);if(json.length<4_000_000)localStorage.setItem(storageKey(),json);}}catch{/* storage full or blocked */}};
  const decimals=(a:AssetId)=>env.decimals(a);
  const pairLabel=(s:MarketStats)=>`${env.label(s.pair.base)} / ${env.label(s.pair.quote)}`;
 
@@ -49,19 +56,36 @@ export function createMarkets(env:MarketsEnv){
   el('markets-root').classList.add('stale');
   try{
    const client=env.client();
-   const [scan,tip]=await Promise.all([scanMarket(client,sources,{maxTransactions:1000}),client.getTipHeader()]);
+   // 16 parallel reads halve a first visit against 8 on the public nodes (measured
+   // 2026-10-29); higher would be faster but heavier on shared endpoints.
+   let restored=false;
+   if(!scanner){scanner=new MarketScanner(client,sources);restored=restore(scanner);}
+   const current=scanner;
+   const [scan,tip]=await Promise.all([current.scan({maxTransactions:1000,concurrency:16}),client.getTipHeader()]);
+   if(scanner!==current)return;
+   save(current);
    now=tip.timestamp;
    prints=scan.events.flatMap(e=>e.kind==='trade'?[print(e)]:[]);
    stats=marketStats(prints,decimals,now);
    if(!selected||!stats.has(selected))selected=[...stats.values()].sort((a,b)=>b.day.quote-a.day.quote||b.trades-a.trades)[0]?.pair.key;
    loadedAt=Date.now();
    const skipped=scan.skipped.length?` · ${scan.skipped.length} event${scan.skipped.length===1?'':'s'} not understood and skipped`:'';
-   el('markets-status').textContent=`${prints.length} trades in ${stats.size} markets from the newest ${scan.transactions} OpenSwap transactions${scan.truncated?' (older history not loaded)':''}${skipped}. Prices use block time; 24 h figures end at the chain tip.`;
+   el('markets-status').textContent=`${prints.length} trades in ${stats.size} markets from the newest ${scan.transactions} OpenSwap transactions${scan.truncated?' (older history not loaded)':''}${skipped}. ${updated(scan,restored)} Prices use block time; 24 h figures end at the chain tip.`;
    render();
   }catch(error){el('markets-status').textContent=`Could not read market history: ${error instanceof Error?error.message:String(error)}`;throw error;}
   finally{el('markets-root').classList.remove('stale');}
  }
- function show(){if(!loading||Date.now()-loadedAt>60_000)loading=load().catch(()=>{}).finally(()=>{loading=undefined;});return loading;}
+ function updated(scan:MarketScan,restored:boolean){
+  const r=scan.refresh,at=new Date().toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  if(r.mode==='full')return `Read in full at ${at}.`;
+  return `${restored?'Saved history in this browser, plus':'Updated at '+at+':'} ${r.newTransactions} recent transaction${r.newTransactions===1?'':'s'} re-read${restored?` at ${at}`:''}.`;
+ }
+ function refresh(){loading??=load().catch(()=>{}).finally(()=>{loading=undefined;});return loading;}
+ /** Load on open; while the tab stays open, refresh every 30 s (each refresh reads only recent blocks). */
+ function show(){
+  if(timer===undefined)timer=window.setInterval(()=>{if(el('view-markets').hidden){window.clearInterval(timer);timer=undefined;return;}void refresh();},30_000);
+  return Date.now()-loadedAt>10_000?refresh():Promise.resolve();
+ }
 
  function render(){renderList();renderDetail();}
  function renderList(){
@@ -199,7 +223,7 @@ export function createMarkets(env:MarketsEnv){
  }
 
  for(const b of document.querySelectorAll<HTMLButtonElement>('[data-market-range]'))b.onclick=()=>{range=b.dataset.marketRange as Range;renderDetail();};
- el('markets-refresh').onclick=()=>{loadedAt=0;void show();};
+ el('markets-refresh').onclick=()=>{void refresh();};
  let resize:number|undefined;window.addEventListener('resize',()=>{clearTimeout(resize);resize=window.setTimeout(()=>{if(!el('view-markets').hidden)renderDetail();},150);});
- return {show,bookChanged:()=>{if(stats.size&&!el('view-markets').hidden)renderDetail();},reset:()=>{prints=[];stats=new Map();selected=undefined;loadedAt=0;}};
+ return {show,bookChanged:()=>{if(stats.size&&!el('view-markets').hidden)renderDetail();},reset:()=>{prints=[];stats=new Map();selected=undefined;loadedAt=0;scanner=undefined;}};
 }

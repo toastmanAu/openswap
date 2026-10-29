@@ -98,6 +98,7 @@ let startupDone:()=>void=()=>{};const startup=new Promise<void>(resolve=>{startu
 const marketView=createMarkets({
  ready:()=>startup,
  client:()=>client,
+ network:()=>deployment.genesisHash,
  sources:()=>({orders:[{version:1,codeHash:deployment.codeHash},...(v2?[{version:2 as const,codeHash:v2.codeHash}]:[])],pools:poolUi.deployment()}),
  book:()=>orders.filter(o=>o.supported&&!(swap.isV2(o)&&swap.isExpired(o,chainNow))).map(o=>({offer:o.offerAsset,ask:o.askAsset,available:swap.isV2(o)?o.available:o.offerAmount,askAmount:o.askAmount,offerAmount:o.offerAmount})),
  pools:()=>poolUi.markets(),
