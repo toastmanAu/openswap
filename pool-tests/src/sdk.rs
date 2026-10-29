@@ -1,6 +1,7 @@
 //! Execute the actual TypeScript builder output, without complete_tx repairing deps.
 mod composition;
 mod resource;
+mod route;
 mod split;
 use crate::fixture::{CYCLES, FUNDING, TOKENS, amount, cell};
 use ckb_system_scripts::BUNDLED_CELL;
@@ -475,6 +476,12 @@ fn sdk_distinct_owner_compositions() {
 fn sdk_split_route_orders_and_pool() {
     let mut fixture = setup();
     split::run(&mut fixture);
+}
+
+#[test]
+fn sdk_two_pool_route() {
+    let mut fixture = setup();
+    route::run(&mut fixture);
 }
 
 #[test]

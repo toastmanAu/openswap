@@ -369,6 +369,48 @@ Limits:
 - **Greedy quotes.** Lots are taken cheapest-first as whole lots; the quote is
   not optimal over every combination.
 
+### Two-pool routes (2026-10-29)
+
+Every pool pairs CKB with one token, so token A to token B goes through two
+pools: the A pool pays CKB for token A, and all of that CKB goes into the B pool
+for token B. `buildRoute` in `pool-sdk/src/builders.ts` settles both legs in one
+transaction with one review and one signature. No contract change was needed:
+the validator authenticates each pool by its own pool ID.
+
+Layout:
+- **Inputs:** pool A state, CKB and token reserves at `0..2`, pool B at `3..5`,
+  then wallet funding.
+- **Outputs:** both pools' successors at the same indexes (`rx`/`ry` are 1/2 and
+  4/5), the token B receipt at 6, any token A change, then plain CKB change.
+- **Witnesses:** pool actions at 0 and 3, the wallet signature at 6.
+
+The builder derives the CKB hop itself. The first leg's exact CKB output is the
+second leg's exact input, so no CKB is left over. Only the final token B
+minimum comes from the caller. It refuses one pool used twice, two pools of the
+same token, issuer-mode funding, and any funding asset other than plain CKB and
+token A. Freshness re-reads both pool states last.
+
+Quoting: `quoteRouteExactOut` in `pool-sdk/src/route.ts` returns the minimal
+token A input for at least the requested token B. The Swap tab quotes every
+listed pool pair when both sides are tokens, and picks the route when it is
+cheapest. The review shows both legs, the hop, totals and both pools after.
+Like other pool routes, it needs a JoyID wallet.
+
+Evidence:
+- `pool-tests` `sdk_two_pool_route` runs the deployed pool binary twice in one
+  transaction, with real xUDT for both tokens and secp, on SDK-built bytes. Three
+  rounds, about 5.86M cycles and 2,896 bytes each. Round 2 spends both pools'
+  outputs from round 1, so both states share one transaction hash.
+- It rejects re-signed tampering: swapped pool actions, a token unit taken from
+  pool B, and CKB taken from either pool.
+- Unit tests: `pool-sdk/test/route.test.ts`. Browser test: the two-pool case
+  in `frontend/test/pools.spec.ts`.
+- Live: a two-pool route on testnet ([run](research/POOL_TESTNET_RUN.md#more-pools-and-a-live-two-pool-route-2026-10-29)).
+
+Limits:
+- Routes do not combine with order lots, and no route uses more than two pools.
+- Not yet in the `split-vm`-style seeded campaigns.
+
 `frontend/src/pools/journal.ts` is a localStorage-backed `ArchivableSubmissionJournal`
 with the solver journal's record validation. A write from another tab poisons
 the instance; reload and reconcile. Clearing site data loses it; the node remains
@@ -380,6 +422,6 @@ endpoints on 2026-10-22. An earlier shared test fixture returned a bare `null`,
 which real nodes do not send. The fixture now uses the real shape, and the UI
 needs no special handling. Network failures still throw.
 
-Tests: `frontend/test/pools.spec.ts`, 8 offline cases. They build a real SDK
+Tests: `frontend/test/pools.spec.ts`, offline cases. They build a real SDK
 genesis, serve it from a mocked node, and sign with a fixed-placeholder mock JoyID
 signer. No signature is cryptographically valid and nothing touches a network.

@@ -1,15 +1,24 @@
 /** Bounded single-owner funding. No signing, send, or automatic consolidation. */
 import {ccc} from '@ckb-ccc/core';
 import {parseAmount} from '../../sdk/src/codec.js';
-import {createPool,transition,type Operation} from '../../pool-model/src/model.js';
+import {createPool,transition,swap,type Operation} from '../../pool-model/src/model.js';
 import {XUDT_CODE_HASH} from './codec.js';
-import {buildCreate,buildTransition,PoolBuildError,type Wallet,type Recipients,type CreateRequest,type BuiltPoolTransaction,type OrderFill} from './builders.js';
+import {buildCreate,buildTransition,buildRoute,PoolBuildError,type Wallet,type Recipients,type CreateRequest,type BuiltPoolTransaction,type OrderFill} from './builders.js';
 import {decodeOrder} from '../../sdk/src/orders.js';
 import {assertPoolNetwork,liveCells,parsePool,pointKey,sameCell,validateCell,readBounded,withPoolDeadline,type PoolClient,type PoolDeployment,type PoolSnapshot,type ReadOptions} from './pools.js';
 
 export type PoolIntent={kind:'create';request:CreateRequest}|{kind:'transition';pool:PoolSnapshot;action:Operation;
  /** Order lots settled in the same transaction (split route); the builder checks them. */
- orders?:OrderFill};
+ orders?:OrderFill}
+ /** Two-pool route: pay `amountIn` of the first pool's token, receive at least
+  * `minOut` of the second pool's token, via CKB. */
+ |{kind:'route';pools:readonly [PoolSnapshot,PoolSnapshot];amountIn:bigint;minOut:bigint};
+/** The one builder call for an intent; funding and review must agree on it. */
+export function buildIntent(deployment:PoolDeployment,wallet:Wallet,recipients:Recipients,intent:PoolIntent):BuiltPoolTransaction {
+ if(intent.kind==='create')return buildCreate(deployment,wallet,recipients,intent.request);
+ if(intent.kind==='route')return buildRoute(deployment,wallet,recipients,intent.pools[0],intent.pools[1],{amountIn:intent.amountIn,minOut:intent.minOut});
+ return buildTransition(deployment,wallet,recipients,intent.pool,intent.action,intent.orders);
+}
 export class PoolFundingError extends Error {
  constructor(readonly code:'INVALID'|'INSUFFICIENT'|'LIMIT'|'RESERVED',message:string){super(`Pool funding: ${message}`);this.name='PoolFundingError';}
 }
@@ -48,15 +57,19 @@ export async function fundPoolTransaction(
  const selectedWallet={...wallet,lock:owner,change:ccc.Script.from(wallet.change).clone(),deps:wallet.deps.map(d=>ccc.CellDep.from(d).clone()),witness:wallet.witness?{...wallet.witness}:undefined};
  const selectedRecipients={ckb:ccc.Script.from(recipients.ckb).clone(),token:ccc.Script.from(recipients.token).clone(),lp:ccc.Script.from(recipients.lp).clone()};
  const captured:PoolIntent=intent.kind==='create'?{kind:'create',request:{...intent.request,parameters:{...intent.request.parameters,backing:{...intent.request.parameters.backing}}}}:
+  intent.kind==='route'?{kind:'route',pools:[parsePool(selectedDeployment,intent.pools[0].stateCell,intent.pools[0].ckbCell,intent.pools[0].tokenCell),parsePool(selectedDeployment,intent.pools[1].stateCell,intent.pools[1].ckbCell,intent.pools[1].tokenCell)],amountIn:intent.amountIn,minOut:intent.minOut}:
   {kind:'transition',pool:parsePool(selectedDeployment,intent.pool.stateCell,intent.pool.ckbCell,intent.pool.tokenCell),action:{...intent.action},
    orders:intent.orders&&{codeHash:intent.orders.codeHash,cellDep:ccc.CellDep.from(intent.orders.cellDep).clone(),cells:intent.orders.cells.map(c=>c.clone())}};
  const orders=captured.kind==='transition'?captured.orders:undefined;
- const result=captured.kind==='create'?createPool(captured.request.parameters,captured.request.x,captured.request.y,captured.request.minShares):transition(captured.pool.accounting,captured.action);
- const token=captured.kind==='create'?ccc.Script.from({codeHash:XUDT_CODE_HASH,hashType:'data1',args:captured.request.tokenOwner}):captured.pool.token;
+ // A route spends only the first pool's token; its builder refuses any other asset.
+ const result=captured.kind==='create'?createPool(captured.request.parameters,captured.request.x,captured.request.y,captured.request.minShares):
+  captured.kind==='route'?swap(captured.pools[0].accounting,'yToX',captured.amountIn,1n):transition(captured.pool.accounting,captured.action);
+ const token=captured.kind==='create'?ccc.Script.from({codeHash:XUDT_CODE_HASH,hashType:'data1',args:captured.request.tokenOwner}):captured.kind==='route'?captured.pools[0].token:captured.pool.token;
  const lp=captured.kind==='transition'?captured.pool.lp:undefined;
  requireFunding(owner.hash()!==token.args,'issuer-mode funding is not supported');
+ if(captured.kind==='route')requireFunding(owner.hash()!==captured.pools[1].token.args,'issuer-mode funding is not supported');
  const {maxCandidates=1000,maxPages=20,pageSize=50,reservations}=options;
- const protocolMax=captured.kind==='create'?256:253-(orders?.cells.length??0),maxInputs=options.maxInputs??protocolMax;
+ const protocolMax=captured.kind==='create'?256:captured.kind==='route'?250:253-(orders?.cells.length??0),maxInputs=options.maxInputs??protocolMax;
  for(const [value,max] of [[maxCandidates,10000],[maxPages,100],[pageSize,100],[maxInputs,protocolMax]])requireFunding(Number.isSafeInteger(value)&&value!>=1&&value!<=max!,'invalid search bound');
  return withPoolDeadline(options,async o=>{
   await assertPoolNetwork(client,selectedDeployment,o);
@@ -114,7 +127,7 @@ export async function fundPoolTransaction(
    let built:BuiltPoolTransaction;
    try{
     const funded={...selectedWallet,funding:live};
-    built=captured.kind==='create'?buildCreate(selectedDeployment,funded,selectedRecipients,captured.request):buildTransition(selectedDeployment,funded,selectedRecipients,captured.pool,captured.action,captured.orders);
+    built=buildIntent(selectedDeployment,funded,selectedRecipients,captured);
    }catch(error){
     if(!(error instanceof PoolBuildError)||error.code!=='FUNDING')throw error;
     const more=remainder[next++];

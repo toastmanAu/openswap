@@ -20,6 +20,8 @@ const joyLock=ccc.Script.from({codeHash:codeType.hash(),hashType:'type',args:`0x
 const otherJoyLock=ccc.Script.from({codeHash:codeType.hash(),hashType:'type',args:`0x0001${'77'.repeat(20)}`});
 const creator=ccc.Script.from({codeHash:hash(8),hashType:'type',args:'0x0002'});
 const token=ccc.Script.from({codeHash:XUDT_CODE_HASH,hashType:'data1',args:hash(7)});
+/** Second pool token ("TWO"), for two-pool routes. */
+const token2=ccc.Script.from({codeHash:XUDT_CODE_HASH,hashType:'data1',args:hash(17)});
 
 type TokenMeta='match'|'mismatch'|'none';
 // Split routes run the real order-lock code check, so the mock serves the built
@@ -32,16 +34,23 @@ function orderLots(sizes:[bigint,bigint][]){
  return sizes.map(([offer,ask],i)=>{const c=estimateCapacity(d,{ownerLock:creator,nonce:new Uint8Array(16).fill(i+1),askAsset:CKB,askAmount:ask},udt(token),offer).cell;
   return ccc.Cell.from({outPoint:{txHash:hash(60+i),index:0n},cellOutput:c.cellOutput,outputData:c.outputData});});
 }
-function chain(tokenMeta:TokenMeta='match',lots:ccc.Cell[]=[]){
+function chain(tokenMeta:TokenMeta='match',lots:ccc.Cell[]=[],twoPools=false){
  const cell=(point:{txHash:ccc.Hex;index:bigint},lock:ccc.Script,capacity:bigint,data:ccc.Hex='0x',type?:ccc.Script)=>ccc.Cell.from({outPoint:point,cellOutput:{capacity,lock,type},outputData:data});
  const request={parameters:{feeBps:30n,lockedShares:1000n,backing:{state:34_000_000_000n,ckb:8_000_000_000n,token:16_000_000_000n}},x:10n**12n,y:4n*10n**12n,minShares:1n,tokenOwner:hash(7)};
  const creatorFunding=[cell({txHash:hash(20),index:0n},creator,20_000_000_000n,ccc.hexFrom(writeLE(request.y,16)),token),cell({txHash:hash(21),index:0n},creator,2n*10n**12n)];
  const built=buildCreate(deployment,{lock:creator,change:creator,deps:[dep(5)],funding:creatorFunding,feeRate:1000n,maxFee:10000n},{ckb:creator,token:creator,lp:creator},request);
  const tx=built.transaction,txHash=tx.hash();
  const lp=tx.outputs.find(o=>o.type&&!o.type.eq(token)&&o.lock.eq(creator)&&o.type.codeHash===deployment.codeHash)!.type!;
+ // Optional second pool: 20,000 CKB / 10,000 TWO, so 1 TWO ≈ 2 CKB ≈ 8 TEST.
+ const second=twoPools?(()=>{
+  const r2={...request,x:2n*10n**12n,y:10n**12n,tokenOwner:hash(17)};
+  const funding=[cell({txHash:hash(22),index:0n},creator,20_000_000_000n,ccc.hexFrom(writeLE(r2.y,16)),token2),cell({txHash:hash(23),index:0n},creator,3n*10n**12n)];
+  return buildCreate(deployment,{lock:creator,change:creator,deps:[dep(5)],funding,feeRate:1000n,maxFee:10000n},{ckb:creator,token:creator,lp:creator},r2);
+ })():undefined;
  const cells=[
   cell(dep(3).outPoint,creator,10n**12n,'0x1234'),cell(dep(4).outPoint,creator,10n**12n,xudt),cell(dep(9).outPoint,creator,10n**12n,'0xabcd',codeType),
   ...tx.outputs.map((o,i)=>cell({txHash,index:BigInt(i)},o.lock,o.capacity,tx.outputsData[i]!,o.type)),
+  ...(second?second.transaction.outputs.map((o,i)=>cell({txHash:second.transaction.hash(),index:BigInt(i)},o.lock,o.capacity,second.transaction.outputsData[i]!,o.type)):[]),
   // The trader: one plain CKB cell and one token cell.
   cell({txHash:hash(30),index:0n},joyLock,10n**13n),cell({txHash:hash(31),index:0n},joyLock,20_000_000_000n,ccc.hexFrom(writeLE(10n**12n,16)),token),
   cell({txHash:hash(32),index:0n},otherJoyLock,10n**13n),
@@ -52,17 +61,19 @@ function chain(tokenMeta:TokenMeta='match',lots:ccc.Cell[]=[]){
  ];
  const manifest={version:1,network:'testnet',
   deployment:{genesisHash,codeHash:deployment.codeHash,poolDep:{outPoint:{txHash:hash(3),index:'0'},depType:'code'},tokenDep:{outPoint:{txHash:hash(4),index:'0'},depType:'code'}},
-  pools:[{label:'CKB / TEST',poolId:built.poolId,...(tokenMeta==='none'?{}:{token:{symbol:'TEST',decimals:8,typeHash:tokenMeta==='match'?token.hash():hash(13)}})}],
+  pools:[{label:'CKB / TEST',poolId:built.poolId,...(tokenMeta==='none'?{}:{token:{symbol:'TEST',decimals:8,typeHash:tokenMeta==='match'?token.hash():hash(13)}})},
+   ...(second?[{label:'CKB / TWO',poolId:second.poolId,token:{symbol:'TWO',decimals:8,typeHash:token2.hash()}}]:[])],
   joyid:{codeHash:joyLock.codeHash,hashType:'type',codeDeps:[{dep:{outPoint:{txHash:hash(9),index:'0'},depType:'code'},dataHash:ccc.hashCkb('0xabcd')}]},
   policy:{feeRate:'1000',maxFee:'10000',slippageBps:50,reviewTtlMs:60000}};
  // Committed parent transactions, which CCC reads to price inputs before sending.
- const parents=new Map<string,ccc.Transaction>([[txHash,tx]]);
- for(const c of cells)if(c.outPoint.txHash!==txHash){
+ const parents=new Map<string,ccc.Transaction>([[txHash,tx],...(second?[[second.transaction.hash(),second.transaction] as [string,ccc.Transaction]]:[])]);
+ const real=new Set([txHash,second?.transaction.hash()]);
+ for(const c of cells)if(!real.has(c.outPoint.txHash)){
   const parent=parents.get(c.outPoint.txHash)??ccc.Transaction.from({});
   while(parent.outputs.length<=Number(c.outPoint.index)){parent.outputs.push(c.cellOutput.clone());parent.outputsData.push(c.outputData);}
   parent.outputs[Number(c.outPoint.index)]=c.cellOutput.clone();parent.outputsData[Number(c.outPoint.index)]=c.outputData;parents.set(c.outPoint.txHash,parent);
  }
- return {cells,manifest,poolId:built.poolId,parents};
+ return {cells,manifest,poolId:built.poolId,secondPoolId:second?.poolId,parents};
 }
 const json=(s?:ccc.Script)=>s?{code_hash:s.codeHash,hash_type:s.hashType,args:s.args}:null;
 const out=(c:ccc.Cell)=>({capacity:ccc.numToHex(c.cellOutput.capacity),lock:json(c.cellOutput.lock),type:json(c.cellOutput.type)});
@@ -78,8 +89,8 @@ function matches(c:ccc.Cell,search:any){
  return true;
 }
 interface Mock {sent:string[];journalAtSend:string[];send:'ok'|'abort';committedAt?:bigint;tip:bigint}
-async function mockPools(page:Page,options:{manifest?:boolean;token?:TokenMeta;lots?:ccc.Cell[]}={}):Promise<Mock>{
- const {cells,manifest,parents}=chain(options.token,options.lots),live=new Map(cells.map(c=>[`${c.outPoint.txHash}:${c.outPoint.index}`,c]));
+async function mockPools(page:Page,options:{manifest?:boolean;token?:TokenMeta;lots?:ccc.Cell[];twoPools?:boolean}={}):Promise<Mock>{
+ const {cells,manifest,parents}=chain(options.token,options.lots,options.twoPools),live=new Map(cells.map(c=>[`${c.outPoint.txHash}:${c.outPoint.index}`,c]));
  const mock:Mock={sent:[],journalAtSend:[],send:'ok',tip:100n},pool=new Map<string,unknown>();
  if(options.manifest!==false)await page.route('**/pool-manifest.json',route=>route.fulfill({json:manifest}));
  await page.route('https://testnet.ckb.dev/**',async route=>{
@@ -331,6 +342,34 @@ test('the Swap tab compares venues and routes to the pool through the pool revie
  // The outcome is reported where the user is (the Swap tab), not only on the hidden Pools tab.
  await expect(status).toContainText(/Submitted 0x[0-9a-f]{64}\. It stays listed under pool submissions on the Pools tab/);
  await expect(page.locator('#swap-submit')).toBeEnabled();
+});
+
+test('a token-to-token swap routes through two pools via CKB in one reviewed transaction',async({page})=>{
+ const mock=await mockPools(page,{twoPools:true});
+ await page.goto('/');await expect(page.locator('#scan-status')).toContainText('supported live orders',{timeout:35000});
+ await expect(page.locator(`#base option[value="${token2.hash()}"]`)).toHaveText('TWO');
+ // Receive TWO, pay TEST: no pool pairs them directly.
+ await page.locator('#base').selectOption(token2.hash());await page.locator('#quote').selectOption(token.hash());
+ await page.locator('#swap-output').fill('10');
+ const status=page.locator('#quote-status');
+ await expect(status).toContainText(/Best route: two pools via CKB in one transaction\. Receive 10(\.\d+)? TWO for [\d.]+ TEST/);
+ await expect(status).toContainText('Two pools via CKB: 10');
+ await connect(page);await page.locator('#swap-output').fill('10');
+ await page.getByRole('button',{name:'Review swap'}).click();
+ await expect(page.locator('#pool-review')).toBeVisible({timeout:30000});
+ const review=page.locator('#pool-review-text');
+ for(const line of ['Routed swap via two pools','Route: TEST → CKB → TWO, two pools in one transaction','Pool 1 (CKB / TEST): pay','Pool 2 (CKB / TWO): pay','All CKB from pool 1 goes into pool 2','Minimum accepted: 10 TWO','Pool 1 after:','Pool 2 after:'])await expect(review).toContainText(line);
+ await expect(review).toContainText(/You receive \(exact\): 10(\.\d+)? TWO/);
+ expect(mock.sent).toEqual([]);
+ await page.getByRole('button',{name:'Approve and sign'}).click();
+ await expect(page.locator('#pool-review')).toBeHidden();expect(mock.sent).toHaveLength(1);
+ // Pool 1's state, CKB and token reserves, then pool 2's, then the wallet.
+ const sent=ccc.Transaction.fromBytes(mock.sent[0]!);
+ const {cells}=chain('match',[],true),find=(i:number)=>cells.find(c=>c.outPoint.eq(sent.inputs[i]!.previousOutput))!;
+ expect([0,3].map(i=>find(i).cellOutput.type?.codeHash)).toEqual([deployment.codeHash,deployment.codeHash]);
+ expect([2,5].map(i=>find(i).cellOutput.type?.hash())).toEqual([token.hash(),token2.hash()]);
+ expect(sent.outputs[6]!.type?.hash()).toBe(token2.hash());expect(sent.outputs[6]!.lock.eq(joyLock)).toBe(true);
+ await expect(status).toContainText(/Submitted 0x[0-9a-f]{64}\./);
 });
 
 test('a split route fills cheap lots and the pool in one reviewed transaction',async({page})=>{

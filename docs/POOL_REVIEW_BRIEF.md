@@ -124,6 +124,11 @@ directories and compares the bytes.
   10,000 shannons) a split of roughly 28 or more token-paid lots exceeds the cap,
   and the builder refuses it before signing. The router does not size routes
   against the cap.
+- **Two-pool routes (2026-10-29, after the e9aa38c freeze).** Two pool groups
+  validate in one transaction, each locating only its own reserves. Both pool
+  actions are unsigned witnesses, as above; all outputs are signature-bound. The
+  first leg's minimum equals its exact output; only the final minimum is the
+  user's. Off-chain change only: the pool binary is unchanged.
 
 Full detail, the internal R1/R2 findings and their fixes are in the
 [internal review](research/POOL_INTERNAL_REVIEW.md).

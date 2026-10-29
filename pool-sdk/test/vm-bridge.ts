@@ -1,7 +1,7 @@
 // Invoked by Rust CKB-VM tests. Only public deterministic in-memory fixture cells.
 import {readFileSync} from 'node:fs';
 import {ccc} from '@ckb-ccc/core';
-import {buildCreate,buildTransition,PoolBuildError} from '../src/builders.js';
+import {buildCreate,buildTransition,buildRoute,PoolBuildError} from '../src/builders.js';
 import {parsePool} from '../src/pools.js';
 import {ModelError,type Operation} from '../../pool-model/src/model.js';
 import {estimateCapacity} from '../../sdk/src/capacity.js';
@@ -21,6 +21,15 @@ const lock=ccc.Script.fromBytes(input.lock);
 const wallet={lock,change:lock,deps:input.lockDeps.map(dep),funding:input.funding.map(cell),feeRate:1000n,maxFee:10000n,witness:input.walletWitness};
 const recipients={ckb:lock,token:lock,lp:input.lpRecipient?ccc.Script.fromBytes(input.lpRecipient):lock};
 const pool=input.previous?parsePool(deployment,...(input.previous.map(cell) as [ccc.Cell,ccc.Cell,ccc.Cell])):undefined;
+// Two-pool route (token A -> CKB -> token B) through the production route builder.
+if(input.route){
+ const [first,second]=input.route.pools.map((cells:never[])=>parsePool(deployment,...(cells.map(cell) as [ccc.Cell,ccc.Cell,ccc.Cell])));
+ const built=buildRoute(deployment,wallet,recipients,first!,second!,{amountIn:BigInt(input.route.amountIn),minOut:BigInt(input.route.minOut)});
+ built.assertIntegrity();
+ console.log(JSON.stringify({transaction:ccc.hexFrom(built.transaction.toBytes()),walletWitnessIndex:built.walletWitnessIndex,stateOutputIndex:built.stateOutputIndex,
+  hops:built.hops!.map(h=>({poolId:h.poolId,amountIn:h.action.amountIn.toString(),out:(h.action.direction==='yToX'?h.result.flows.receivedX:h.result.flows.receivedY).toString()}))}));
+ process.exit(0);
+}
 const actions={xToY:{kind:'swap',direction:'xToY',amountIn:10000000000n,minOut:1n},yToX:{kind:'swap',direction:'yToX',amountIn:10000000000n,minOut:1n},deposit:{kind:'deposit',maxX:10000000000n,maxY:40000000000n,minShares:1n},withdraw:{kind:'withdraw',shares:pool?pool.accounting.totalShares-pool.accounting.lockedShares:1n,minX:1n,minY:1n}} satisfies Record<string,Operation>;
 if(input.random!==undefined&&pool){
  const random=BigInt(input.random),x=(random%10000n+1n)*1000000n,y=((random>>12n)%10000n+1n)*4000000n;
@@ -44,7 +53,7 @@ const initial=input.initial??{fee:'30',locked:'1000',x:'1000000000000',y:'400000
 let built;
 const orders=input.orders&&{codeHash:input.orders.codeHash,cellDep:dep(input.orders.dep),cells:input.orders.cells.map(cell)};
 if(input.swapAmountIn!==undefined){actions.xToY.amountIn=BigInt(input.swapAmountIn);actions.yToX.amountIn=BigInt(input.swapAmountIn);}
-try{built=pool?buildTransition(deployment,wallet,recipients,pool,actions[input.action as keyof typeof actions],orders):buildCreate(deployment,wallet,recipients,{parameters:{feeBps:BigInt(initial.fee),lockedShares:BigInt(initial.locked),backing:{state:34000000000n,ckb:8000000000n,token:16000000000n}},x:BigInt(initial.x),y:BigInt(initial.y),minShares:1n,tokenOwner:`0x${'11'.repeat(32)}`});}
+try{built=pool?buildTransition(deployment,wallet,recipients,pool,actions[input.action as keyof typeof actions],orders):buildCreate(deployment,wallet,recipients,{parameters:{feeBps:BigInt(initial.fee),lockedShares:BigInt(initial.locked),backing:{state:34000000000n,ckb:8000000000n,token:16000000000n}},x:BigInt(initial.x),y:BigInt(initial.y),minShares:1n,tokenOwner:input.tokenOwner??`0x${'11'.repeat(32)}`});}
 catch(error){
  const code=error instanceof PoolBuildError&&(error.code==='FUNDING'||error.code==='FEE')?error.code:error instanceof ModelError?error.code:undefined;
  if(!input.allowSkip||!code)throw error;

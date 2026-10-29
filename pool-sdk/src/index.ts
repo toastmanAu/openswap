@@ -8,3 +8,4 @@ export * from './funding.js';
 export * from './review.js';
 export * from './recovery.js';
 export * from './split.js';
+export * from './route.js';

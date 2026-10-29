@@ -1,5 +1,5 @@
 import {ccc} from '@ckb-ccc/core';
-import {scanPools,resolveJoyIdWallet,joyIdProofSource,fundPoolTransaction,reviewPoolTransaction,PoolFundingReservations,PoolSubmissionRecovery,quoteSplit,
+import {scanPools,resolveJoyIdWallet,joyIdProofSource,fundPoolTransaction,reviewPoolTransaction,PoolFundingReservations,PoolSubmissionRecovery,quoteSplit,quoteRouteExactOut,
  type PoolSnapshot,type SplitLot,type PoolIntent,type PoolJoyIdSigner,type FundedPoolTransaction,type PoolTransactionReview,type PoolSubmitClient} from '../../../pool-sdk/src/index.js';
 import {transition,swapExactOut,type Operation} from '../../../pool-model/src/model.js';
 import {loadPoolManifest,type PoolManifest,type PoolTokenDisplay} from './manifest.js';
@@ -12,6 +12,8 @@ export interface PoolMarket {poolId:ccc.Hex;token:ccc.Script;symbol:string;decim
 export interface PoolRoute {poolId:ccc.Hex;direction:'xToY'|'yToX';amountIn:bigint;amountOut:bigint;checkedAt:number}
 /** Whole order lots plus a pool swap for the rest, settled in one transaction. */
 export interface SplitRoute<T extends SplitLot> extends PoolRoute {lots:T[];lotIn:bigint;lotOut:bigint;poolIn:bigint;poolOut:bigint}
+/** Token A to token B through two pools (A/CKB then CKB/B) in one transaction. */
+export interface MultiHopRoute {pools:[ccc.Hex,ccc.Hex];amountIn:bigint;hop:bigint;amountOut:bigint;checkedAt:number}
 export interface OrderCode {codeHash:ccc.Hex;cellDep:ccc.CellDepLike}
 export interface PoolEnv {client():ccc.Client;signer():ccc.Signer|undefined;epoch():number;run(fn:()=>Promise<void>):void}
 const el=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id)! as T;
@@ -36,6 +38,8 @@ const RECHECK_MS=15000;
 
 interface Session {signer:ccc.Signer;epoch:number;client:ccc.Client;lock:ccc.Script;journal:BrowserSubmissionJournal;recovery:PoolSubmissionRecovery;reservations:PoolFundingReservations}
 interface Pending {generation:number;session:Session;funded:FundedPoolTransaction;review:PoolTransactionReview;sign:()=>Promise<ccc.Transaction>;title:string;token:TokenDisplay;
+ /** The token received on a two-pool route. */
+ tokenOut?:TokenDisplay;
  /** Status line that reports this review's outcome: the Pools tab, or the Swap tab for a routed swap. */
  feedback:string}
 
@@ -181,7 +185,6 @@ export function createPoolUi(env:PoolEnv){
   if(session)void loadLp().catch(()=>{});
   return true;
  }
- async function currentPool(poolId:string){await refresh();const pool=snapshots.find(p=>p.poolId===poolId);if(!pool)throw new Error('Pool is no longer live; refresh and choose again');return pool;}
 
  /** Single-flight per connection: concurrent callers (tab open, connect, review)
   * share one session instead of racing to replace each other's. */
@@ -286,20 +289,22 @@ export function createPoolUi(env:PoolEnv){
 
  /** Single-flight: a second preparation must never start (and cancel the first)
   * while the first still holds its funding reservation. */
- async function prepare(title:string,build:(pool?:PoolSnapshot)=>Promise<PoolIntent>,poolId?:string,feedback='pool-action-status'){
+ async function prepare(title:string,build:(pools:PoolSnapshot[])=>Promise<PoolIntent>,poolIds:string[]=[],feedback='pool-action-status'){
   if(busy)throw new Error('A pool transaction is still being prepared, signed or sent. Wait for its result before starting another.');
   setBusy(true);
-  try{await prepareReview(title,build,poolId,feedback);}finally{setBusy(false);}
+  try{await prepareReview(title,build,poolIds,feedback);}finally{setBusy(false);}
  }
- async function prepareReview(title:string,build:(pool?:PoolSnapshot)=>Promise<PoolIntent>,poolId:string|undefined,feedback:string){
+ async function prepareReview(title:string,build:(pools:PoolSnapshot[])=>Promise<PoolIntent>,poolIds:string[],feedback:string){
   invalidate();const start=generation,s=await ensureSession(),m=manifest!;
-  const pool=poolId?await currentPool(poolId):undefined;
-  if(pool){
+  // One refresh for every pool the transaction spends, so they come from one load.
+  if(poolIds.length)await refresh();
+  const pools=poolIds.map(id=>{const pool=snapshots.find(p=>p.poolId===id);if(!pool)throw new Error('Pool is no longer live; refresh and choose again');return pool;});
+  for(const pool of pools){
    const state=`${pool.stateCell.outPoint.txHash}:${pool.stateCell.outPoint.index}`;
    const holder=s.journal.list().find(row=>row.orders.includes(state));
-   if(holder)throw new Error(`Pool submission ${holder.hash} (${holder.status}) already spends this pool's current state, and its inputs stay reserved. Use Recheck until it resolves; do not prepare a replacement.`);
+   if(holder)throw new Error(`Pool submission ${holder.hash} (${holder.status}) already spends ${pools.length>1?`the current state of pool ${pool.poolId.slice(0,12)}…`:"this pool's current state"}, and its inputs stay reserved. Use Recheck until it resolves; do not prepare a replacement.`);
   }
-  const intent=await build(pool);
+  const intent=await build(pools),pool=pools[0];
   text(feedback,'Preparing the transaction with your JoyID account…');
   // Probe funding for JoyID preparation: one plain, data-free cell of this account.
   let probe:ccc.Cell|undefined;
@@ -318,13 +323,41 @@ export function createPoolUi(env:PoolEnv){
    if(start!==generation)throw new Error('The form, pool selection or connection changed while the review was being prepared. Nothing was signed; prepare again.');
    if(session!==s||env.signer()!==s.signer)throw new Error('The wallet connection changed while the review was being prepared. Nothing was signed; prepare again.');
    const bound=resolved.bindReview(review);
-   pending={generation:start,session:s,funded,review,sign:()=>bound.sign({timeoutMs:60000}),title,token:tokenOf(pool),feedback};
+   pending={generation:start,session:s,funded,review,sign:()=>bound.sign({timeoutMs:60000}),title,token:tokenOf(pool),tokenOut:pools[1]&&tokenOf(pools[1]),feedback};
    showReview(pending,resolved.identity.keyType);
    text(feedback,'Review ready. Check every line before approving.');
   }catch(error){funded.release();throw error;}
  }
+ /** Two-pool route: both legs, the CKB hop between them and both pools after. */
+ function routeReviewLines(p:Pending,keyType:string,address:string):string[]{
+  const r=p.review.summary,route=r.route!,tin=p.token,tout=p.tokenOut??RAW,[first,second]=route.hops as [typeof route.hops[0],typeof route.hops[0]];
+  const label=(id:string)=>manifest?.pools.find(m=>m.poolId===id)?.label??`${id.slice(0,12)}…`;
+  const outputs=r.outputs.filter(o=>!o.pool).map(o=>`  #${o.index} ${o.asset==='ckb'?'CKB':o.asset==='token'?tokenAmount(o.amount!,tin):o.asset==='tokenOut'?tokenAmount(o.amount!,tout):shares(o.amount!)} · capacity ${ckb(o.capacity)} (storage ${ckb(o.occupiedCapacity)})`);
+  return [
+   p.title,
+   `Account: ${address} · JoyID ${keyType}`,
+   `Network: CKB TESTNET · genesis ${r.genesisHash.slice(0,18)}…`,
+   `Route: ${tin.symbol} → CKB → ${tout.symbol}, two pools in one transaction`,
+   `  Pool 1 (${label(first.poolId)}): pay ${tokenAmount(route.paid,tin)} · receive ${ckb(route.hop)}`,
+   `  Pool 2 (${label(second.poolId)}): pay ${ckb(route.hop)} · receive ${tokenAmount(route.received,tout)}`,
+   `  All CKB from pool 1 goes into pool 2; none is left over.`,
+   `You pay: ${tokenAmount(route.paid,tin)}`,
+   `You receive (exact): ${tokenAmount(route.received,tout)}`,
+   `Minimum accepted: ${tokenAmount(route.minOut,tout)}`,
+   `Network fee: ${ckb(r.fee)} (cap ${ckb(r.maxFee)})`,
+   `Your outputs:`,...outputs,
+   `Pool 1 after: ${ckb(first.next.x)} · ${tokenAmount(first.next.y,tin)}`,
+   `Pool 2 after: ${ckb(second.next.x)} · ${tokenAmount(second.next.y,tout)}`,
+   `Review expires: ${new Date(r.expiresAt).toLocaleTimeString()}. Approving asks your wallet to sign; the signed transaction is saved here before it is sent.`,
+  ];
+ }
  function showReview(p:Pending,keyType:string){
   const r=p.review.summary,f=r.flows,a=r.action,units=(n:bigint)=>tokenAmount(n,p.token),address=ccc.Address.fromScript(p.session.lock,p.session.client).toString();
+  if(r.route){
+   text('pool-review-text',routeReviewLines(p,keyType,address).join('\n'));
+   text('pool-review-raw',ccc.stringify(p.review.transaction()));
+   el<HTMLDialogElement>('pool-review').showModal();return;
+  }
   const minimum=a.kind==='swap'?`Minimum accepted${r.orders.length?' from the pool':''}: ${a.direction==='xToY'?units(a.minOut):ckb(a.minOut)}`:a.kind==='deposit'?`Minimum LP shares: ${a.minShares}`:a.kind==='withdraw'?`Minimum received: ${ckb(a.minX)} · ${units(a.minY)}`:`Minimum LP shares: ${a.minShares}`;
   const outputs=r.outputs.filter(o=>!o.pool&&!o.maker).map(o=>`  #${o.index} ${o.asset==='ckb'?'CKB':o.asset==='token'?units(o.amount!):shares(o.amount!)} · capacity ${ckb(o.capacity)} (storage ${ckb(o.occupiedCapacity)})`);
   const asset=(kind:'ckb'|'token',n:bigint)=>kind==='ckb'?ckb(n):units(n),t=r.total;
@@ -386,23 +419,23 @@ export function createPoolUi(env:PoolEnv){
   el<HTMLInputElement>('pool-withdraw-shares').value=String(balance*BigInt(b.dataset.sharePct!)/100n);invalidate();withdrawQuote();
  };
  for(const id of ['pool-swap-direction','pool-swap-amount'])el(id).oninput=()=>{invalidate();quote();};
- el('pool-swap').onsubmit=e=>{e.preventDefault();if(busy)return;act('Checking the live pool…',()=>prepare('Pool swap',async pool=>{
+ el('pool-swap').onsubmit=e=>{e.preventDefault();if(busy)return;act('Checking the live pool…',()=>prepare('Pool swap',async ([pool])=>{
   const direction=value('pool-swap-direction') as 'xToY'|'yToX',amountIn=parseUnits(value('pool-swap-amount'),direction==='xToY'?8:tokenOf(pool).decimals);
   const flows=transition(pool!.accounting,{kind:'swap',direction,amountIn,minOut:1n}).flows;
   const action:Operation={kind:'swap',direction,amountIn,minOut:minimumOut(direction==='xToY'?flows.receivedY:flows.receivedX,manifest!.policy.slippageBps)};
   return {kind:'transition',pool:pool!,action};
- },selected().poolId));};
- el('pool-deposit').onsubmit=e=>{e.preventDefault();if(busy)return;act('Checking the live pool…',()=>prepare('Add liquidity',async pool=>{
+ },[selected().poolId]));};
+ el('pool-deposit').onsubmit=e=>{e.preventDefault();if(busy)return;act('Checking the live pool…',()=>prepare('Add liquidity',async ([pool])=>{
   const maxX=parseUnits(value('pool-deposit-ckb'),8),maxY=parseUnits(value('pool-deposit-token'),tokenOf(pool).decimals);
   const minted=transition(pool!.accounting,{kind:'deposit',maxX,maxY,minShares:1n}).flows.mintedShares;
   return {kind:'transition',pool:pool!,action:{kind:'deposit',maxX,maxY,minShares:minimumOut(minted,manifest!.policy.slippageBps)}};
- },selected().poolId));};
- el('pool-withdraw').onsubmit=e=>{e.preventDefault();if(busy)return;act('Checking the live pool…',()=>prepare('Remove liquidity',async pool=>{
+ },[selected().poolId]));};
+ el('pool-withdraw').onsubmit=e=>{e.preventDefault();if(busy)return;act('Checking the live pool…',()=>prepare('Remove liquidity',async ([pool])=>{
   const burned=parseUnits(value('pool-withdraw-shares'),0);
   const flows=transition(pool!.accounting,{kind:'withdraw',shares:burned,minX:1n,minY:1n}).flows;
   const s=manifest!.policy.slippageBps;
   return {kind:'transition',pool:pool!,action:{kind:'withdraw',shares:burned,minX:minimumOut(flows.receivedX,s),minY:minimumOut(flows.receivedY,s)}};
- },selected().poolId));};
+ },[selected().poolId]));};
  el('pool-create').onsubmit=e=>{e.preventDefault();if(busy)return;act('Checking the network…',()=>prepare('Create pool',async()=>{
   const c=manifest?.create;if(!c)throw new Error('Pool creation is not enabled for this deployment');
   return {kind:'create',request:{parameters:c.parameters,tokenOwner:c.tokenOwner,x:parseUnits(value('pool-create-ckb'),8),y:parseUnits(value('pool-create-token'),0),minShares:1n}};
@@ -445,27 +478,48 @@ export function createPoolUi(env:PoolEnv){
   * signature; the order lock and pool validator both run in the transaction. */
  function prepareSplit(route:Pick<SplitRoute<SplitLot&{cell:ccc.Cell}>,'poolId'|'direction'|'lots'>,orderCode:OrderCode,amountOut:bigint,maxAmountIn:bigint){
   const lotIn=route.lots.reduce((n,l)=>n+l.askAmount,0n),lotOut=route.lots.reduce((n,l)=>n+l.offerAmount,0n);
-  return prepare(`Split route: ${route.lots.length} order lot${route.lots.length===1?'':'s'} + pool`,async pool=>{
+  return prepare(`Split route: ${route.lots.length} order lot${route.lots.length===1?'':'s'} + pool`,async ([pool])=>{
    if(lotOut>=amountOut)throw new Error('The selected lots already cover the request; quote again');
    const r=swapExactOut(pool!.accounting,route.direction,amountOut-lotOut),poolIn=route.direction==='xToY'?r.flows.paidX:r.flows.paidY;
    if(lotIn+poolIn>maxAmountIn)throw new Error('The lots plus the pool now cost more than your maximum payment; quote again');
    return {kind:'transition',pool:pool!,action:{kind:'swap',direction:route.direction,amountIn:poolIn,minOut:amountOut-lotOut},
     orders:{codeHash:orderCode.codeHash,cellDep:orderCode.cellDep,cells:route.lots.map(l=>l.cell.clone())}};
-  },route.poolId,'quote-status');
+  },[route.poolId],'quote-status');
  }
  /** Prepares the routed swap from live state through the normal pool review:
   * exact output (minOut = requested), input bounded by the caller's maximum. */
  function prepareRouted(route:Pick<PoolRoute,'poolId'|'direction'>,amountOut:bigint,maxAmountIn:bigint){
-  return prepare('Routed swap via pool',async pool=>{
+  return prepare('Routed swap via pool',async ([pool])=>{
    const r=swapExactOut(pool!.accounting,route.direction,amountOut),amountIn=route.direction==='xToY'?r.flows.paidX:r.flows.paidY;
    if(amountIn>maxAmountIn)throw new Error('The pool now needs more than your maximum payment; quote again');
    return {kind:'transition',pool:pool!,action:{kind:'swap',direction:route.direction,amountIn,minOut:amountOut}};
-  },route.poolId,'quote-status');
+  },[route.poolId],'quote-status');
+ }
+ /** Cheapest pair of listed pools taking `tokenIn` to `tokenOut` via CKB, from the last loaded state. */
+ function multiHopQuote(tokenIn:ccc.Hex,tokenOut:ccc.Hex,amountOut:bigint):MultiHopRoute|undefined {
+  let best:MultiHopRoute|undefined;
+  const list=markets();
+  for(const first of list)for(const second of list){
+   if(first.token.hash()!==tokenIn||second.token.hash()!==tokenOut||first.poolId===second.poolId)continue;
+   const a=snapshots.find(p=>p.poolId===first.poolId)!,b=snapshots.find(p=>p.poolId===second.poolId)!;
+   let q;try{q=quoteRouteExactOut(a.accounting,b.accounting,amountOut);}catch{continue;}
+   if(!best||q.amountIn<best.amountIn)best={pools:[a.poolId,b.poolId],...q,checkedAt};
+  }
+  return best;
+ }
+ /** Prepares a two-pool route from live state: exact output (minOut = requested),
+  * token A input bounded by the caller's maximum. One review, one signature. */
+ function prepareMultiHop(route:Pick<MultiHopRoute,'pools'>,amountOut:bigint,maxAmountIn:bigint){
+  return prepare('Routed swap via two pools',async ([first,second])=>{
+   const q=quoteRouteExactOut(first!.accounting,second!.accounting,amountOut);
+   if(q.amountIn>maxAmountIn)throw new Error('The two pools now need more than your maximum payment; quote again');
+   return {kind:'route',pools:[first!,second!],amountIn:q.amountIn,minOut:amountOut};
+  },route.pools,'quote-status');
  }
 
  return {
   show:()=>env.run(async()=>{await refresh();if(env.signer())await ensureSession();}),
-  load:refresh,markets,routeQuote,prepareRouted,splitQuote,prepareSplit,tokenDep:()=>manifest?.deployment.tokenDep,
+  load:refresh,markets,routeQuote,prepareRouted,splitQuote,prepareSplit,multiHopQuote,prepareMultiHop,tokenDep:()=>manifest?.deployment.tokenDep,
   invalidate,reset,
  };
 }

@@ -2,10 +2,10 @@
  * and captured cells; does not authenticate RPC data or authorize a broadcast. */
 import {ccc} from '@ckb-ccc/core';
 import {parseAmount} from '../../sdk/src/codec.js';
-import {buildCreate,buildTransition,type BuiltPoolTransaction,type Wallet,type Recipients} from './builders.js';
+import type {BuiltPoolTransaction,Wallet,Recipients} from './builders.js';
 import {decodeWitness,poolScript,Role} from './codec.js';
 import {minimumCapacity,parsePool,withPoolDeadline,type PoolDeployment,type PoolClient,type ReadOptions} from './pools.js';
-import type {PoolIntent} from './funding.js';
+import {buildIntent,type PoolIntent} from './funding.js';
 
 type Immutable<T>=T extends (...args:never[])=>unknown?T:T extends object?{readonly [K in keyof T]:Immutable<T[K]>}:T;
 function freeze<T>(value:T):Immutable<T>{
@@ -30,13 +30,14 @@ export function reviewPoolTransaction(
  const createdAt=Date.now(),started=performance.now();
  // No awaits: builders capture independent input snapshots and raw/witness bytes.
  // Rebuilding also checks requested minima, recipients, change and fee policy.
- const built=intent.kind==='create'?buildCreate(deployment,wallet,recipients,intent.request):buildTransition(deployment,wallet,recipients,intent.pool,intent.action,intent.orders);
+ const built=buildIntent(deployment,wallet,recipients,intent);
  built.assertIntegrity(prepared);
  requireReview(ccc.hexFrom(prepared.toBytes())===ccc.hexFrom(built.transaction.toBytes()),'expected unsigned prepared bytes');
  const transaction=prepared.clone();
  const action=decodeWitness(transaction.witnesses[built.actionWitnessIndex]!,intent.kind==='create');
  const lots=intent.kind==='transition'?intent.orders?.cells??[]:[];
- const inputs=[...lots,...(intent.kind==='transition'?[intent.pool.stateCell,intent.pool.ckbCell,intent.pool.tokenCell]:[]),...wallet.funding].map(c=>c.clone());
+ const pools=intent.kind==='transition'?[intent.pool]:intent.kind==='route'?[...intent.pools]:[];
+ const inputs=[...lots,...pools.flatMap(p=>[p.stateCell,p.ckbCell,p.tokenCell]),...wallet.funding].map(c=>c.clone());
  const inputCapacity=inputs.reduce((n,c)=>n+c.cellOutput.capacity,0n);
  const outputCapacity=transaction.outputs.reduce((n,c)=>n+c.capacity,0n);
  const fee=inputCapacity-outputCapacity;
@@ -44,7 +45,14 @@ export function reviewPoolTransaction(
  const script=(s:ccc.Script)=>ccc.hexFrom(s.toBytes());
  const token=transaction.outputs[built.stateOutputIndex+2]!.type!;
  const lp=poolScript(deployment.codeHash,built.poolId,Role.LpType);
- const previous=intent.kind==='transition'?parsePool(deployment,intent.pool.stateCell,intent.pool.ckbCell,intent.pool.tokenCell).accounting:undefined;
+ const previous=pools[0]?parsePool(deployment,pools[0].stateCell,pools[0].ckbCell,pools[0].tokenCell).accounting:undefined;
+ // Route: the token received is the second pool's; both pools' cells are pool outputs.
+ const hops=built.hops??[],tokenOut=hops[1]?.token,poolOutputs=hops.length?hops.length*3:3;
+ const route=hops.length?{
+  hops:hops.map(h=>({poolId:h.poolId,token:script(h.token),action:{...h.action},previous:{...h.previous,backing:{...h.previous.backing}},next:{...h.result.next,backing:{...h.result.next.backing}},flows:{...h.result.flows},stateOutputIndex:h.stateOutputIndex})),
+  tokenIn:script(hops[0]!.token),tokenOut:script(tokenOut!),
+  paid:hops[0]!.result.flows.paidY,hop:hops[0]!.result.flows.receivedX,received:hops[1]!.result.flows.receivedY,minOut:hops[1]!.action.minOut,
+ }:undefined;
  const summary=freeze({
   createdAt,expiresAt:createdAt+ttlMs,genesisHash:deployment.genesisHash,
   transactionHash:transaction.hash(),poolId:built.poolId,
@@ -55,14 +63,15 @@ export function reviewPoolTransaction(
   // Split route: each lot's maker payment is the output at its own input index.
   orders:built.orders.map(o=>({...o,outPoint:{txHash:o.outPoint.txHash,index:o.outPoint.index},owner:script(o.owner)})),
   total:totals(built.result.flows,built.orders),orderDependency:built.orderDep?{txHash:built.orderDep.outPoint.txHash,index:built.orderDep.outPoint.index,depType:built.orderDep.depType}:undefined,next:{...built.result.next,backing:{...built.result.next.backing}},
+  route,
   fee,feeRate:wallet.feeRate,maxFee:wallet.maxFee,ckbReceiptTopUp:built.ckbReceiptTopUp,
   // All wallet receipts/change and permanent pool storage remain individually visible.
   outputs:transaction.outputs.map((output,index)=>({index,capacity:output.capacity,
    occupiedCapacity:minimumCapacity(ccc.CellAny.from({cellOutput:output,outputData:transaction.outputsData[index]!})),
    lock:script(output.lock),type:output.type?script(output.type):undefined,data:transaction.outputsData[index]!,
-   asset:output.type?.eq(token)?'token':output.type?.eq(lp)?'lp':output.type?'state':'ckb',
-   amount:output.type?.eq(token)||output.type?.eq(lp)?parseAmount(transaction.outputsData[index]!):undefined,
-   pool:index>=built.stateOutputIndex&&index<=built.stateOutputIndex+2,maker:index<built.orders.length})),
+   asset:output.type?.eq(token)?'token':tokenOut&&output.type?.eq(tokenOut)?'tokenOut':output.type?.eq(lp)?'lp':output.type?'state':'ckb',
+   amount:output.type?.eq(token)||output.type?.eq(lp)||(tokenOut&&output.type?.eq(tokenOut))?parseAmount(transaction.outputsData[index]!):undefined,
+   pool:index>=built.stateOutputIndex&&index<built.stateOutputIndex+poolOutputs,maker:index<built.orders.length})),
   inputs:inputs.map(c=>({txHash:c.outPoint.txHash,index:c.outPoint.index,capacity:c.cellOutput.capacity,lock:script(c.cellOutput.lock),type:c.cellOutput.type?script(c.cellOutput.type):undefined,data:c.outputData})),
   dependencies:transaction.cellDeps.map(d=>({txHash:d.outPoint.txHash,index:d.outPoint.index,depType:d.depType})),
   walletWitnessIndex:built.walletWitnessIndex,stateOutputIndex:built.stateOutputIndex,
