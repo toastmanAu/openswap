@@ -106,8 +106,9 @@ Follow-up deployment `https://07268421.toastdex.pages.dev` (source `99dfe12`,
 pools in one reviewed transaction (`deff7ca`), and a pool list that adds the
 CKB / TEST2 and CKB / TEST3 testnet pools (`99dfe12`). Files on all origins are
 byte-identical to the reproducible release, and all 25 browser tests pass on
-toastdex.org and the deployment URL. No two-pool route has yet been signed with
-JoyID on the deployed origin.
+toastdex.org and the deployment URL. The user then signed a TEST2 → TEST3 route
+with JoyID on toastdex.org (tx `0xf035abad…ec0c`, block 22,896,802), verified
+on both endpoints ([record](../deployments/pool-route-joyid.json)).
 
 Rollback: select the previous successful deployment in Pages. Published contract
 code and outstanding order cells remain unchanged by frontend rollbacks.

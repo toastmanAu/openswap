@@ -36,6 +36,8 @@ the P6 test pool at state `0x3dbe5e92…1cdd`. Both `toastdex.org` and
 `toastdex.pages.dev` serve the recorded deployment of `09ca6f9`.
 Update (2026-10-29): both now serve the recorded deployment of `99dfe12`
 (two-pool routes and the TEST2/TEST3 pools; see [Pages](docs/CLOUDFLARE_PAGES.md)).
+The user signed a two-pool route with JoyID there (tx `0xf035abad…ec0c`),
+verified on both endpoints by `scripts/pool-route-verify.ts`.
 
 Since 2026-10-23 (see [readiness](docs/READINESS.md) and
 [Pages](docs/CLOUDFLARE_PAGES.md)): routed and split swaps deployed and signed

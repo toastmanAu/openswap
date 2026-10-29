@@ -45,7 +45,7 @@
     }
   },
   "walletAcceptanceEvidence": "deployments/public-wallet-verification.json",
-  "passkeySigningNote": "2026-10-24: routed Swap-tab pool swap signed with JoyID on https://toastdex.org, tx 0x1961a4a3dff3959e942c347c28d237fa4dcf4db0ddcbf94c2cbf3e223ef52340 (block 22,842,588), verified on both testnet endpoints against the pool model. The 75ced03 deployment changes only read concurrency in review preparation; its pay-TEST review was timed on toastdex.org at 12.5 s (57 live-cell reads) with a non-signing test wallet. 2026-10-24 (250e964): adds split routes; the live split swap (tx 0x16027a46a7919ebae45589baf924d4950d6b39663a2801b76af235957c8444a5) was signed from the local build before deployment.",
+  "passkeySigningNote": "2026-10-24: routed Swap-tab pool swap signed with JoyID on https://toastdex.org, tx 0x1961a4a3dff3959e942c347c28d237fa4dcf4db0ddcbf94c2cbf3e223ef52340 (block 22,842,588), verified on both testnet endpoints against the pool model. The 75ced03 deployment changes only read concurrency in review preparation; its pay-TEST review was timed on toastdex.org at 12.5 s (57 live-cell reads) with a non-signing test wallet. 2026-10-24 (250e964): adds split routes; the live split swap (tx 0x16027a46a7919ebae45589baf924d4950d6b39663a2801b76af235957c8444a5) was signed from the local build before deployment. 2026-10-29 (99dfe12): two-pool route TEST2 -> CKB -> TEST3 signed with JoyID on https://toastdex.org, tx 0xf035abad55e5a94ced216b4b8a9a0bab6ab90b5b459c69baa0468bbc8479ec0c (block 22,896,802), verified on both testnet endpoints against the pool model (deployments/pool-route-joyid.json).",
   "previous": {
     "deploymentUrl": "https://ace4a8ff.toastdex.pages.dev",
     "sourceCommit": "09ca6f9e66c553a68638fd67569ee2dd5f4b805b",

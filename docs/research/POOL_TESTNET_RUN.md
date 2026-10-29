@@ -298,5 +298,14 @@ receipt pays the maker exactly the reviewed amount. The send went through
 
 **Local app against live testnet.** With no wallet connected, the Swap tab
 quoted "two pools via CKB" for TEST2 → TEST3 and TEST3 → TEST2, and a single
-pool for CKB → TEST2. Not yet done: a JoyID-signed two-pool route from the
-browser, locally or on toastdex.org.
+pool for CKB → TEST2.
+
+**JoyID on the deployed site.** After the Pages deployment of `99dfe12`, the user signed
+the route on toastdex.org (tx `0xf035abad…ec0c`, block
+22,896,802): exactly 25 TEST3 for 555.50484488 TEST2, with 52.66442952 tCKB
+passed between the pools, fee 3,948 shannons, 3,291 bytes. It spent both pool
+states left by the maker's route. `scripts/pool-route-verify.ts` checked on both
+endpoints that each pool's next state matches the model for its signed action,
+that all tCKB out of the first pool went into the second, and that every other
+cell in and out belongs to the user's JoyID
+([record](../../deployments/pool-route-joyid.json)).

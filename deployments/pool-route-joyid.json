@@ -1,0 +1,36 @@
+{
+  "network": "testnet",
+  "signer": "JoyID main key, user's wallet",
+  "origin": "https://toastdex.org",
+  "sourceCommit": "99dfe12",
+  "verifier": "scripts/pool-route-verify.ts",
+  "hash": "0xf035abad55e5a94ced216b4b8a9a0bab6ab90b5b459c69baa0468bbc8479ec0c",
+  "block": "22896802",
+  "route": "CKB / TEST2 then CKB / TEST3",
+  "pools": [
+    "0xad840f622f7f6400c8dca6f8ff2b2b4cbe9abe7aa9d8f616eb2dacac3f9fafde",
+    "0x7bb5aa1d2013ac90b40bdcadd342ef7be19a07f24edc9574d70b28acf2466223"
+  ],
+  "states": [
+    {
+      "txHash": "0xc9eb38ea92b54d86197489748734976d9a5a934bfcfa065b5ab368554998ed0e",
+      "index": "0"
+    },
+    {
+      "txHash": "0xc9eb38ea92b54d86197489748734976d9a5a934bfcfa065b5ab368554998ed0e",
+      "index": "3"
+    }
+  ],
+  "paid": "55550484488",
+  "hop": "5266442952",
+  "received": "2500000000",
+  "minOut": "2500000000",
+  "fee": "3948",
+  "wallet": "ckt1qrfrwcdnvssswdwpn3s9v8fp87emat306ctjwsm3nmlkjg8qyza2cqgqq9qha8uqganyw9aavyyqeltvrlg59lp4svl02uvq",
+  "bytes": 3291,
+  "verifiedOn": [
+    "https://testnet.ckb.dev",
+    "https://testnet.ckbapp.dev"
+  ],
+  "verifiedAt": "2026-10-29T02:40:18.555734Z"
+}
