@@ -131,6 +131,13 @@ chain). Files on all origins are byte-identical to the reproducible release, all
 on toastdex.org against the real testnet shows 75 trades in 5 markets without page
 errors.
 
+Follow-up deployment `https://2ac8f6bb.toastdex.pages.dev` (source `fa6e518`,
+2026-10-29): faster market refresh (relevant inputs only, incremental refresh,
+saved history). Files on all origins are byte-identical to the reproducible
+release and all 29 browser tests pass on toastdex.org and the deployment URL. On
+toastdex.org against the real testnet, after app startup, Markets was ready in 6.3 s
+on a first visit and 1.8 s on a returning visit, without page errors.
+
 Rollback: select the previous successful deployment in Pages. Published contract
 code and outstanding order cells remain unchanged by frontend rollbacks.
 
