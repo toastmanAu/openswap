@@ -8,8 +8,10 @@ Saved 2026-10-12 (Australia/Adelaide). Read this first when resuming.
 
 `matchBook` settles several v2 orders (and whole v1 lots) per side of one market in
 one transaction; verified offline (solver tests) and on the real v2 binary (60
-matcher-built books, up to 8 legs, conservation checked from cells). Not yet run
-live on testnet.
+matcher-built books, up to 8 legs, conservation checked from cells), and live:
+four orders from two owners settled in one transaction `0x8c7a20aa…12fe4`
+(`deployments/lock-v2-multi.json`). A's buy order remainder (648 CKB) stays live
+until it expires.
 
 ### Market data (2026-10-29)
 

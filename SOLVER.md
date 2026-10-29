@@ -287,3 +287,13 @@ unchanged: reconcile the journal, reserve inputs, journal before the single send
   partial leg), matcher-built books (60 settlements, 253 legs, up to 8 per
   settlement, 54 with a partial leg; token amounts and capacity conserved, checked
   from the cells) and SDK-planned chains on the real v2 binary.
+- **Live (2026-10-29, `scripts/lock-v2-multi.ts`, `deployments/lock-v2-multi.json`):**
+  the maker placed three TEST2-for-CKB orders (0.090, 0.092, 0.094 CKB each,
+  2,000 TEST2 apiece) and test wallet A offered 1,200 CKB for TEST2 at 0.10.
+  `ReferenceSolverV2` run by test wallet B settled all four in one journaled
+  transaction, `0x8c7a20aa…12fe4` (block 22,901,010): the three sells filled whole
+  and A's order partly (552 CKB for 5,520 TEST2, remainder live under identical
+  args). On both endpoints every order input is accepted by the reference model,
+  payments sit at order indexes, token and capacity paid out never exceed what the
+  orders held, and every other input and output is the solver's. The solver kept
+  480 TEST2. `scripts/market-verify.ts` also reads it as exactly these four fills.

@@ -68,6 +68,17 @@ for(const url of ENDPOINTS){
  const [test3Sold,ckbSold]=[settle.find(t=>t.got.asset.kind==='udt')!,settle.find(t=>t.got.asset.kind==='ckb')!];
  assert.equal(test3Sold.got.amount,450n*10n**8n);assert.equal(test3Sold.gave.amount,900n*10n**8n);
  assert.equal(ckbSold.got.amount,1000n*10n**8n);assert.equal(ckbSold.gave.amount,450n*10n**8n);checked++;
+ // Multi-order settlement (scripts/lock-v2-multi.ts): three sells filled whole, one buy partly.
+ const multi=await json('deployments/lock-v2-multi.json').catch(()=>undefined);
+ if(multi?.settle?.status==='verified'){
+  const legs=trades(multi.settle.hash);
+  assert.equal(legs.length,4,'Multi-order settlement should be four order fills');
+  const sells=legs.filter(t=>t.got.asset.kind==='udt').sort((x,y)=>x.gave.amount<y.gave.amount?-1:1);
+  assert.deepEqual(sells.map(t=>[t.got.amount,t.gave.amount,t.final]),[[2000n,180n],[2000n,184n],[2000n,188n]].map(([g,p])=>[g!*10n**8n,p!*10n**8n,true]));
+  const buy=legs.find(t=>t.got.asset.kind==='ckb')!;
+  assert.deepEqual([buy.got.amount,buy.gave.amount,buy.final],[552n*10n**8n,5520n*10n**8n,false]);
+  checked++;
+ }
  // JoyID two-pool route: TEST2 → CKB in pool 1, CKB → TEST3 in pool 2, hop conserved.
  const hops=trades(route.hash).filter(t=>t.venue==='pool');
  assert.equal(hops.length,2,'Route should be two pool swaps');
