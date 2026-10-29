@@ -124,6 +124,13 @@ The user then partly filled a v2 order with JoyID on toastdex.org (350 of 2,000
 TEST3 at 2 CKB each; tx `0xddf59ef8…5979`, block 22,899,288), verified on both
 endpoints ([record](../deployments/lock-v2-joyid.json)).
 
+Follow-up deployment `https://cc8fc43f.toastdex.pages.dev` (source `3902b61`,
+2026-10-29): the Markets tab (trades, stats, price and depth charts read from the
+chain). Files on all origins are byte-identical to the reproducible release, all
+29 browser tests pass on toastdex.org and the deployment URL, and the Markets tab
+on toastdex.org against the real testnet shows 75 trades in 5 markets without page
+errors.
+
 Rollback: select the previous successful deployment in Pages. Published contract
 code and outstanding order cells remain unchanged by frontend rollbacks.
 
