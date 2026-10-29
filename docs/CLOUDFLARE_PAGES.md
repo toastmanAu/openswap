@@ -138,6 +138,14 @@ release and all 29 browser tests pass on toastdex.org and the deployment URL. On
 toastdex.org against the real testnet, after app startup, Markets was ready in 6.3 s
 on a first visit and 1.8 s on a returning visit, without page errors.
 
+Follow-up deployment `https://3fb52d14.toastdex.pages.dev` (source `f7c5c27`,
+2026-10-29): Markets starts after the endpoints and manifests instead of the live
+pool scan, and draws saved history first. Files on all origins are byte-identical
+to the reproducible release and all 29 browser tests pass on toastdex.org and the
+deployment URL. On toastdex.org against the real testnet, with Markets opened at
+navigation, a first visit showed charts at 7.4 s and a returning visit at 1.1 s
+(refreshed at 2.4 s), without page errors.
+
 Rollback: select the previous successful deployment in Pages. Published contract
 code and outstanding order cells remain unchanged by frontend rollbacks.
 
