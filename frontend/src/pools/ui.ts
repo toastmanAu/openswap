@@ -8,7 +8,7 @@ import {parseUnits,formatUnits} from '../amounts.js';
 import {explainError} from '../errors.js';
 import {parseAmount} from '../../../sdk/src/codec.js';
 
-export interface PoolMarket {poolId:ccc.Hex;token:ccc.Script;symbol:string;decimals:number;x:bigint;y:bigint}
+export interface PoolMarket {poolId:ccc.Hex;token:ccc.Script;symbol:string;decimals:number;x:bigint;y:bigint;feeBps:bigint}
 export interface PoolRoute {poolId:ccc.Hex;direction:'xToY'|'yToX';amountIn:bigint;amountOut:bigint;checkedAt:number}
 /** Whole order lots plus a pool swap for the rest, settled in one transaction. */
 export interface SplitRoute<T extends SplitLot> extends PoolRoute {lots:T[];lotIn:bigint;lotOut:bigint;poolIn:bigint;poolOut:bigint}
@@ -448,7 +448,7 @@ export function createPoolUi(env:PoolEnv){
  /** Live pools whose token display metadata matched the live token (checked in refresh). */
  function markets():PoolMarket[]{
   return snapshots.flatMap(pool=>{const t=manifest?.pools.find(p=>p.poolId===pool.poolId)?.token;
-   return t?[{poolId:pool.poolId,token:pool.token.clone(),symbol:t.symbol,decimals:t.decimals,x:pool.accounting.x,y:pool.accounting.y}]:[];});
+   return t?[{poolId:pool.poolId,token:pool.token.clone(),symbol:t.symbol,decimals:t.decimals,x:pool.accounting.x,y:pool.accounting.y,feeBps:pool.accounting.feeBps}]:[];});
  }
  /** Cheapest listed pool delivering at least `amountOut`, from the last loaded state. */
  function routeQuote(tokenHash:ccc.Hex,payCkb:boolean,amountOut:bigint):PoolRoute|undefined {
@@ -519,7 +519,7 @@ export function createPoolUi(env:PoolEnv){
 
  return {
   show:()=>env.run(async()=>{await refresh();if(env.signer())await ensureSession();}),
-  load:refresh,markets,routeQuote,prepareRouted,splitQuote,prepareSplit,multiHopQuote,prepareMultiHop,tokenDep:()=>manifest?.deployment.tokenDep,
+  load:refresh,markets,routeQuote,prepareRouted,splitQuote,prepareSplit,multiHopQuote,prepareMultiHop,tokenDep:()=>manifest?.deployment.tokenDep,deployment:()=>manifest?.deployment,
   invalidate,reset,
  };
 }

@@ -9,6 +9,7 @@ import {isOwnOrder,assertExternalFill} from './ownership.js';
 import {readActivity,mergeActivity,fetchActivity,accountKey,type Activity} from './activity.js';
 import {createPoolUi,type PoolRoute,type SplitRoute,type MultiHopRoute} from './pools/ui.js';
 import {XUDT_CODE_HASH} from '../../pool-sdk/src/codec.js';
+import {createMarkets} from './markets.js';
 const deployment=deploymentJson as swap.Deployment;
 const el=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id)! as T;
 const value=(id:string)=>(el<HTMLInputElement>(id)).value;
@@ -89,8 +90,20 @@ function v2Note(o:swap.AnyOrder){
  return ` · ${parts.join(' · ')}`;
 }
 function v2Context():swap.BuildContext{if(!v2)throw new Error('Order lock v2 is not deployed on this network');return{...context(),deployment:v2};}
-function showView(view:string){if(view==='activity')void refreshActivity();if(view==='pools')poolUi.show();for(const name of ['swap','orders','pools','activity','settings'])el(`view-${name}`).hidden=name!==view;for(const b of document.querySelectorAll<HTMLButtonElement>('[data-view]'))b.setAttribute('aria-pressed',String(b.dataset.view===view));}
+function showView(view:string){if(view==='activity')void refreshActivity();if(view==='pools')poolUi.show();for(const name of ['swap','orders','markets','pools','activity','settings'])el(`view-${name}`).hidden=name!==view;for(const b of document.querySelectorAll<HTMLButtonElement>('[data-view]'))b.setAttribute('aria-pressed',String(b.dataset.view===view));if(view==="markets")void marketView.show();}
 for(const b of document.querySelectorAll<HTMLButtonElement>('[data-view]'))b.onclick=()=>showView(b.dataset.view!);
+/** Market history read from the chain: v1 and v2 order fills plus pool swaps. Open orders
+ * feed depth; expired v2 orders are left out, as the router does. */
+let startupDone:()=>void=()=>{};const startup=new Promise<void>(resolve=>{startupDone=resolve;});
+const marketView=createMarkets({
+ ready:()=>startup,
+ client:()=>client,
+ sources:()=>({orders:[{version:1,codeHash:deployment.codeHash},...(v2?[{version:2 as const,codeHash:v2.codeHash}]:[])],pools:poolUi.deployment()}),
+ book:()=>orders.filter(o=>o.supported&&!(swap.isV2(o)&&swap.isExpired(o,chainNow))).map(o=>({offer:o.offerAsset,ask:o.askAsset,available:swap.isV2(o)?o.available:o.offerAmount,askAmount:o.askAmount,offerAmount:o.offerAmount})),
+ pools:()=>poolUi.markets(),
+ label,decimals,
+ explorer:hash=>`https://pudge.explorer.nervos.org/transaction/${hash}`,
+});
 el('reverse').onclick=()=>{const base=value('base');el<HTMLSelectElement>('base').value=value('quote');el<HTMLSelectElement>('quote').value=base;el<HTMLInputElement>('swap-output').value='';el<HTMLInputElement>('swap-budget').value='';invalidate();renderBook();};
 function swapAssets(){const base=selected('base'),quote=selected('quote');return value('swap-direction')==='buy'?{assetOut:base,assetIn:quote}:{assetOut:quote,assetIn:base};}
 function mixedQuote(){if(!scanFresh)throw new Error('Refresh live orders before requesting a quote.');const {assetIn,assetOut}=swapAssets();return swap.quoteMixed(orders.filter(o=>!isOwnOrder(o,walletLocks)),{assetIn,assetOut,amountOut:parseUnits(value('swap-output'),decimals(assetOut)),maxAmountIn:value('swap-budget').trim()?parseUnits(value('swap-budget'),decimals(assetIn)):swap.U128_MAX,genesisHash:deployment.genesisHash,nowSeconds:chainNow});}
@@ -234,7 +247,7 @@ function cancelButton(order:swap.AnyOrder,title='Cancel'){return button(title,as
 function fillButton(order:swap.AnyOrder,title:string){return button(title,async()=>buildReview(async ctx=>{await assertExternalFill(ctx.signer,[order]);await checkFunding(ctx.signer,order.askAsset,askNow(order));return swap.isV2(order)?swap.fillOrdersV2(v2Context(),[{outPoint:order.outPoint}],{nowSeconds:chainNow}):swap.fillOrders(ctx,[order.outPoint]);},`You pay: ${amount(askNow(order),order.askAsset)}\nYou receive: ${amount(remaining(order),order.offerAsset)}`));}
 /** Anyone may return an expired v2 order to its owner; the caller pays the fee. */
 function returnButton(order:swap.AnyOrder){return button('Return to owner',async()=>buildReview(async()=>swap.returnExpiredV2(v2Context(),[order.outPoint],chainNow-RETURN_DELAY),`Return expired order ${swap.orderKey(order)} to its owner, unchanged.\nYou pay only the network fee. The order's CKB and tokens go back to the owner's own address.`));}
-function renderAvailable(){renderSwapOwnOrders();const root=el('available-orders');root.replaceChildren();text('quote-age',scanFresh?`Orders checked ${new Date(lastScan).toLocaleTimeString()}`:'Live orders need refreshing.');const markets=poolUi.markets();
+function renderAvailable(){renderSwapOwnOrders();marketView.bookChanged();const root=el('available-orders');root.replaceChildren();text('quote-age',scanFresh?`Orders checked ${new Date(lastScan).toLocaleTimeString()}`:'Live orders need refreshing.');const markets=poolUi.markets();
  text('available-note',orders.length||markets.length?`${markets.length?`${markets.length} pool${markets.length===1?'':'s'} (any amount, price moves with size)${orders.length?' and ':''}`:''}${orders.length?`${orders.length} order-book ${v2?'order':'lot'}${orders.length===1?'':'s'} (fixed price${v2?', some can fill partly':', whole lots only'})`:''}.`:'No live swaps yet. Place an order in the Orders tab.');
  // Pools first: they take any amount, so they set the pair for the form above.
  for(const market of markets){const row=document.createElement('div');row.className='quote-row';const copy=document.createElement('span');
@@ -270,7 +283,7 @@ async function configure(rpc:string,indexer:string){
   nextRpc.value.findCellsPagedNoCache=(...args)=>nextIndexer.value.findCellsPagedNoCache(...args);
   nextRpc.value.findTransactionsPaged=nextIndexer.value.findTransactionsPaged.bind(nextIndexer.value);
  }catch(error){await nextRpc.dispose();await nextIndexer.dispose();throw error;}
- scanAbort?.abort();invalidate();poolUi.reset();connector.disconnect();signer=undefined;owner=undefined;walletLocks=[];text('connected-account','');orders=[];
+ scanAbort?.abort();invalidate();poolUi.reset();marketView.reset();connector.disconnect();signer=undefined;owner=undefined;walletLocks=[];text('connected-account','');orders=[];
  const oldRpc=rpcOwner,oldIndexer=indexerOwner;rpcOwner=nextRpc;indexerOwner=nextIndexer;client=nextRpc.value;connector.client=client;
  await oldRpc.dispose();await oldIndexer.dispose();renderBook();text('status','Connected to CKB testnet.');
 }
@@ -383,7 +396,7 @@ run(async()=>{
  // Pool tokens join the asset list (and the resolver) before the order scan, so
  // orders in a pool's token are recognised and both venues can be compared.
  await poolUi.load().then(registerPoolMarkets,report);
- v2=await loadOrderV2().catch(error=>{report(error);return undefined;});showV2Options();await scan();
+ v2=await loadOrderV2().catch(error=>{report(error);return undefined;});showV2Options();startupDone();await scan();
 });
 /** The v2 order lock manifest, if this build ships one; absent means v1 only. */
 async function loadOrderV2():Promise<swap.Deployment|undefined>{

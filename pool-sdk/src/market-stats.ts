@@ -6,7 +6,10 @@ import type {Pair,Print} from './market.js';
 
 export type Decimals=(asset:AssetId)=>number;
 const units=(n:bigint,d:number)=>Number(n)/10**d;
-const byTime=(prints:readonly Print[])=>[...prints].sort((a,b)=>a.trade.time!==b.trade.time?(a.trade.time<b.trade.time?-1:1):a.trade.block!==b.trade.block?(a.trade.block<b.trade.block?-1:1):a.trade.hash.localeCompare(b.trade.hash));
+/** One total order for prints: block time, then block, transaction and source (order or pool),
+ * so ties within a block or a multi-leg transaction always resolve the same way. */
+export const comparePrints=(a:Print,b:Print)=>a.trade.time!==b.trade.time?(a.trade.time<b.trade.time?-1:1):a.trade.block!==b.trade.block?(a.trade.block<b.trade.block?-1:1):a.trade.hash!==b.trade.hash?a.trade.hash.localeCompare(b.trade.hash):a.trade.source.localeCompare(b.trade.source);
+const byTime=(prints:readonly Print[])=>[...prints].sort(comparePrints);
 export const priceOf=(p:Pick<Print,'pair'|'base'|'quote'>,decimals:Decimals)=>units(p.quote,decimals(p.pair.quote))/units(p.base,decimals(p.pair.base));
 
 export interface MarketStats {

@@ -454,3 +454,43 @@ unchanged and v1-only. With it:
   created with partial fills and expiry, its args decoded. The shared fixture
   answers `order-v2-manifest.json` with 404, so every other scenario stays v1-only
   whether or not the build ships a manifest.
+
+### Markets (2026-10-29)
+
+A **Markets** tab shows trades, prices and depth read straight from the chain, with
+no server. `pool-sdk/src/market-scan.ts` finds the newest OpenSwap transactions by
+indexer prefix search (v1 and v2 order locks, pool state type; at most 1,000),
+resolves their inputs and block times, and `pool-sdk/src/market.ts` extracts:
+
+- **order fills** (v1 whole lots; v2 partial and final), with the amount taken and
+  paid computed exactly as the locks account for them;
+- **pool swaps** from the reserve change of each pool state transition (so a
+  two-pool route is two trades, one per market);
+- cancels, expiry returns and liquidity changes, which are not trades.
+
+Anything it cannot interpret is skipped and counted in the status line, never
+guessed. `market-stats.ts` derives per-market last price, 24 h change, range and
+volume (by block time, ending at the chain tip), and depth: open orders (expired v2
+orders excluded) plus each pool's constant-product curve with its fee, out to ±50%
+of mid. CKB is always the quote; between two tokens the quote is the one with the
+smaller script hash.
+
+The view has a market list, stat tiles, a step-line price chart (one series),
+a depth chart (bids and asks, with legend and direct labels), a depth table and a
+trade list with explorer links. Charts are plain SVG with a crosshair that snaps to
+the nearest point, the same readout on keyboard focus (arrow keys), and no value
+that only the tooltip shows. Colours were checked with the dataviz validator against
+the app surface.
+
+Checks: `scripts/market-verify.ts` scans live testnet through both endpoints and
+matches every independently recorded fill, cancel, return, solver match and route
+(24 checks, nothing skipped). `pool-sdk/test/market.test.ts` runs extraction on real
+transaction fixtures (`scripts/market-fixtures.ts`) with independent checks (v1 pays
+the ask in the args, v2 meets the maker price, pool swaps match the signed action,
+route hop CKB conserved) and tampered copies. `frontend/test/markets.spec.ts` runs
+the view on the same fixtures.
+
+Limits: a full refresh reads every input's parent transaction (7–11 s for the
+current ~120 transactions); resolving only order and pool inputs would cut that.
+Token decimals and names come from the pool manifest and token catalog; an unknown
+token shows a hash prefix and 0 decimals.
