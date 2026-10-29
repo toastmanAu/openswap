@@ -259,3 +259,44 @@ UI defects found and fixed during P7:
   its funding reservation.
 - Submissions showed UNKNOWN after a successful send and were never archived.
 - The dev server let browsers keep a stale bundle across restarts.
+
+## More pools and a live two-pool route (2026-10-29)
+
+**Basis.** On 2026-10-29 the user asked to "start with multi-hop routing and more
+pools". No separate approval table was written for this run. It used testnet only
+and local test keys only: the split-test maker key (`.local/testnet-split-maker-key`,
+already used for split and contention runs) and two new issuer keys,
+`.local/testnet-token-test2-key` and `.local/testnet-token-test3-key`. The user's
+JoyID signed nothing; it only received minted test tokens. Script:
+`scripts/pool-markets.ts`. Record: `deployments/pool-markets.json`.
+
+| Item | Value |
+| --- | --- |
+| New tokens | TEST2 (`0xe30c668a…4d92`) and TEST3 (`0x780c0612…5671`), 8 decimals, same deployed xUDT code as TEST |
+| Mints | TEST2: 200,000 to the maker, 20,000 to the user's JoyID. TEST3: 10,000 to the maker, 1,000 to the JoyID |
+| Pools | CKB/TEST2 `0xad840f62…afde`, seeded 5,000 tCKB + 50,000 TEST2. CKB/TEST3 `0x7bb5aa1d…6223`, seeded 5,000 tCKB + 2,500 TEST3. Same parameters as P6: 30 bps, M=1,000, backing 340/80/160 tCKB |
+| LP | Held by the maker |
+| Permanent cost | 2 × 580 tCKB backing. The 10,000 tCKB of liquidity is withdrawable by the maker |
+
+Transactions, each committed and checked on both endpoints by `pool-markets.ts verify`:
+
+| Step | Transaction | Fee (shannons) |
+| --- | --- | --- |
+| Fund both issuers (1,000 tCKB each) | `0xb4fee714…4056` | 573 |
+| Mint TEST2 | `0x79a1da7d…7c8e` | 814 |
+| Mint TEST3 | `0x6865c247…c682` | 814 |
+| Create CKB/TEST2 | `0xdc267678…b326` | 1,698 |
+| Create CKB/TEST3 | `0xf855bbde…481f` | 1,698 |
+| Route TEST2 → CKB → TEST3 | `0xc9eb38ea…ed0e` | 2,859 |
+
+**Live route.** The maker paid 1,000 TEST2 into the TEST2 pool. All 97.75076616
+tCKB it returned went into the TEST3 pool, which paid 47.78077453 TEST3 to the
+maker at output 6. The minimum was 1% below the quote. Verification on both
+endpoints checked that inputs 0 and 3 are the reviewed pool states and that the
+receipt pays the maker exactly the reviewed amount. The send went through
+`PoolSubmissionRecovery` with a file journal and was archived at 3 confirmations.
+
+**Local app against live testnet.** With no wallet connected, the Swap tab
+quoted "two pools via CKB" for TEST2 → TEST3 and TEST3 → TEST2, and a single
+pool for CKB → TEST2. Not yet done: a JoyID-signed two-pool route from the
+browser, locally or on toastdex.org.

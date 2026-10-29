@@ -4,6 +4,29 @@ Saved 2026-10-12 (Australia/Adelaide). Read this first when resuming.
 
 ## Current request and stopping point
 
+### Multi-hop routing and more pools (2026-10-29)
+
+User direction: hold the audit until after feature work and a public testnet
+round, then seek a grant. Started with multi-hop routing and more pools.
+
+Done, committed locally and not pushed:
+- `buildRoute` and `quoteRouteExactOut`: token A to CKB to token B through two
+  pools in one transaction. No contract change was needed.
+- A route intent in funding and review. The Swap tab compares two-pool routes
+  for token-to-token requests, with a two-leg review.
+- Tests: VM test `sdk_two_pool_route`, `route.test.ts`, and a browser case.
+  Full offline suite green.
+- Live on testnet with local keys only: TEST2 and TEST3 minted, CKB/TEST2 and
+  CKB/TEST3 pools created, and one maker-signed route verified on two
+  endpoints ([run](docs/research/POOL_TESTNET_RUN.md#more-pools-and-a-live-two-pool-route-2026-10-29)).
+  The user's JoyID holds 20,000 TEST2 and 1,000 TEST3 for trying routes.
+- The manifest lists all three pools, and the local app quotes live routes.
+
+Next, all needing the user:
+- A JoyID-signed two-pool route from the local build (`npm run dev:frontend`).
+- Push, and a Pages deploy so toastdex.org lists the new pools.
+- The review freeze at `e9aa38c` predates this work; refreeze after features.
+
 ### Status check, no code change (2026-10-29)
 
 Tree clean at `5e7f61b`, equal to `origin/main`. Offline check at HEAD: typecheck

@@ -28,6 +28,24 @@
         "decimals": 8,
         "typeHash": "0x983d7de2fa8b3b430c50e19230eb786765568dc0f30e84db9ca8614080e739c1"
       }
+    },
+    {
+      "label": "CKB / TEST2",
+      "poolId": "0xad840f622f7f6400c8dca6f8ff2b2b4cbe9abe7aa9d8f616eb2dacac3f9fafde",
+      "token": {
+        "symbol": "TEST2",
+        "decimals": 8,
+        "typeHash": "0xe30c668aa269c77dc932e3518893282fc51ed957181b31a4f702e8e463ce4d92"
+      }
+    },
+    {
+      "label": "CKB / TEST3",
+      "poolId": "0x7bb5aa1d2013ac90b40bdcadd342ef7be19a07f24edc9574d70b28acf2466223",
+      "token": {
+        "symbol": "TEST3",
+        "decimals": 8,
+        "typeHash": "0x780c0612895441448179f2e019ebf4ede1c99b6f936d21ae959f87c092a65671"
+      }
     }
   ],
   "joyid": {
