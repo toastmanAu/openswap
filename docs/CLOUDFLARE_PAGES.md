@@ -101,6 +101,14 @@ Swap tab, with the quote noting skipped own lots (`09ca6f9`). Files on all
 origins are byte-identical to the reproducible release, and all 24 browser tests
 pass on toastdex.org and the deployment URL.
 
+Follow-up deployment `https://07268421.toastdex.pages.dev` (source `99dfe12`,
+2026-10-29): two-pool routes, where a token-to-token swap goes through two CKB
+pools in one reviewed transaction (`deff7ca`), and a pool list that adds the
+CKB / TEST2 and CKB / TEST3 testnet pools (`99dfe12`). Files on all origins are
+byte-identical to the reproducible release, and all 25 browser tests pass on
+toastdex.org and the deployment URL. No two-pool route has yet been signed with
+JoyID on the deployed origin.
+
 Rollback: select the previous successful deployment in Pages. Published contract
 code and outstanding order cells remain unchanged by frontend rollbacks.
 

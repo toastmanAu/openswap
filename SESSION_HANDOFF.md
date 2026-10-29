@@ -34,6 +34,8 @@ clean; order SDK/solver 81, pool SDK 70, pool model 15 tests pass. Live testnet:
 two open order lots (both owned by one JoyID lock not recorded in this repo) and
 the P6 test pool at state `0x3dbe5e92…1cdd`. Both `toastdex.org` and
 `toastdex.pages.dev` serve the recorded deployment of `09ca6f9`.
+Update (2026-10-29): both now serve the recorded deployment of `99dfe12`
+(two-pool routes and the TEST2/TEST3 pools; see [Pages](docs/CLOUDFLARE_PAGES.md)).
 
 Since 2026-10-23 (see [readiness](docs/READINESS.md) and
 [Pages](docs/CLOUDFLARE_PAGES.md)): routed and split swaps deployed and signed
