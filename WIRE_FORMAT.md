@@ -134,3 +134,33 @@ Required vector classes:
 - oversized ask Script,
 - zero ask amount,
 - trailing garbage.
+
+---
+
+## Version 2 (order lock v2, not deployed)
+
+Separate binary (`contracts/openswap-lock-v2`, new `data1` code hash) that accepts
+only version 2 tails. Design and spend rules: [ORDER_LOCK_V2](docs/research/ORDER_LOCK_V2.md).
+
+| Offset | Size | Field |
+|---:|---:|---|
+| 0 | 1 | version = 2 |
+| 1 | 1 | flags = 0 |
+| 2 | 2 | reserved = 0 |
+| 4 | 16 | nonce (non-zero) |
+| 20 | 8 | capacity_refund u64 LE (CKB offer: payment cell capacity; UDT offer: 0) |
+| 28 | 8 | expiry u64 LE (0, or absolute timestamp `since`: top byte 0x40, value > 0) |
+| 36 | 4 | ask_script_size u32 LE |
+| 40 | N | ask_type_script |
+| 40+N | 16 | ask_amount u128 LE (> 0) |
+| 56+N | 16 | offer_amount u128 LE (> 0) |
+| 72+N | 16 | min_fill u128 LE (1..=offer_amount) |
+
+`args.len() == O + 88 + A`. Shared vectors: `lock-v2-tests/vectors/wire.json`
+(codec) and `fill.json` (fill verdicts from `sdk/src/v2/model.ts`, run against the
+binary). Regenerate with `npx tsx scripts/generate-lock-v2-vectors.ts`.
+
+New error codes: 35 zero offer amount, 36 invalid min fill, 37 invalid expiry,
+62 expiry not reached, 70 duplicate remainder, 71 remainder type, 72 remainder
+data, 73 remainder capacity above input, 74 nothing filled, 75 fill below minimum,
+76 remainder below minimum. v1 codes keep their meaning.

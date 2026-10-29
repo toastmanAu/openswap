@@ -9,3 +9,4 @@ export * from './tx/builders.js';
 export * from './quote.js';
 export * from './tx/swap.js';
 export * from './catalog.js';
+export * from './v2/index.js';

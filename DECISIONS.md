@@ -1,5 +1,8 @@
 # Frozen Design Decisions
 
+> 2026-10-29: for the **v2** order lock only, the user reopened "full-fill lots only"
+> and "no expiry". See [ORDER_LOCK_V2](docs/research/ORDER_LOCK_V2.md). v0.1 (v1 lock) is unchanged.
+
 This file exists so an agent does not accidentally re-open already-settled architecture questions.
 
 ## Chosen

@@ -1184,6 +1184,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "openswap-lock-v2"
+version = "0.2.0"
+dependencies = [
+ "ckb-std",
+]
+
+[[package]]
+name = "openswap-lock-v2-tests"
+version = "0.2.0"
+dependencies = [
+ "ckb-std",
+ "ckb-testtool",
+ "openswap-pool-arithmetic",
+ "serde_json",
+]
+
+[[package]]
 name = "openswap-pool"
 version = "0.1.0"
 dependencies = [
