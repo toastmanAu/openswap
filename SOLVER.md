@@ -306,3 +306,11 @@ unchanged: reconcile the journal, reserve inputs, journal before the single send
   payments sit at order indexes, token and capacity paid out never exceed what the
   orders held, and every other input and output is the solver's. The solver kept
   480 TEST2. `scripts/market-verify.ts` also reads it as exactly these four fills.
+- **Live ring (2026-10-30, `scripts/lock-v2-ring.ts`, `deployments/lock-v2-ring.json`):**
+  three test wallets placed CKB->TEST2 (400 CKB for 4,000 TEST2), TEST2->TEST3
+  (6,000 TEST2 for 2,400 TEST3) and TEST3->CKB (2,000 TEST3 for 480 CKB). No two
+  share a market, so `ReferenceSolverV2` found the ring and settled it in one
+  journaled transaction, `0x21543cfa…9f0fa` (block 22,901,977): the CKB order filled
+  whole, the TEST2 order sold 4,000 for 1,600 TEST3 and the TEST3 order sold 1,600
+  for 384 CKB, both remainders live. Checked on both endpoints as above; the solver
+  kept 16 CKB and added no tokens or capacity of its own.

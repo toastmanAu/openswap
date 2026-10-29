@@ -8,7 +8,9 @@ Saved 2026-10-12 (Australia/Adelaide). Read this first when resuming.
 
 `matchRing` settles a cycle of three orders (A->B->C->A) when no direct match
 exists; verified offline and on the real v2 binary (60 rings, both orientations).
-Not yet run live on testnet.
+Run live 2026-10-30 (`scripts/lock-v2-ring.ts`): CKB->TEST2->TEST3->CKB settled in
+`0x21543cfa…9f0fa` (block 22,901,977), verified on both endpoints; the solver kept
+16 CKB. Remainders stay live: 2,000 TEST2 (contention wallet) and 400 TEST3 (maker).
 
 ### Fee rate cap (2026-10-29)
 
