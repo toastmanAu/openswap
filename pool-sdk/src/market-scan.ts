@@ -93,6 +93,11 @@ export class MarketScanner {
   return {hash,block:f.block,time:await this.time(f.block),tx,inputs};
  }
 
+ /** What the scanner holds now (restored or last scanned), without reading anything. */
+ cached():{events:MarketEvent[];skipped:Skipped[];transactions:number}{
+  const kept=[...this.kept.values()];
+  return {events:kept.flatMap(k=>k.events),skipped:kept.flatMap(k=>k.skipped),transactions:kept.length};
+ }
  /** Settled history for storage; undefined before the first scan. */
  snapshot():MarketSnapshot|undefined{
   if(this.newest===undefined)return undefined;

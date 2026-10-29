@@ -35,6 +35,7 @@ test('markets: trades, stats, charts and depth from real testnet transactions',a
  // A returning visit restores the settled history saved in this browser and re-reads only recent blocks.
  expect(await page.evaluate(()=>Object.keys(localStorage).some(k=>k.startsWith('toastdex-market-history:')))).toBe(true);
  await page.evaluate(([fixtures,options])=>{(globalThis as any).marketReads=0;return (globalThis as any).MarketsHarness.install(fixtures,options);},[raw,{tip:String(TIP),labels,book,pools}] as const);
+ // The saved history shows first, then the refresh of recent blocks replaces it.
  await expect(page.locator('#markets-status')).toContainText('Saved history in this browser');
  await expect(page.locator('#markets-status')).toContainText(`${prints.length} trades in ${pairs} markets`);
  expect(await page.evaluate(()=>(globalThis as any).marketReads as number)).toBeLessThan(fullReads);

@@ -61,6 +61,14 @@ export function createMarkets(env:MarketsEnv){
    let restored=false;
    if(!scanner){scanner=new MarketScanner(client,sources);restored=restore(scanner);}
    const current=scanner;
+   // Show saved history at once (it needs only the tip time), then refresh it.
+   if(restored){
+    now=(await client.getTipHeader()).timestamp;if(scanner!==current)return;
+    prints=current.cached().events.flatMap(e=>e.kind==='trade'?[print(e)]:[]);stats=marketStats(prints,decimals,now);
+    if(!selected||!stats.has(selected))selected=[...stats.values()].sort((a,b)=>b.day.quote-a.day.quote||b.trades-a.trades)[0]?.pair.key;
+    el('markets-status').textContent=`${prints.length} trades in ${stats.size} markets from saved history; checking the latest blocks…`;
+    render();
+   }
    const [scan,tip]=await Promise.all([current.scan({maxTransactions:1000,concurrency:16}),client.getTipHeader()]);
    if(scanner!==current)return;
    save(current);

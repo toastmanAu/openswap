@@ -62,6 +62,8 @@ test('snapshot and restore: a returning visitor reads only recent blocks, with i
  assert(snap.entries.every(([,k]:[string,{block:string}])=>BigInt(k.block)<=newest-REORG_MARGIN),'only settled blocks are stored');
  const second=chain(),restored=new MarketScanner(second.client,sources);
  assert.equal(restored.restore(snap),true);
+ assert.equal(second.reads.tx.size,0,'restoring reads nothing');
+ assert.deepEqual(key(restored.cached().events),key(full.events.filter(e=>e.block<=newest-REORG_MARGIN)),'cached() serves the restored history before any scan');
  const again=await restored.scan();
  assert.equal(again.refresh.mode,'incremental');
  assert.deepEqual(key(again.events),key(full.events));

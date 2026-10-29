@@ -65,7 +65,7 @@ if (input.books) {
       return { plan, order: await parseV2(ccc.Cell.from({ ...plan.cell, outPoint: { txHash: `0x${'dd'.repeat(32)}`, index: n } }), deployment, resolver) };
     };
     try {
-      const lefts = [], rights = [];
+      const lefts: Awaited<ReturnType<typeof make>>[] = [], rights: Awaited<ReturnType<typeof make>>[] = [];
       for (let k = 0, nl = 1 + Number(next(4n)); k < nl; k++) lefts.push(await make(x, y, 'left'));
       for (let k = 0, nr = 1 + Number(next(4n)); k < nr; k++) rights.push(await make(y, x, 'right'));
       const best = (p: typeof lefts) => [...p].sort((u, v) => { const d = u.order.askAmount * v.order.offerAmount - v.order.askAmount * u.order.offerAmount; return d < 0n ? -1 : d > 0n ? 1 : 0; });

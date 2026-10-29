@@ -8,6 +8,7 @@ import {capacityReview} from './review.js';
 import {isOwnOrder,assertExternalFill} from './ownership.js';
 import {readActivity,mergeActivity,fetchActivity,accountKey,type Activity} from './activity.js';
 import {createPoolUi,type PoolRoute,type SplitRoute,type MultiHopRoute} from './pools/ui.js';
+import {loadPoolManifest,type PoolManifest} from './pools/manifest.js';
 import {XUDT_CODE_HASH} from '../../pool-sdk/src/codec.js';
 import {createMarkets} from './markets.js';
 const deployment=deploymentJson as swap.Deployment;
@@ -94,15 +95,20 @@ function showView(view:string){if(view==='activity')void refreshActivity();if(vi
 for(const b of document.querySelectorAll<HTMLButtonElement>('[data-view]'))b.onclick=()=>showView(b.dataset.view!);
 /** Market history read from the chain: v1 and v2 order fills plus pool swaps. Open orders
  * feed depth; expired v2 orders are left out, as the router does. */
+// Markets needs only the endpoints and the two static manifests (contract hashes, token
+// names and decimals), not the live pool scan, so it starts as soon as those are in.
 let startupDone:()=>void=()=>{};const startup=new Promise<void>(resolve=>{startupDone=resolve;});
+let poolManifest:PoolManifest|undefined;
+const manifestToken=(asset:swap.AssetId)=>asset.kind==='udt'?poolManifest?.pools.find(p=>p.token?.typeHash===asset.scriptHash)?.token:undefined;
 const marketView=createMarkets({
  ready:()=>startup,
  client:()=>client,
  network:()=>deployment.genesisHash,
- sources:()=>({orders:[{version:1,codeHash:deployment.codeHash},...(v2?[{version:2 as const,codeHash:v2.codeHash}]:[])],pools:poolUi.deployment()}),
+ sources:()=>({orders:[{version:1,codeHash:deployment.codeHash},...(v2?[{version:2 as const,codeHash:v2.codeHash}]:[])],pools:poolUi.deployment()??poolManifest?.deployment}),
  book:()=>orders.filter(o=>o.supported&&!(swap.isV2(o)&&swap.isExpired(o,chainNow))).map(o=>({offer:o.offerAsset,ask:o.askAsset,available:swap.isV2(o)?o.available:o.offerAmount,askAmount:o.askAmount,offerAmount:o.offerAmount})),
  pools:()=>poolUi.markets(),
- label,decimals,
+ label:asset=>manifestToken(asset)?.symbol??label(asset),
+ decimals:asset=>manifestToken(asset)?.decimals??decimals(asset),
  explorer:hash=>`https://pudge.explorer.nervos.org/transaction/${hash}`,
 });
 el('reverse').onclick=()=>{const base=value('base');el<HTMLSelectElement>('base').value=value('quote');el<HTMLSelectElement>('quote').value=base;el<HTMLInputElement>('swap-output').value='';el<HTMLInputElement>('swap-budget').value='';invalidate();renderBook();};
@@ -390,14 +396,17 @@ el('sign').onclick=()=>run(async()=>{const pending=review;if(!pending||pending.g
  try{await assertActiveAccount(pending.signer,pending.generation);const hash=await swap.submit(pending.built,pending.signer,{beforeBroadcast:hash=>{submittedHash=hash;saveActivity({hash,account:pending.account,network:deployment.genesisHash,summary:pending.summary.slice(0,2000),status:'unknown',createdAt:Date.now()});}});submittedHash=hash;saveActivity({hash,account:pending.account,network:deployment.genesisHash,summary:pending.summary.slice(0,2000),status:'submitted',createdAt:Date.now()});void refreshActivity();review=undefined;el<HTMLDialogElement>('review').close();text('status',`Submitted: ${hash}. Waiting for confirmation…`);await pending.signer.client.waitTransaction(hash,1);text('status',`Committed: ${hash}`);saveActivity({hash,account:pending.account,network:deployment.genesisHash,summary:pending.summary.slice(0,2000),status:'committed',createdAt:Date.now()});void refreshActivity();await scan();}catch(error){if(submittedHash){review=undefined;el<HTMLDialogElement>('review').close();void refreshActivity();throw new Error(`Transaction ${submittedHash} was sent to the node, but its final status is not confirmed here. Check Activity or the explorer before retrying. ${String(error)}`);}throw error;}finally{setBusy(false);}
 });
 run(async()=>{
+ // Both manifests are static files; fetch them while the endpoints are configured.
+ const manifests=Promise.all([loadPoolManifest().catch(()=>undefined),loadOrderV2().catch(error=>{report(error);return undefined;})]);
  try{for(const item of JSON.parse(localStorage.getItem('openswap-assets')??'[]'))addAsset(String(item.label),ccc.Script.from(item.script));}catch{report(new Error('Stored token list was invalid; add the tokens again.'));}
  const testOwner=await ccc.Address.fromString('ckt1qrfrwcdnvssswdwpn3s9v8fp87emat306ctjwsm3nmlkjg8qyza2cqgqq9qha8uqganyw9aavyyqeltvrlg59lp4svl02uvq',client);
  const testToken=await ccc.Script.fromKnownScript(client,ccc.KnownScript.XUdt,testOwner.script.hash());addAsset('Order-test xUDT',testToken);
  for(const token of swap.tokensForNetwork('testnet'))if(token.profile!=='resolver-required')addAsset(token.symbol,ccc.Script.from(token.script));renderCatalog();refreshAssets();if(value('quote')==='ckb')el<HTMLSelectElement>('quote').value=testToken.hash();await configure(value('rpc'),value('indexer'));
  // Pool tokens join the asset list (and the resolver) before the order scan, so
  // orders in a pool's token are recognised and both venues can be compared.
+ [poolManifest,v2]=await manifests;showV2Options();startupDone();
  await poolUi.load().then(registerPoolMarkets,report);
- v2=await loadOrderV2().catch(error=>{report(error);return undefined;});showV2Options();startupDone();await scan();
+ await scan();
 });
 /** The v2 order lock manifest, if this build ships one; absent means v1 only. */
 async function loadOrderV2():Promise<swap.Deployment|undefined>{

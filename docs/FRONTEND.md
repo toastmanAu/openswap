@@ -509,5 +509,16 @@ Refresh cost (2026-10-29, ~120 transactions, measured in the browser after start
 First visit: about 5.3 s (was 8–10 s). Returning visit: about 1.8 s. Each 30 s
 refresh: indexer queries only, under 1 s.
 
+- **Earlier start.** Markets waits only for the endpoints and the two static
+  manifests (pool and order lock v2), fetched while the endpoints are configured,
+  not for the live pool scan. Token names and decimals come from the pool manifest.
+  Depth gains the pool curves when the pool scan finishes.
+- **Saved history first.** On a returning visit the restored history is drawn as
+  soon as the chain tip time is known, then replaced by the refresh.
+
+Measured from navigation with the tab opened at once (2026-10-29, 126 transactions):
+first visit 7.1–7.6 s (was 9.4–10.9 s); returning visit charts at about 2.1 s
+(was 5.5 s), refreshed about 1 s later.
+
 Token decimals and names come from the pool manifest and token catalog; an unknown
 token shows a hash prefix and 0 decimals.
