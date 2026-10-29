@@ -5,7 +5,8 @@
 //                          verify it on both endpoints
 // Steps, in order: createB (short expiry), createA, createC, fillA1 (partial),
 // fillA2 (final), fillC1 (partial CKB offer), cancelC (maker cancels the remainder),
-// returnB (the v2 keeper returns B after expiry).
+// returnB (the v2 keeper returns B after expiry), createJ (an order for the user's
+// JoyID partial fill on toastdex.org).
 // Maker: .local/testnet-split-maker-key. Taker and keeper: .local/testnet-contention-key.
 // Keys are never printed. Journal: deployments/lock-v2-live.json.
 import {ccc} from '@ckb-ccc/core';
@@ -25,7 +26,7 @@ const token=(symbol:string)=>ccc.Script.from(markets.tokens.find((t:{symbol:stri
 const TEST2=udt(token('TEST2')),TEST3=udt(token('TEST3'));
 const UNIT=10n**8n;
 const journalFile=new URL('../deployments/lock-v2-live.json',import.meta.url);
-const STEPS=['createB','createA','createC','fillA1','fillA2','fillC1','cancelC','returnB'] as const;
+const STEPS=['createB','createA','createC','fillA1','fillA2','fillC1','cancelC','returnB','createJ'] as const;
 type Step=typeof STEPS[number];
 type Journal={network:'testnet';deployment:ccc.Hex;steps:Partial<Record<Step,Record<string,unknown>&{status:string;hash?:ccc.Hex}>>};
 
@@ -66,11 +67,13 @@ const orderLockOf=(s:Step)=>{const r=journal.steps[s];assert(r?.orderLock,`${s} 
 let built:BuiltTransaction,signer:ccc.Signer,summary:Record<string,unknown>={};
 let send:(()=>Promise<ccc.Hex>)|undefined;
 switch(step){
- case 'createB':case 'createA':case 'createC':{
+ case 'createB':case 'createA':case 'createC':case 'createJ':{
   const spec={
    createB:{offerAsset:TEST3,askAsset:CKB,expiry:expiryAt(now+120n),lot:{offerAmount:100n*UNIT,askAmount:50n*UNIT,minFill:100n*UNIT,partialFills:0}},
    createA:{offerAsset:TEST2,askAsset:CKB,expiry:expiryAt(now+6n*3600n),lot:{offerAmount:1000n*UNIT,askAmount:300n*UNIT,minFill:250n*UNIT,partialFills:2}},
    createC:{offerAsset:CKB,askAsset:TEST2,expiry:expiryAt(now+6n*3600n),lot:{offerAmount:400n*UNIT,askAmount:1000n*UNIT,minFill:100n*UNIT,partialFills:2}},
+   // 2.0 CKB per TEST3, below the CKB / TEST3 pool (about 2.12 on 2026-10-29), so smaller swaps take part of it.
+   createJ:{offerAsset:TEST3,askAsset:CKB,expiry:expiryAt(now+24n*3600n),lot:{offerAmount:2000n*UNIT,askAmount:4000n*UNIT,minFill:250n*UNIT,partialFills:4}},
   }[step];
   signer=maker;
   const created=await createOrdersV2(context(maker),{offerAsset:spec.offerAsset,askAsset:spec.askAsset,expiry:spec.expiry,lots:[spec.lot]});
