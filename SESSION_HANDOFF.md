@@ -10,8 +10,9 @@ The user chose one v2 lock covering both features, then approved the defaults:
 soft expiry with permissionless return, timestamp only, no keeper tip, and v2-only
 creation after deploy. Design and status: [ORDER_LOCK_V2](docs/research/ORDER_LOCK_V2.md).
 Steps 1–2 (spec, TS model, vectors, contract, VM tests) are done offline and
-committed locally. The v1 binary still matches the deployment. Next: step 3, SDK
-builders for create, partial fill, return and cancel. Then solver and frontend.
+pushed. The v1 binary still matches the deployment. Step 3 (SDK) is done offline:
+planners, builders, discovery, mixed v1/v2 quotes, and a VM replay campaign of
+SDK-planned chains (`lock-v2-sdk`). Next: step 4 (solver), then step 5 (frontend).
 Testnet deployment of v2 needs user approval.
 
 ### Multi-hop routing and more pools (2026-10-29)

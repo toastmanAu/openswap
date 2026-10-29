@@ -14,6 +14,7 @@ const targets={
  'pool-model-diff':{cases:200_000,command:(o:Run)=>['npx',['tsx','pool-model/src/campaign.ts',`--seed=${o.seed}`,`--cases=${o.cases}`,...(o.seconds===undefined?[]:[`--seconds=${o.seconds}`])]] as const,env:false},
  'pool-vm':{cases:100,command:(o:Run)=>['cargo',['test','--locked','-q','-p','openswap-pool-tests','sdk_seeded_vm_endurance','--','--nocapture']] as const,env:true},
  'split-vm':{cases:100,command:(o:Run)=>['cargo',['test','--locked','-q','-p','openswap-pool-tests','sdk_seeded_split_campaign','--','--nocapture']] as const,env:true},
+ 'lock-v2-sdk':{cases:40,command:(o:Run)=>['cargo',['test','--locked','-q','-p','openswap-lock-v2-tests','sdk_planned_order_chains_verify_on_the_binary','--','--nocapture']] as const,env:true},
 };
 type Target=keyof typeof targets;
 interface Run {seed:bigint;cases:number;seconds?:number}
@@ -36,7 +37,7 @@ const sha256=(path:string)=>existsSync(`${root}/${path}`)?createHash('sha256').u
 const status=spawnSync('git',['status','--porcelain=v1','-z','--untracked-files=all'],{cwd:root,encoding:'utf8'}).stdout;
 const dirtyPaths=status.split('\0').filter(Boolean).map(l=>l.slice(3)).filter(p=>!p.startsWith('docs/')&&!/^[^/]+\.md$/.test(p));
 const provenance={commit:git('rev-parse','HEAD'),dirty:dirtyPaths.length>0,dirtyPaths,
- binaries:{orderLock:sha256('target/riscv64imac-unknown-none-elf/release/openswap-lock'),pool:sha256('target/riscv64imac-unknown-none-elf/release/openswap-pool')}};
+ binaries:{orderLock:sha256('target/riscv64imac-unknown-none-elf/release/openswap-lock'),pool:sha256('target/riscv64imac-unknown-none-elf/release/openswap-pool'),orderLockV2:sha256('target/riscv64imac-unknown-none-elf/release/openswap-lock-v2')}};
 if(provenance.dirty)console.error(`Warning: uncommitted code changes (${dirtyPaths.join(', ')}); records will be marked dirty.`);
 
 let failed=false;

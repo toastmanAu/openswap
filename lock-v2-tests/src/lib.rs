@@ -10,6 +10,8 @@ mod fixture;
 #[cfg(test)]
 mod paths;
 #[cfg(test)]
+mod sdk;
+#[cfg(test)]
 mod vectors;
 #[cfg(test)]
 #[path = "../../contracts/openswap-lock-v2/src/wide.rs"]

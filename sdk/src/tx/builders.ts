@@ -13,7 +13,7 @@ export interface BuiltTransaction {
   assertLayout(tx?: ccc.Transaction): void;
 }
 function key(point: ccc.OutPoint): string { return `${point.txHash}:${point.index}`; }
-function distinct(cells: ccc.Cell[]): void {
+export function distinct(cells: ccc.Cell[]): void {
   if (!cells.length || cells.length > 32) throw new Error('Select 1..32 independent lots');
   if (new Set(cells.map(c => key(c.outPoint))).size !== cells.length || new Set(cells.map(c => c.cellOutput.lock.hash())).size !== cells.length) throw new Error('Duplicate OutPoint or OpenSwap lock group');
 }
@@ -26,7 +26,7 @@ export function pin(tx: ccc.Transaction, inputs: number, outputs: number): (cand
     outs.forEach(([v, data], i) => { if (ccc.hexFrom(candidate.outputs[i]!.toBytes()) !== v || candidate.outputsData[i] !== data) throw new Error('Pinned maker output reordered or changed'); });
   };
 }
-async function fresh(context: BuildContext, points: ccc.OutPointLike[]): Promise<ccc.Cell[]> {
+export async function fresh(context: BuildContext, points: ccc.OutPointLike[]): Promise<ccc.Cell[]> {
   await assertNetwork(context.signer.client, context.deployment);
   const cells = await Promise.all(points.map(p => context.signer.client.getCellLive(p, true)));
   if (cells.some(c => !c)) throw new Error('Order input is no longer live');
@@ -34,7 +34,7 @@ async function fresh(context: BuildContext, points: ccc.OutPointLike[]): Promise
   if (live.some(c => c.cellOutput.lock.codeHash !== context.deployment.codeHash || c.cellOutput.lock.hashType !== 'data1')) throw new Error('Not an OpenSwap order');
   distinct(live); return live;
 }
-async function tokens(tx: ccc.Transaction, context: BuildContext): Promise<void> {
+export async function tokens(tx: ccc.Transaction, context: BuildContext): Promise<void> {
   const resolver = context.resolver ?? defaultResolver(context.signer.client);
   const assets = new Map<string, ccc.Script>();
   const cells = await Promise.all(tx.inputs.map(i => i.getCell(context.signer.client)));
@@ -65,7 +65,7 @@ async function tokens(tx: ccc.Transaction, context: BuildContext): Promise<void>
     if (surplus > 0n) tx.addOutput({ lock: changeLock, type }, amountData(surplus));
   }
 }
-async function finish(tx: ccc.Transaction, context: BuildContext, check: (tx: ccc.Transaction) => void, feeOutput?: number): Promise<BuiltTransaction> {
+export async function finish(tx: ccc.Transaction, context: BuildContext, check: (tx: ccc.Transaction) => void, feeOutput?: number): Promise<BuiltTransaction> {
   if (feeOutput === undefined) await tokens(tx, context);
   check(tx);
   await tx.completeInputsByCapacity(context.signer); check(tx);

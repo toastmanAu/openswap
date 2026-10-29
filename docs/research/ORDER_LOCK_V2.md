@@ -132,8 +132,11 @@ and a UDT→UDT payment needs `== C_in`. These are the v1 rules with
 - **CKB → UDT:** each partial payment cell's `capacity_refund` (≈144 CKB) comes
   out of the order's CKB. That CKB is the maker's own and stays in the maker's
   wallet as the payment cell's storage. It does mean that **after k partial
-  fills, k × capacity_refund less CKB is sold**. The app adds the reserve when
-  the user picks "up to N fills", so the full amount can still sell.
+  fills, k × capacity_refund less CKB is sold**. (Changed during the SDK build:
+  pre-funding a reserve here would let a single final fill buy the reserve too,
+  selling more CKB than the maker offered, because the lock cannot tell reserve
+  CKB from offered CKB. So CKB offers carry no reserve, and the app discloses
+  the shortfall instead.)
 
 Example (UDT → CKB): sell 10,000 TEST for 1,000 CKB, min fill 1,000 TEST.
 - A taker fills 2,500 TEST and must pay ≥ 250 CKB to the maker at output `i`. The
@@ -189,7 +192,7 @@ Example (UDT → CKB): sell 10,000 TEST for 1,000 CKB, min fill 1,000 TEST.
 |---|---|
 | 1. Spec and model | Done. `WIRE_FORMAT.md` v2 section; `sdk/src/v2/` codec and fill model; 22 wire and 647 fill vectors |
 | 2. Contract | Done. `contracts/openswap-lock-v2`: 30,000 bytes, sha256 `0f5e8e73…6350`, data hash `0x71027f76…3ede`. `lock-v2-tests`: all fill vectors give the model's exact verdict on the binary (369 accepted, max 70,082 cycles); cancel and malformed-tail rescue; expiry `since` boundaries; no recreation on return; chained partial fills; two partial orders in one transaction; wide product checked against U256 |
-| 3. SDK | Not started |
+| 3. SDK | Done (offline). `sdk/src/v2/`: create sizing (`planCreateV2`), decode/parse, fill planning (`planFillV2`, `partialRange`; every plan is checked against the model, and cells are built at exact capacity because CCC silently raises too-small capacities), builders for create, fill (partial v2 plus whole v1 lots in one transaction), expiry return (`since` = expiry) and cancel, `scanV2`, and `quoteMixed` over v1 and v2 with expiry margin. 8 builder/planner tests; VM replay of SDK-planned chains (`npm run campaign -- lock-v2-sdk`; 1,200 chains, 2,658 transactions, 1,458 partial fills verified at seed 29) |
 | 4. Solver | Not started |
 | 5. Frontend | Not started |
 | 6. Testnet | Not started; needs approval |
