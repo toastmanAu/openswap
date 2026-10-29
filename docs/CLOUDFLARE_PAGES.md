@@ -154,6 +154,14 @@ toastdex.org and the deployment URL. On toastdex.org against the real testnet th
 app read a node estimate of 33,222 shannons/KB (capped to 5,000), without page
 errors.
 
+Follow-up deployment `https://af6bc486.toastdex.pages.dev` (source `ca5615d`,
+2026-10-30): Markets lists solver settlements (matches and rings) read from the
+fills. Files on all origins are byte-identical to the reproducible release and all
+31 browser tests pass on toastdex.org and the deployment URL. On toastdex.org against
+the real testnet the panel showed 16 settlements at 7.4 s from navigation, including
+the live ring CKB → TEST2 → TEST3 → CKB with its three fills and 16 CKB kept, without
+page errors.
+
 Rollback: select the previous successful deployment in Pages. Published contract
 code and outstanding order cells remain unchanged by frontend rollbacks.
 

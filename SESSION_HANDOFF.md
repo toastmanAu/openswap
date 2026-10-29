@@ -10,7 +10,7 @@ Markets recognises solver settlements from the fills (`settlements()`, pool-sdk
 market-stats): a "Solver settlements" panel lists matches and rings with each fill,
 the spread kept and a link to each leg's market; trades from a settlement are
 labelled in the trades list and tooltip. Fixtures now include the live multi-order
-and ring settlements. Not yet deployed to Pages.
+and ring settlements. Live since Pages deploy `af6bc486`.
 
 ### Three-asset rings (2026-10-29)
 
