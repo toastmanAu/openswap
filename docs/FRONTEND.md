@@ -566,7 +566,10 @@ rate of 4,000–5,000) and 10 (raised to the minimum).
 33,222 shannons/KB (0.00047608 CKB at that rate). The verifier rebuilds the size CCC
 priced and requires the fee to be CCC's estimate at a policy rate: it was built at
 exactly 5,000 shannons/KB. The pre-cap JoyID fill `0xddf59ef8…` fails the same check
-(built at 33,222).
+(built at 33,222). Cancelling that order with JoyID, `0xf451eed3…5539` (block
+22,907,796; inputs the order and the user's change cell, outputs back to the same
+JoyID lock), passes too: 0.0000889 CKB, built at exactly 5,000 (1,778 bytes priced,
+1,125 committed, 7,902 shannons/KB on chain), against 0.00037375 at the nodes' rate.
 
 Rates are stated on the pre-signing size. The JoyID signer reserves 1,000 bytes for
 its signature when the fee is estimated (`@ckb-ccc/joy-id` `prepareTransaction`); the

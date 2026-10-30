@@ -10,7 +10,7 @@
 // block, touches an order lock and no pool cell, and every input that is not an order
 // belongs to one JoyID wallet, which therefore paid the fee. Also records the nodes'
 // current fee-rate estimate, to show what an uncapped build would have paid.
-// Writes deployments/fee-cap-joyid.json.
+// Adds the check to deployments/fee-cap-joyid.json, one entry per transaction.
 //   npx tsx scripts/fee-cap-joyid-verify.ts <tx-hash>
 import {ccc} from '@ckb-ccc/core';
 import {readFile,writeFile} from 'node:fs/promises';
@@ -67,7 +67,10 @@ for(const url of ENDPOINTS){
 }
 assert.equal(results[0]!.block,results[1]!.block,'Endpoints disagree on the block');
 for(const k of ['fee','builtRate','pricedBytes','signer','kind'] as const)assert.equal(results[0]![k],results[1]![k],`Endpoints disagree on ${k}`);
-const record={network:'testnet',tx:txHash,checkedAt:new Date().toISOString(),policy:{minRate:ORDER_FEE_POLICY.minRate.toString(),maxRate:ORDER_FEE_POLICY.maxRate.toString(),maxFee:show(ORDER_FEE_POLICY.maxFee)},results};
+const check={tx:txHash,checkedAt:new Date().toISOString(),results};
+const prior=await json('deployments/fee-cap-joyid.json').catch(()=>undefined);
+const checks=[...(prior?.checks??[]).filter((c:{tx:string})=>c.tx!==txHash),check];
+const record={network:'testnet',policy:{minRate:ORDER_FEE_POLICY.minRate.toString(),maxRate:ORDER_FEE_POLICY.maxRate.toString(),maxFee:show(ORDER_FEE_POLICY.maxFee)},checks};
 await writeFile(new URL('../deployments/fee-cap-joyid.json',import.meta.url),ccc.stringify(record)+'\n');
-console.log(ccc.stringify(record),'\nFee within the order fee policy on both endpoints.');
+console.log(ccc.stringify(check),'\nFee within the order fee policy on both endpoints.');
 process.exit(0);

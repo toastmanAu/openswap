@@ -10,6 +10,9 @@ A JoyID v2 order on toastdex.org (`0x3d46ac85…a9f5`) was built at exactly 5,00
 shannons/KB while the nodes suggested 33,222 (`scripts/fee-cap-joyid-verify.ts`,
 `deployments/fee-cap-joyid.json`). On chain it measures 7,278 because JoyID reserves
 a 1,000-byte signature placeholder when the fee is estimated; see docs/FRONTEND.md.
+The user's JoyID cancel of that order (`0xf451eed3…5539`, block 22,907,796) passes
+the same check: built at 5,000, fee 0.0000889 CKB (0.00037375 at the nodes' 33,222).
+The order is closed; the record keeps one entry per transaction.
 
 ### Rings in the Markets tab (2026-10-30)
 
