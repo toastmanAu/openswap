@@ -4,6 +4,13 @@ Saved 2026-10-12 (Australia/Adelaide). Read this first when resuming.
 
 ## Current request and stopping point
 
+### JoyID fee cap check (2026-10-30)
+
+A JoyID v2 order on toastdex.org (`0x3d46ac85…a9f5`) was built at exactly 5,000
+shannons/KB while the nodes suggested 33,222 (`scripts/fee-cap-joyid-verify.ts`,
+`deployments/fee-cap-joyid.json`). On chain it measures 7,278 because JoyID reserves
+a 1,000-byte signature placeholder when the fee is estimated; see docs/FRONTEND.md.
+
 ### Rings in the Markets tab (2026-10-30)
 
 Markets recognises solver settlements from the fills (`settlements()`, pool-sdk

@@ -559,3 +559,19 @@ Pool transactions keep the pool manifest's fixed policy (1,000 shannons/KB, at m
 Tests: `sdk/test/frontend-fees.test.ts` (bounds, failing node, review line);
 browser tests with the mock node suggesting 47,000 (review shows the cap and a
 rate of 4,000–5,000) and 10 (raised to the minimum).
+
+**JoyID check (2026-10-30, `scripts/fee-cap-joyid-verify.ts`,
+`deployments/fee-cap-joyid.json`).** A v2 order placed with JoyID on toastdex.org,
+`0x3d46ac85…a9f5` (block 22,906,996), paid 0.0001043 CKB while both nodes suggested
+33,222 shannons/KB (0.00047608 CKB at that rate). The verifier rebuilds the size CCC
+priced and requires the fee to be CCC's estimate at a policy rate: it was built at
+exactly 5,000 shannons/KB. The pre-cap JoyID fill `0xddf59ef8…` fails the same check
+(built at 33,222).
+
+Rates are stated on the pre-signing size. The JoyID signer reserves 1,000 bytes for
+its signature when the fee is estimated (`@ckb-ccc/joy-id` `prepareTransaction`); the
+real signature here was 347 bytes, so the committed transaction is 1,433 bytes, not
+2,086, and its fee measures 7,278 shannons/KB on chain. The review's rate is computed
+on the same pre-signing transaction as the fee, so it matches how the fee was built;
+the amount it shows is exactly what is paid. Over-reserving only costs a JoyID user
+a few thousand shannons and never slows confirmation.
