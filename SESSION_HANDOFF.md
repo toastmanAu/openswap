@@ -10,8 +10,9 @@ Saved 2026-10-12 (Australia/Adelaide). Read this first when resuming.
 service"): settle, return expired orders, archive deep settlements, write
 `.local/solver-service/status.json`; pauses sending below a 500 CKB balance floor or
 past a 0.5 CKB 24 h fee budget. Dry run by default. First dry cycle: nothing
-crosses; five expired orders (including the ring and multi remainders and the
-user's JoyID-filled order remainder from `0xddf59ef8`) would be returned. Going live
+crosses; five expired test orders would be returned in one transaction (the
+1,650 TEST3 left of the order the user part-filled with JoyID, the 550 TEST3
+campaign remainder, A's multi remainder and both ring remainders). Going live
 (`--execute`, running continuously) needs the user's go-ahead, and a decision on
 where it runs.
 
