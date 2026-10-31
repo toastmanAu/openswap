@@ -4,6 +4,17 @@ Saved 2026-10-12 (Australia/Adelaide). Read this first when resuming.
 
 ## Current request and stopping point
 
+### Always-on solver (2026-11-01)
+
+`npm run solver:service` runs the v2 solver in a loop (SOLVER.md, "Always-on
+service"): settle, return expired orders, archive deep settlements, write
+`.local/solver-service/status.json`; pauses sending below a 500 CKB balance floor or
+past a 0.5 CKB 24 h fee budget. Dry run by default. First dry cycle: nothing
+crosses; five expired orders (including the ring and multi remainders and the
+user's JoyID-filled order remainder from `0xddf59ef8`) would be returned. Going live
+(`--execute`, running continuously) needs the user's go-ahead, and a decision on
+where it runs.
+
 ### JoyID fee cap check (2026-10-30)
 
 A JoyID v2 order on toastdex.org (`0x3d46ac85…a9f5`) was built at exactly 5,000

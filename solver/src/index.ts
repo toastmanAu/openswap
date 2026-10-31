@@ -4,3 +4,4 @@ export * from './recovery.js';
 export * from './resolution.js';
 export * from './matcher-v2.js';
 export * from './runner-v2.js';
+export * from './service.js';

@@ -318,3 +318,44 @@ unchanged: reconcile the journal, reserve inputs, journal before the single send
   kept 16 CKB and added no tokens or capacity of its own.
   The recorded solver events predate the event rename (2026-10-30), so the journal
   logs this ring as `candidate_pair`; the runner now emits `candidate_ring` with the route.
+
+---
+
+## Always-on service (2026-11-01)
+
+`SolverService` (`solver/src/service.ts`) runs a solver in a loop;
+`npm run solver:service` (`scripts/solver-service.ts`) runs `ReferenceSolverV2` on
+testnet with the solver wallet, over v2 orders and whole v1 lots. **Dry run by
+default:** it builds what it would send and reports it. `--execute` sends.
+
+Each cycle (every 15 s by default):
+1. Archives journaled settlements committed at least 24 blocks deep, and marks their
+   live outputs usable again, so the solver's own change is spent in later
+   settlements (before this, a long-running solver would have locked itself out of
+   its change).
+2. Checks sending is allowed: the fee wallet holds at least its floor (500 CKB) and
+   the fees paid in the last 24 h are under the budget (0.5 CKB). If not, the cycle
+   still scans and builds, sends nothing, and the status says why.
+3. Settles up to 4 matches (one per tick: pairs, books, rings), checking the budget
+   before each send, so it is overshot by at most one transaction's fee (cap 0.01 CKB).
+4. Returns up to 16 expired v2 orders to their owners (the keeper).
+5. Writes `.local/solver-service/status.json`: mode, state (`running`, `paused`,
+   `error`, `stopped`), pause reasons, balance, fees in the last 24 h, what was last
+   built and sent, active journal rows, and rows that need the operator.
+
+Settlements are built at 1,000 shannons/KB, capped at 0.01 CKB each. Errors back
+off exponentially (to 5 min) and clear on the next good cycle. Rejected rows, and
+rows unresolved for 30 min, are listed under `attention` and stay reserved; the
+service never abandons or resends them; resolve them with `npm run solver-journal`
+(`--journal-dir=.local/solver-service/journal`, after stopping the service, since
+the journal admits one writer). Fees already paid carry over a restart through the
+status file. SIGINT or SIGTERM stops after the cycle in progress.
+
+Runner fix that goes with it: with a journal, the runner now rebuilds its pending
+set from the journal each tick; before, an archived row stayed in memory and the
+next tick failed reading it.
+
+Evidence: 10 service tests (dry run, per-cycle cap, budget pause and carry-over,
+balance floor, archive at depth with outputs freed, attention list, backoff, stop),
+a runner test for archived rows. First dry cycle on testnet (2026-11-01): no
+crossing orders; would return five expired orders in one transaction.

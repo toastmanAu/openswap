@@ -126,3 +126,16 @@ test('repeated indexer outages release the tick guard and recovery permits a lat
  f.client.findCells=scan;
  assert(await solver.tick(true));assert.equal(broadcasts,1);
 });
+test('archived submissions leave the runner\'s reservations on the next tick',async()=>{
+ const f=market(),dir=mkdtempSync(join(tmpdir(),'solver-runner-'));
+ const journal=new FileSubmissionJournal(dir,{genesisHash:f.context.deployment.genesisHash,accountLockHash:owner.hash()});
+ try{
+  let sent=0;f.client.sendTransaction=async tx=>{sent++;return ccc.Transaction.from(tx).hash();};
+  f.client.getTransactionNoCache=async()=>({status:'committed'}) as ccc.ClientTransactionResponse;
+  const solver=new BaseSolver(f.context,undefined,{journal});
+  const first=await solver.tick(true);assert(first);assert.equal(await solver.tick(true),undefined);assert.equal(sent,1);
+  journal.archive(first.hash(),'committed');
+  // The fixture's order cells stay listed, so the released orders are matched again.
+  assert(await solver.tick(true));assert.equal(sent,2);assert.equal(journal.list().length,1);
+ }finally{journal.close();rmSync(dir,{recursive:true,force:true});}
+});

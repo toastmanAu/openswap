@@ -37,6 +37,8 @@ export class ReferenceSolver {
         if((await client.getHeaderByNumber(0))?.hash!==scope.genesisHash)throw new Error('Solver journal network mismatch');
         // Reload before every scan, including previously committed rows: a reorg
         // must not turn their old inputs into an unreserved replacement attempt.
+        // The journal is the whole record: rows archived since the last tick are dropped.
+        this.pending.clear();
         for(const row of journal.list())this.pending.set(row.hash,{orders:row.orders,tx:ccc.Transaction.fromBytes(row.transaction)});
       }
       for (const [hash, pending] of this.pending) {
