@@ -359,3 +359,12 @@ Evidence: 10 service tests (dry run, per-cycle cap, budget pause and carry-over,
 balance floor, archive at depth with outputs freed, attention list, backoff, stop),
 a runner test for archived rows. First dry cycle on testnet (2026-11-01): no
 crossing orders; would return five expired orders in one transaction.
+
+**Supervised live run (2026-11-01, `--execute` on the development machine).** The
+first cycle sent that return, `0x46c2c0c7…c93f` (block 22,928,102, fee 0.00001638
+CKB): 1,650 TEST3, 400 TEST3, 550 TEST3, 2,000 TEST2 and 648 CKB, each back to its
+owner unchanged at its own index after expiry. `scripts/solver-service-verify.ts`
+checks this on both endpoints (`deployments/solver-service.json`); it also checks
+settlements against the reference model with per-asset conservation. The service
+archived the return 24 blocks deep (about 4 minutes later) and has run since with no
+errors and nothing else to settle.

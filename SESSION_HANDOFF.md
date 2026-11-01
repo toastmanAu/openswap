@@ -12,9 +12,11 @@ service"): settle, return expired orders, archive deep settlements, write
 past a 0.5 CKB 24 h fee budget. Dry run by default. First dry cycle: nothing
 crosses; five expired test orders would be returned in one transaction (the
 1,650 TEST3 left of the order the user part-filled with JoyID, the 550 TEST3
-campaign remainder, A's multi remainder and both ring remainders). Going live
-(`--execute`, running continuously) needs the user's go-ahead, and a decision on
-where it runs.
+campaign remainder, A's multi remainder and both ring remainders). Supervised
+live run started 2026-11-01 on the development machine: it sent that return
+(`0x46c2c0c7…c93f`, verified on both endpoints by `scripts/solver-service-verify.ts`,
+`deployments/solver-service.json`) and archived it 24 blocks later. Still open: where
+it runs for public testing (a VPS with systemd), and a live settlement through it.
 
 ### JoyID fee cap check (2026-10-30)
 
