@@ -16,7 +16,10 @@ campaign remainder, A's multi remainder and both ring remainders). Supervised
 live run started 2026-11-01 on the development machine: it sent that return
 (`0x46c2c0c7…c93f`, verified on both endpoints by `scripts/solver-service-verify.ts`,
 `deployments/solver-service.json`) and archived it 24 blocks later. Still open: where
-it runs for public testing (a VPS with systemd), and a live settlement through it.
+it runs for public testing (a VPS with systemd). It also settled a crossing pair
+placed by `scripts/solver-service-pair.ts` on its own (`0x6f533564…30ed`, verified,
+solver kept 200 TEST2, funded from the return's change); the maker's 200 TEST3
+remainder is due back through the keeper after its 2 h expiry.
 
 ### JoyID fee cap check (2026-10-30)
 

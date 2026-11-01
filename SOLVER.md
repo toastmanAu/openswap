@@ -366,5 +366,17 @@ CKB): 1,650 TEST3, 400 TEST3, 550 TEST3, 2,000 TEST2 and 648 CKB, each back to i
 owner unchanged at its own index after expiry. `scripts/solver-service-verify.ts`
 checks this on both endpoints (`deployments/solver-service.json`); it also checks
 settlements against the reference model with per-asset conservation. The service
-archived the return 24 blocks deep (about 4 minutes later) and has run since with no
-errors and nothing else to settle.
+archived the return 24 blocks deep (about 4 minutes later).
+
+**Live settlement by the service (2026-11-01, `scripts/solver-service-pair.ts`,
+`deployments/solver-service-pair.json`).** That script places orders and never runs
+a solver. The maker offered 1,000 TEST3 for 2,000 TEST2 (`0xb3c2a943…`) and wallet C
+1,800 TEST2 for 800 TEST3 (`0x8f83c685…`). The running service found the pair
+within one cycle and settled it, `0x6f533564…30ed` (block 22,929,128, fee 0.00001599
+CKB): C filled whole (800 TEST3), the maker sold 800 TEST3 for 1,600 TEST2 with
+200 TEST3 left live, and the solver kept 200 TEST2. The solver funded it with the
+change output of its earlier return (`0x46c2c0c7…:5`), freed by the archive step.
+Verified on both endpoints by `scripts/solver-service-verify.ts`: reference model at
+every order input, payments at order indexes, per-asset conservation, solver-only
+other cells. The 200 TEST3 remainder expires about 2026-11-01 04:28 UTC, and the
+keeper returns it about 15 minutes after that.
