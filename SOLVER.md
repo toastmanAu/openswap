@@ -351,6 +351,14 @@ service never abandons or resends them; resolve them with `npm run solver-journa
 the journal admits one writer). Fees already paid carry over a restart through the
 status file. SIGINT or SIGTERM stops after the cycle in progress.
 
+**On a server:** `docs/SOLVER_SERVICE_RUNBOOK.md` with the systemd units in
+`deploy/solver/`. The key comes from `OPENSWAP_SOLVER_KEY_FILE` or systemd's
+`LoadCredential` (refused if group or others can read it) and state from
+`OPENSWAP_SOLVER_STATE_DIR`. `npm run solver:health` (`assessStatus`) reads the
+status file and fails on a stale cycle, errors, paused sending, a stopped service or
+journal rows needing the operator; a timer runs it every 5 minutes, with optional
+dead-man pings. One running instance per solver wallet.
+
 Runner fix that goes with it: with a journal, the runner now rebuilds its pending
 set from the journal each tick; before, an archived row stayed in memory and the
 next tick failed reading it.

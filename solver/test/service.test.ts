@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ccc } from '@ckb-ccc/core';
-import { SolverService, type ServiceOptions, type ServiceStatus } from '../src/service.js';
+import { SolverService, assessStatus, type ServiceOptions, type ServiceStatus } from '../src/service.js';
 import type { SubmissionRecord, SubmissionResolution } from '../src/journal.js';
 
 const tx = (n: number) => ccc.Transaction.from({ inputs: [{ previousOutput: { txHash: `0x${n.toString(16).padStart(64, '0')}`, index: 0 } }], outputs: [{ capacity: 100n, lock: ccc.Script.from({ codeHash: `0x${'11'.repeat(32)}`, hashType: 'type', args: '0x' }) }], outputsData: ['0x'] });
@@ -129,4 +129,28 @@ test('run stops after the cycle in progress and records the stop', async () => {
 test('invalid bounds are refused', () => {
   assert.throws(() => harness({ maxSettlementsPerCycle: 0 }), /1\.\.32/);
   assert.throws(() => harness({ dailyFeeBudget: -1n }), /negative/);
+});
+
+test('health: a fresh running live status is ok; stale, error, paused, stopped and attention are problems', async () => {
+  const h = harness();
+  await h.service.cycle();
+  const now = Date.parse(h.last().lastCycleAt!);
+  assert.deepEqual(assessStatus(h.last(), now + 1000), { ok: true, problems: [], warnings: [] });
+  assert.deepEqual(assessStatus(h.last(), now + 301_000).problems, ['last cycle 301 s ago']);
+  assert.match(assessStatus({ ...h.last(), state: 'error', consecutiveErrors: 3, lastError: 'node down' }, now).problems[0]!, /3 in a row, last: node down/);
+  assert.deepEqual(assessStatus({ ...h.last(), state: 'paused', pauseReasons: ['24 h fee budget spent'] }, now).problems, ['sending paused: 24 h fee budget spent']);
+  assert.deepEqual(assessStatus({ ...h.last(), state: 'stopped' }, now).problems, ['service stopped']);
+  const attention = { hash: `0x${'ab'.repeat(32)}` as ccc.Hex, status: 'rejected', ageSeconds: 60 };
+  assert.match(assessStatus({ ...h.last(), journal: { ...h.last().journal, attention: [attention] } }, now).problems[0]!, /is rejected after 60 s/);
+  const { lastCycleAt: _, ...never } = h.last();
+  assert.deepEqual(assessStatus(never as ServiceStatus, now).problems, ['no cycle has run']);
+});
+
+test('health: dry run and a wallet near its floor are warnings only', async () => {
+  const h = harness({ execute: false });
+  h.state.balance = 700n * 10n ** 8n;
+  await h.service.cycle();
+  const health = assessStatus(h.last(), Date.parse(h.last().lastCycleAt!));
+  assert.equal(health.ok, true);
+  assert.deepEqual(health.warnings, ['dry run: nothing is sent', 'fee wallet 700 CKB is within 50% of its 500 CKB floor']);
 });

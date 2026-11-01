@@ -154,3 +154,22 @@ export class SolverService {
     await this.write();
   }
 }
+
+export interface Health { ok: boolean; problems: string[]; warnings: string[] }
+/** Judge a status record: stale cycles, errors, paused sending, stopped, or journal rows
+ * needing the operator are problems; a wallet within 50% of its floor is a warning. */
+export function assessStatus(status: ServiceStatus, nowMs: number, maxAgeMs = 300_000): Health {
+  const problems: string[] = [], warnings: string[] = [];
+  if (status.version !== 1) problems.push(`unknown status version ${String(status.version)}`);
+  const last = status.lastCycleAt ? Date.parse(status.lastCycleAt) : NaN;
+  if (Number.isNaN(last)) problems.push('no cycle has run');
+  else if (nowMs - last > maxAgeMs) problems.push(`last cycle ${Math.round((nowMs - last) / 1000)} s ago`);
+  if (status.state === 'stopped') problems.push('service stopped');
+  if (status.state === 'error') problems.push(`errors: ${status.consecutiveErrors} in a row, last: ${status.lastError ?? 'unknown'}`);
+  if (status.state === 'paused') problems.push(`sending paused: ${status.pauseReasons.join('; ')}`);
+  if (status.mode !== 'live') warnings.push('dry run: nothing is sent');
+  for (const a of status.journal.attention) problems.push(`submission ${a.hash} is ${a.status} after ${a.ageSeconds} s; resolve with solver-journal`);
+  if (status.balance !== undefined && BigInt(status.balance) * 2n < BigInt(status.minBalance) * 3n && BigInt(status.balance) >= BigInt(status.minBalance))
+    warnings.push(`fee wallet ${ccc.fixedPointToString(BigInt(status.balance))} CKB is within 50% of its ${ccc.fixedPointToString(BigInt(status.minBalance))} CKB floor`);
+  return { ok: !problems.length, problems, warnings };
+}

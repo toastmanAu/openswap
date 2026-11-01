@@ -1,0 +1,19 @@
+# Health check for openswap-solver.service: reads its status file, no key, no RPC.
+# Fails (and pings OPENSWAP_HEALTH_FAIL_URL, if set) on a stale cycle, errors, paused
+# sending or journal rows needing the operator. Run by openswap-solver-health.timer.
+[Unit]
+Description=OpenSwap solver service health check
+
+[Service]
+Type=oneshot
+User=openswap
+Group=openswap
+WorkingDirectory=/opt/openswap
+EnvironmentFile=-/etc/openswap/solver.env
+Environment=OPENSWAP_SOLVER_STATE_DIR=/var/lib/openswap-solver
+ExecStart=/opt/openswap/node_modules/.bin/tsx scripts/solver-service-health.ts
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadOnlyPaths=/var/lib/openswap-solver

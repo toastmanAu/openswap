@@ -1,0 +1,47 @@
+# OpenSwap testnet solver service (scripts/solver-service.ts). TESTNET ONLY.
+# Install: docs/SOLVER_SERVICE_RUNBOOK.md. One instance per solver wallet, ever:
+# stop any other copy (e.g. a development machine) before starting this one.
+[Unit]
+Description=OpenSwap testnet solver service
+Documentation=file:/opt/openswap/docs/SOLVER_SERVICE_RUNBOOK.md
+After=network-online.target
+Wants=network-online.target
+# A start that keeps failing (e.g. a journal lock left by a hard kill) stops after 5 tries
+# in an hour instead of looping; see the runbook's "Journal locked".
+StartLimitIntervalSec=1h
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=openswap
+Group=openswap
+WorkingDirectory=/opt/openswap
+EnvironmentFile=/etc/openswap/solver.env
+Environment=OPENSWAP_SOLVER_STATE_DIR=/var/lib/openswap-solver
+# The key is copied by systemd into a private, read-only credentials directory.
+LoadCredential=solver-key:/etc/openswap/testnet-solver-key
+ExecStart=/opt/openswap/node_modules/.bin/tsx scripts/solver-service.ts --execute $SOLVER_ARGS
+Restart=on-failure
+RestartSec=30
+# SIGTERM finishes the cycle in progress and closes the journal; allow for a slow node.
+KillSignal=SIGTERM
+TimeoutStopSec=180
+StateDirectory=openswap-solver
+StateDirectoryMode=0700
+UMask=0077
+MemoryMax=1G
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictNamespaces=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

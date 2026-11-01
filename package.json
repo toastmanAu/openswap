@@ -27,6 +27,7 @@
     "pools": "tsx pool-sdk/src/cli.ts",
     "solver-journal": "tsx scripts/solver-journal.ts",
     "solver:service": "tsx scripts/solver-service.ts",
+    "solver:health": "tsx scripts/solver-service-health.ts",
     "campaign": "tsx scripts/campaign.ts",
     "pool:issuer": "tsx scripts/pool-issuer.ts prepare",
     "pool:mint": "tsx scripts/pool-issuer.ts mint",
