@@ -386,5 +386,10 @@ CKB): C filled whole (800 TEST3), the maker sold 800 TEST3 for 1,600 TEST2 with
 change output of its earlier return (`0x46c2c0c7…:5`), freed by the archive step.
 Verified on both endpoints by `scripts/solver-service-verify.ts`: reference model at
 every order input, payments at order indexes, per-asset conservation, solver-only
-other cells. The 200 TEST3 remainder expires about 2026-11-01 04:28 UTC, and the
-keeper returns it about 15 minutes after that.
+other cells. The 200 TEST3 remainder expired at 04:28 UTC and the keeper returned
+it at 04:44 (`0xeae77d5c…fa5a`, block 22,930,152, fee 0.00000691 CKB, verified).
+
+**Outage (2026-11-03 05:59 to 2026-11-04 03:57 UTC).** The development laptop
+suspended and then had no DNS for about 22 hours. The service logged 257
+consecutive `fetch failed` cycles at the 5-minute backoff cap, sent nothing, and
+resumed by itself when the network returned; nothing was pending at the time.
