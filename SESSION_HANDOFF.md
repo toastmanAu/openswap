@@ -21,7 +21,10 @@ placed by `scripts/solver-service-pair.ts` on its own (`0x6f533564…30ed`, veri
 solver kept 200 TEST2, funded from the return's change); the maker's 200 TEST3
 remainder came back through the keeper (`0xeae77d5c…`, verified). The service rode
 out a 22 h laptop network outage (Nov 3–4) and recovered by itself. The user chose
-to keep it on the development machine for now. VPS setup written
+to keep it on the development machine for now: since 2026-11-06 it runs as a systemd
+user service there (`openswap-solver.service`, health timer every 5 min; runbook "On
+your own machine"), no longer tied to a Claude session. Linger is off, so it runs
+while the user is logged in. VPS setup written
 (`docs/SOLVER_SERVICE_RUNBOOK.md`, `deploy/solver/`: hardened systemd unit with the key
 via LoadCredential, health timer, env example); not yet installed anywhere. Moving it
 means stopping the copy on the development machine first (one instance per wallet).

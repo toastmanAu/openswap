@@ -143,6 +143,52 @@ sudo systemctl reset-failed openswap-solver && sudo systemctl start openswap-sol
 
 Never remove the lock while a solver process might still be writing.
 
+## On your own machine (systemd user service)
+
+Simpler than the server setup, for a machine you are logged into: the key and state
+stay in the repository's ignored `.local/` (`testnet-solver-key`, `solver-service/`).
+`~/.config/systemd/user/openswap-solver.service` (adjust the two paths):
+
+```ini
+[Unit]
+Description=OpenSwap testnet solver service
+StartLimitIntervalSec=1h
+StartLimitBurst=5
+
+[Service]
+Type=simple
+WorkingDirectory=/path/to/openswap
+Environment=PATH=/path/to/node/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/path/to/node/bin/node /path/to/openswap/node_modules/.bin/tsx scripts/solver-service.ts --execute
+Restart=on-failure
+RestartSec=30
+KillSignal=SIGTERM
+TimeoutStopSec=180
+UMask=0077
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=default.target
+```
+
+The health check is the same pair as on a server (`openswap-solver-health.service`
+running `scripts/solver-service-health.ts`, and the 5-minute timer), without the
+`User=`, state-directory and hardening lines. Then:
+
+```sh
+systemctl --user daemon-reload
+systemctl --user enable --now openswap-solver.service openswap-solver-health.timer
+journalctl --user -u openswap-solver -f
+npm run solver:health
+```
+
+Stop any copy started by hand first (Ctrl-C or SIGTERM, then check that
+`.local/solver-service/journal/writer.lock` is gone). A user service runs while you
+are logged in; `loginctl enable-linger` keeps it running without a login. A laptop
+that sleeps pauses it; it carries on after waking, and orders wait meanwhile.
+`solver-journal` commands use `--journal-dir=.local/solver-service/journal` with the
+service stopped (`systemctl --user stop openswap-solver`).
+
 ## Moving it back or elsewhere
 
 Stop it, resolve the journal to empty as in "Key and configuration", then start the
