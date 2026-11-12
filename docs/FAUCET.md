@@ -33,6 +33,14 @@ The faucet signs with sighash-all, so it commits to exactly the checked transact
 - **Concurrent claims:** two claims sent at the same moment by the same account can both pass the balance check.
 - **Bot protection:** none, beyond the stock running out. If that becomes a problem, add a Cloudflare rate-limiting rule on `/api/faucet` (one rule is free) or Turnstile.
 
+## Live record
+
+- **Seeded:** `0x6f2458d0…032b`, fee 0.00006033 CKB, committed on both endpoints (`deployments/faucet-seed.json`). It holds 8 stock cells per token, enough for 200 claims each.
+- **First claim:** the tester wallet claimed through the function, run locally under `wrangler pages dev` against testnet: `0x9a9c30d3…86cb`, block 23,036,597.
+  - It received 250 TEST, 1,000 TEST2 and 500 TEST3 for a fee of 0.00001893 CKB, paid by the tester.
+  - It was checked again on both endpoints, and the tester's balances rose by exactly the grants (`deployments/faucet-claims.json`).
+  - The tester is now ineligible for further claims.
+
 ## Operate
 
 ```sh

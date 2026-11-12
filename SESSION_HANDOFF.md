@@ -11,10 +11,11 @@ Built, not yet live (docs/FAUCET.md). A separate faucet wallet (`.local/testnet-
 claimant builds and signs the claim in the app (header "Test tokens") and pays its
 own capacity and fee; `POST /api/faucet` (Pages Function, secret `FAUCET_KEY`) checks it
 with `checkFaucetClaim` (sdk/src/faucet.ts) and co-signs. Checked locally under
-`wrangler pages dev` (health, refusals) and in unit and browser tests. Still to do, each
-needing the user's go-ahead: seed the stock (`scripts/faucet-wallet.ts seed --execute`),
-run an end-to-end claim with the tester wallet, deploy to Pages with the secret, then
-a JoyID claim on toastdex.org.
+`wrangler pages dev` (health, refusals) and in unit and browser tests. Seeded
+(`0x6f2458d0…`, 200 claims per token) and claimed end to end by the tester wallet
+through the function under local `wrangler pages dev` (`0x9a9c30d3…`, verified on both
+endpoints). Still to do, each needing the user's go-ahead: deploy to Pages with the
+`FAUCET_KEY` secret, then a JoyID claim on toastdex.org.
 
 ### Always-on solver (2026-11-01)
 
