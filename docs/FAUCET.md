@@ -41,6 +41,13 @@ The faucet signs with sighash-all, so it commits to exactly the checked transact
   - It was checked again on both endpoints, and the tester's balances rose by exactly the grants (`deployments/faucet-claims.json`).
   - The tester is now ineligible for further claims.
 
+**Deployed** to toastdex.org on 2026-11-12, Pages deployment `c3afc1ce` from source `bbb1172`.
+- The `FAUCET_KEY` secret is set, and `GET /api/faucet` reports `ok` on all three origins.
+- The static files match the reproducible release.
+- All 32 browser tests pass against toastdex.org.
+
+A JoyID claim on the site is still to be done.
+
 ## Operate
 
 ```sh

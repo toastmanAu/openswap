@@ -6,7 +6,7 @@ Saved 2026-10-12 (Australia/Adelaide). Read this first when resuming.
 
 ### Test-token faucet (2026-11-12)
 
-Built, not yet live (docs/FAUCET.md). A separate faucet wallet (`.local/testnet-faucet-key`,
+Live on toastdex.org (docs/FAUCET.md). A separate faucet wallet (`.local/testnet-faucet-key`,
 `deployments/faucet.json`) gives 250 TEST, 1,000 TEST2 and 500 TEST3 per account. The
 claimant builds and signs the claim in the app (header "Test tokens") and pays its
 own capacity and fee; `POST /api/faucet` (Pages Function, secret `FAUCET_KEY`) checks it
@@ -14,8 +14,10 @@ with `checkFaucetClaim` (sdk/src/faucet.ts) and co-signs. Checked locally under
 `wrangler pages dev` (health, refusals) and in unit and browser tests. Seeded
 (`0x6f2458d0…`, 200 claims per token) and claimed end to end by the tester wallet
 through the function under local `wrangler pages dev` (`0x9a9c30d3…`, verified on both
-endpoints). Still to do, each needing the user's go-ahead: deploy to Pages with the
-`FAUCET_KEY` secret, then a JoyID claim on toastdex.org.
+endpoints). Deployed to toastdex.org (Pages `c3afc1ce`, source `bbb1172`,
+secret set, health ok, 32 browser tests pass on the site). Still to do: the user's
+JoyID claim on toastdex.org, which proves that JoyID leaves the faucet's witness
+placeholder intact.
 
 ### Always-on solver (2026-11-01)
 

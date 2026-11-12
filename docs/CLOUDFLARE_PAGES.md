@@ -170,3 +170,11 @@ code and outstanding order cells remain unchanged by frontend rollbacks.
 References: [static deployment](https://developers.cloudflare.com/pages/framework-guides/deploy-anything/),
 [custom domains](https://developers.cloudflare.com/pages/configuration/custom-domains/),
 [headers](https://developers.cloudflare.com/pages/configuration/headers/).
+
+## 2026-11-12 deployment: test-token faucet
+
+- **Deployment:** source `bbb1172`, deployment `https://c3afc1ce.toastdex.pages.dev`.
+- **What it adds:** the **Test tokens** dialog and the first Pages Function, `/api/faucet`, with the production secret `FAUCET_KEY` (see [the faucet](FAUCET.md)).
+- **Static files:** they are byte-identical to the reproducible release on all three origins. Pages serves `index.html` at `/` and redirects `/index.html` to it.
+- **Faucet health:** `GET /api/faucet` reports `ok` with the published faucet address.
+- **Browser tests:** all 32 pass against https://toastdex.org.
