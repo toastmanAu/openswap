@@ -4,6 +4,18 @@ Saved 2026-10-12 (Australia/Adelaide). Read this first when resuming.
 
 ## Current request and stopping point
 
+### Test-token faucet (2026-11-12)
+
+Built, not yet live (docs/FAUCET.md). A separate faucet wallet (`.local/testnet-faucet-key`,
+`deployments/faucet.json`) gives 250 TEST, 1,000 TEST2 and 500 TEST3 per account. The
+claimant builds and signs the claim in the app (header "Test tokens") and pays its
+own capacity and fee; `POST /api/faucet` (Pages Function, secret `FAUCET_KEY`) checks it
+with `checkFaucetClaim` (sdk/src/faucet.ts) and co-signs. Checked locally under
+`wrangler pages dev` (health, refusals) and in unit and browser tests. Still to do, each
+needing the user's go-ahead: seed the stock (`scripts/faucet-wallet.ts seed --execute`),
+run an end-to-end claim with the tester wallet, deploy to Pages with the secret, then
+a JoyID claim on toastdex.org.
+
 ### Always-on solver (2026-11-01)
 
 `npm run solver:service` runs the v2 solver in a loop (SOLVER.md, "Always-on

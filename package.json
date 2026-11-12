@@ -11,7 +11,7 @@
     "deploy:prepare": "node scripts/deploy-testnet.mjs",
     "deploy:record": "node scripts/record-deployment.mjs",
     "deploy:check": "node scripts/check-deployment.mjs",
-    "typecheck": "tsc --noEmit && tsc -p tsconfig.scripts.json && tsc -p frontend/tsconfig.json",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.scripts.json && tsc -p frontend/tsconfig.json && tsc -p functions/tsconfig.json",
     "test:sdk": "tsx --test sdk/test/*.test.ts solver/test/*.test.ts",
     "orders": "tsx scripts/orders.ts",
     "build:smoke": "node scripts/build-smoke.mjs",

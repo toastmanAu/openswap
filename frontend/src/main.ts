@@ -12,6 +12,7 @@ import {loadPoolManifest,type PoolManifest} from './pools/manifest.js';
 import {XUDT_CODE_HASH} from '../../pool-sdk/src/codec.js';
 import {createMarkets} from './markets.js';
 import {ORDER_FEE_POLICY,orderFeeQuote,feeLine,type FeeQuote} from './fees.js';
+import {createFaucet} from './faucet.js';
 const deployment=deploymentJson as swap.Deployment;
 const el=<T extends HTMLElement=HTMLElement>(id:string)=>document.getElementById(id)! as T;
 const value=(id:string)=>(el<HTMLInputElement>(id)).value;
@@ -48,12 +49,13 @@ let poolTokenDep:ccc.CellDepLike|undefined;
 const tokenDecimals=new Map<string,number>();
 function assetResolver(c:ccc.Client):swap.AssetResolver{const base=new swap.CatalogAssetResolver(c);return poolTokenDep?new swap.PinnedXudtResolver(base,XUDT_CODE_HASH,poolTokenDep):base;}
 const poolUi=createPoolUi({client:()=>client,signer:()=>signer,epoch:()=>connectionEpoch,run});
+const faucet=createFaucet({signer:()=>signer,busy:()=>busy,onSubmitted:(hash,summary)=>{saveActivity({hash,account:accountKey(walletLocks),network:deployment.genesisHash,summary,status:'submitted',createdAt:Date.now()});void refreshActivity();},onCommitted:(hash,summary)=>{saveActivity({hash,account:accountKey(walletLocks),network:deployment.genesisHash,summary,status:'committed',createdAt:Date.now()});void refreshActivity();showBalance();}});
 const assets=new Map<string,{label:string;asset:swap.AssetId}>([['ckb',{label:'CKB',asset:swap.CKB}]]);
 const connector=new WebComponentConnector();connector.client=client;connector.name='ToastDEX Testnet';
 connector.addEventListener('select-client',event=>{const selected=(event as SelectClientEvent).client;if(selected.addressPrefix!=='ckt'){report(new Error('Only testnet is supported'));return;}connector.client=selected;client=selected;});
 connector.addEventListener('connection',event=>{
  const connection=(event as ConnectorConnectionEvent).connectionOwner,epoch=++connectionEpoch;
- signer=connection?.value.signerInfo.signer;owner=undefined;walletLocks=[];clearActivity();poolUi.reset();text('connect',signer?'Loading account…':'Connect wallet');text('connected-account','');text('wallet-address',signer?'Loading account…':'Browse without connecting.');invalidate();renderBook();
+ signer=connection?.value.signerInfo.signer;owner=undefined;walletLocks=[];clearActivity();poolUi.reset();faucet.reset();text('connect',signer?'Loading account…':'Connect wallet');text('connected-account','');text('wallet-address',signer?'Loading account…':'Browse without connecting.');invalidate();renderBook();
  const selected=signer;run(async()=>{if(!selected){text('wallet-address','Browse without connecting.');text('connect','Connect wallet');text('connected-account','');renderBook();return;}
  const [address,addresses]=await Promise.all([selected.getRecommendedAddressObj(),selected.getAddressObjs()]);if(signer!==selected||epoch!==connectionEpoch)return;walletLocks=addresses.map(a=>a.script);
  owner=address.script;text('wallet-address',address.toString());text('connected-account',`Account: ${address.toString()}`);text('connect','Switch wallet');renderBook();void refreshActivity();if(!el('view-pools').hidden)poolUi.show();});

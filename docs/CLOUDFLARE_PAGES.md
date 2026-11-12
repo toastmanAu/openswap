@@ -3,8 +3,10 @@
 The testnet app is live at **https://toastdex.org**, with
 **https://toastdex.pages.dev** as an alternate URL. The Pages project `toastdex`
 uses direct uploads; pushing Git commits does not automatically deploy it.
-There are no Pages Functions, Workers, D1, server secrets or hosted order services.
-CKB RPC/indexer and wallets remain external.
+The one Pages Function is the test-token faucet, `POST /api/faucet` (`functions/`,
+secret `FAUCET_KEY`; see [the faucet](FAUCET.md)). There are no Workers, D1 or hosted
+order services. CKB RPC/indexer and wallets remain external. Wrangler bundles
+`functions/` from the repository root, so deploy from there.
 
 The [deployment record](../deployments/frontend-pages.json) identifies the deployed
 source commit, immutable deployment URL and verified asset hashes. The supplied
@@ -34,8 +36,8 @@ npm exec --yes --package=wrangler@4.134.0 -- wrangler pages deploy frontend/dist
 TOASTDEX_BASE_URL=https://toastdex.org npm run test:frontend
 ```
 
-`wrangler.jsonc` specifies the static output directory. No application environment
-secrets are required. Keep Wrangler credentials outside the repository.
+`wrangler.jsonc` specifies the static output directory. The only application secret is
+the faucet's `FAUCET_KEY`, set once with `wrangler pages secret put` (docs/FAUCET.md). Keep Wrangler credentials outside the repository.
 
 ## Domain and acceptance
 

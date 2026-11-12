@@ -13,3 +13,4 @@
 /.wrangler/
 /.claude/worktrees/
 /test-results/
+/.dev.vars

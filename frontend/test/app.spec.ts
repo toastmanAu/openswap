@@ -28,3 +28,13 @@ test('built-in catalog finds iCKB and mainnet tokens without script entry',async
  await page.locator('#catalog-search').fill('CAT++');await expect(page.locator('#catalog-results')).toContainText('CAT++');await expect(page.locator('#catalog-results button')).toBeDisabled();
  await page.locator('#catalog-search').fill('no-such-token');await expect(page.locator('#catalog-results')).toHaveText('No matching tokens.');
 });
+test('test-token faucet lists the grants and asks for a wallet before claiming',async({page})=>{
+ await page.setViewportSize({width:390,height:844});await page.goto('/');
+ await page.getByRole('button',{name:'Test tokens',exact:true}).click();
+ const dialog=page.locator('#faucet-dialog');await expect(dialog).toBeVisible();
+ await expect(dialog).toContainText('250 TEST, 1000 TEST2, 500 TEST3');
+ await expect(page.locator('#faucet-status')).toHaveText('Connect a wallet to claim.');
+ await expect(page.getByRole('button',{name:'Claim with wallet'})).toBeDisabled();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.getByRole('button',{name:'Close',exact:true}).click();await expect(dialog).not.toBeVisible();
+});
